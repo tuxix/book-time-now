@@ -1,8 +1,17 @@
 import { useState } from "react";
-import { ArrowLeft, Clock, User, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Clock, User, CheckCircle2, Plus, Pencil, Trash2, X, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { providers } from "@/data/mockData";
+import { providers, TimeSlot } from "@/data/mockData";
 import { format } from "date-fns";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface DashboardBooking {
   id: string;
@@ -26,10 +35,18 @@ const statusStyles: Record<string, { bg: string; text: string; icon: typeof Cloc
 const ProviderDashboard = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState(mockBookings);
-  const provider = providers[0]; // default to first provider
+  const provider = providers[0];
+
+  const [slots, setSlots] = useState<TimeSlot[]>(provider.timeSlots);
   const [enabledSlots, setEnabledSlots] = useState<Set<string>>(
     new Set(provider.timeSlots.map((s) => s.id))
   );
+
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingSlot, setEditingSlot] = useState<TimeSlot | null>(null);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
 
   const toggleSlot = (id: string) => {
     setEnabledSlots((prev) => {
@@ -49,6 +66,51 @@ const ProviderDashboard = () => {
         return { ...b, status: next };
       })
     );
+  };
+
+  const openAddDialog = () => {
+    setEditingSlot(null);
+    setStartTime("");
+    setEndTime("");
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (slot: TimeSlot) => {
+    setEditingSlot(slot);
+    setStartTime(slot.start);
+    setEndTime(slot.end);
+    setDialogOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!startTime.trim() || !endTime.trim()) return;
+
+    if (editingSlot) {
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === editingSlot.id ? { ...s, start: startTime.trim(), end: endTime.trim() } : s
+        )
+      );
+    } else {
+      const newSlot: TimeSlot = {
+        id: `custom-${Date.now()}`,
+        start: startTime.trim(),
+        end: endTime.trim(),
+        available: true,
+      };
+      setSlots((prev) => [...prev, newSlot]);
+      setEnabledSlots((prev) => new Set([...prev, newSlot.id]));
+    }
+    setDialogOpen(false);
+  };
+
+  const removeSlot = (id: string) => {
+    setSlots((prev) => prev.filter((s) => s.id !== id));
+    setEnabledSlots((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   return (
@@ -99,11 +161,20 @@ const ProviderDashboard = () => {
 
       {/* Time slot config */}
       <div className="px-5 pt-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-          Time Slot Configuration
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Time Slot Configuration
+          </h2>
+          <button
+            onClick={openAddDialog}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold transition-all duration-200 active:scale-95"
+          >
+            <Plus size={14} />
+            Add
+          </button>
+        </div>
         <div className="space-y-2">
-          {provider.timeSlots.map((slot) => (
+          {slots.map((slot) => (
             <div
               key={slot.id}
               className="bg-card rounded-2xl p-4 booka-shadow-sm flex items-center justify-between"
@@ -112,22 +183,88 @@ const ProviderDashboard = () => {
                 <Clock size={16} className="text-muted-foreground" />
                 <span className="text-sm font-medium">{slot.start} – {slot.end}</span>
               </div>
-              <button
-                onClick={() => toggleSlot(slot.id)}
-                className={`w-11 h-6 rounded-full transition-all duration-200 relative ${
-                  enabledSlots.has(slot.id) ? "bg-primary" : "bg-border"
-                }`}
-              >
-                <div
-                  className={`w-5 h-5 rounded-full bg-primary-foreground booka-shadow-sm absolute top-0.5 transition-all duration-200 ${
-                    enabledSlots.has(slot.id) ? "left-[22px]" : "left-0.5"
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openEditDialog(slot)}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary transition-colors duration-150 active:scale-95"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => removeSlot(slot.id)}
+                  className="p-1.5 rounded-lg text-destructive/70 hover:bg-destructive/10 transition-colors duration-150 active:scale-95"
+                >
+                  <Trash2 size={14} />
+                </button>
+                <button
+                  onClick={() => toggleSlot(slot.id)}
+                  className={`w-11 h-6 rounded-full transition-all duration-200 relative ${
+                    enabledSlots.has(slot.id) ? "bg-primary" : "bg-border"
                   }`}
-                />
-              </button>
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-primary-foreground booka-shadow-sm absolute top-0.5 transition-all duration-200 ${
+                      enabledSlots.has(slot.id) ? "left-[22px]" : "left-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           ))}
+          {slots.length === 0 && (
+            <div className="bg-card rounded-2xl p-6 booka-shadow-sm text-center">
+              <Clock size={24} className="text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No time slots configured</p>
+              <button
+                onClick={openAddDialog}
+                className="mt-3 text-xs font-semibold text-primary active:scale-95 transition-transform"
+              >
+                Add your first slot
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Add / Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-[340px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingSlot ? "Edit Time Slot" : "Add Time Slot"}</DialogTitle>
+            <DialogDescription>
+              {editingSlot ? "Update the start and end times." : "Enter a start and end time for the new slot."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Start Time</label>
+              <Input
+                placeholder="e.g. 9:00 AM"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">End Time</label>
+              <Input
+                placeholder="e.g. 10:30 AM"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button className="flex-1 rounded-xl" onClick={handleSave} disabled={!startTime.trim() || !endTime.trim()}>
+              {editingSlot ? "Update" : "Add Slot"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
