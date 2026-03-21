@@ -9,6 +9,7 @@ export interface ServiceProvider {
   image: string;
   lat: number;
   lng: number;
+  timeSlots: TimeSlot[];
 }
 
 export interface TimeSlot {
