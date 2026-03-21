@@ -52,6 +52,14 @@ export const providers: ServiceProvider[] = [
     image: "KK",
     lat: 18.0195,
     lng: -76.8020,
+    timeSlots: [
+      { id: "1-1", start: "7:00 AM", end: "8:00 AM", available: true },
+      { id: "1-2", start: "8:00 AM", end: "9:00 AM", available: true },
+      { id: "1-3", start: "9:30 AM", end: "10:30 AM", available: false },
+      { id: "1-4", start: "11:00 AM", end: "12:00 PM", available: true },
+      { id: "1-5", start: "1:00 PM", end: "2:00 PM", available: true },
+      { id: "1-6", start: "3:00 PM", end: "4:00 PM", available: true },
+    ],
   },
   {
     id: "2",
@@ -64,6 +72,12 @@ export const providers: ServiceProvider[] = [
     image: "FF",
     lat: 18.0145,
     lng: -76.7925,
+    timeSlots: [
+      { id: "2-1", start: "9:00 AM", end: "10:30 AM", available: true },
+      { id: "2-2", start: "10:30 AM", end: "12:00 PM", available: true },
+      { id: "2-3", start: "1:00 PM", end: "2:30 PM", available: false },
+      { id: "2-4", start: "3:00 PM", end: "4:30 PM", available: true },
+    ],
   },
   {
     id: "3",
@@ -76,6 +90,12 @@ export const providers: ServiceProvider[] = [
     image: "GH",
     lat: 18.0210,
     lng: -76.7980,
+    timeSlots: [
+      { id: "3-1", start: "8:00 AM", end: "10:00 AM", available: true },
+      { id: "3-2", start: "10:00 AM", end: "12:00 PM", available: true },
+      { id: "3-3", start: "1:00 PM", end: "3:00 PM", available: true },
+      { id: "3-4", start: "3:00 PM", end: "5:00 PM", available: false },
+    ],
   },
   {
     id: "4",
@@ -88,6 +108,13 @@ export const providers: ServiceProvider[] = [
     image: "CG",
     lat: 18.0280,
     lng: -76.8050,
+    timeSlots: [
+      { id: "4-1", start: "8:30 AM", end: "10:00 AM", available: true },
+      { id: "4-2", start: "10:30 AM", end: "12:00 PM", available: false },
+      { id: "4-3", start: "12:30 PM", end: "2:00 PM", available: true },
+      { id: "4-4", start: "2:30 PM", end: "4:00 PM", available: true },
+      { id: "4-5", start: "4:30 PM", end: "6:00 PM", available: true },
+    ],
   },
   {
     id: "5",
@@ -100,6 +127,11 @@ export const providers: ServiceProvider[] = [
     image: "PG",
     lat: 18.0230,
     lng: -76.7880,
+    timeSlots: [
+      { id: "5-1", start: "7:30 AM", end: "9:30 AM", available: true },
+      { id: "5-2", start: "10:00 AM", end: "12:00 PM", available: true },
+      { id: "5-3", start: "1:00 PM", end: "3:00 PM", available: true },
+    ],
   },
   {
     id: "6",
@@ -112,9 +144,16 @@ export const providers: ServiceProvider[] = [
     image: "NT",
     lat: 18.0160,
     lng: -76.7950,
+    timeSlots: [
+      { id: "6-1", start: "9:00 AM", end: "10:00 AM", available: true },
+      { id: "6-2", start: "10:00 AM", end: "11:00 AM", available: false },
+      { id: "6-3", start: "11:30 AM", end: "12:30 PM", available: true },
+      { id: "6-4", start: "1:00 PM", end: "2:00 PM", available: true },
+      { id: "6-5", start: "2:30 PM", end: "3:30 PM", available: true },
+      { id: "6-6", start: "4:00 PM", end: "5:00 PM", available: true },
+    ],
   },
 ];
-
 export const defaultTimeSlots: TimeSlot[] = [
   { id: "1", start: "8:00 AM", end: "9:30 AM", available: true },
   { id: "2", start: "9:30 AM", end: "11:00 AM", available: true },
