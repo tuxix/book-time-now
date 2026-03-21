@@ -7,7 +7,8 @@ export interface ServiceProvider {
   address: string;
   phone: string;
   image: string;
-  pinPosition: { top: string; left: string };
+  lat: number;
+  lng: number;
 }
 
 export interface TimeSlot {
@@ -35,6 +36,9 @@ export const categories = [
   { id: "nail-tech", label: "Nail Tech", icon: "💅" },
 ];
 
+// Center: Kingston, Jamaica ~18.0179, -76.8099
+export const MAP_CENTER = { lat: 18.0179, lng: -76.8099 } as const;
+
 export const providers: ServiceProvider[] = [
   {
     id: "1",
@@ -45,7 +49,8 @@ export const providers: ServiceProvider[] = [
     address: "12 Kingsway Ave, Kingston 10",
     phone: "+1 876-555-0101",
     image: "KK",
-    pinPosition: { top: "35%", left: "55%" },
+    lat: 18.0195,
+    lng: -76.8020,
   },
   {
     id: "2",
@@ -56,7 +61,8 @@ export const providers: ServiceProvider[] = [
     address: "45 Hope Road, Kingston 6",
     phone: "+1 876-555-0102",
     image: "FF",
-    pinPosition: { top: "50%", left: "30%" },
+    lat: 18.0145,
+    lng: -76.7925,
   },
   {
     id: "3",
@@ -67,7 +73,8 @@ export const providers: ServiceProvider[] = [
     address: "8 Trafalgar Road, Kingston 10",
     phone: "+1 876-555-0103",
     image: "GH",
-    pinPosition: { top: "25%", left: "40%" },
+    lat: 18.0210,
+    lng: -76.7980,
   },
   {
     id: "4",
@@ -78,7 +85,8 @@ export const providers: ServiceProvider[] = [
     address: "22 Constant Spring Rd, Kingston 8",
     phone: "+1 876-555-0104",
     image: "CG",
-    pinPosition: { top: "60%", left: "65%" },
+    lat: 18.0280,
+    lng: -76.8050,
   },
   {
     id: "5",
@@ -89,7 +97,8 @@ export const providers: ServiceProvider[] = [
     address: "5 Barbican Road, Kingston 6",
     phone: "+1 876-555-0105",
     image: "PG",
-    pinPosition: { top: "45%", left: "70%" },
+    lat: 18.0230,
+    lng: -76.7880,
   },
   {
     id: "6",
@@ -100,7 +109,8 @@ export const providers: ServiceProvider[] = [
     address: "33 Lady Musgrave Rd, Kingston 5",
     phone: "+1 876-555-0106",
     image: "NT",
-    pinPosition: { top: "40%", left: "20%" },
+    lat: 18.0160,
+    lng: -76.7950,
   },
 ];
 
