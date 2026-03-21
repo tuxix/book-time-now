@@ -1,17 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { MapPin, ChevronRight, Star } from "lucide-react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { providers, categories, MAP_CENTER, type ServiceProvider } from "@/data/mockData";
 
-// Fix default marker icon issue with bundlers
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
+interface MapHomeProps {
+  onSelectCategory: (categoryId: string) => void;
+  onSelectProvider: (provider: ServiceProvider) => void;
+}
 
 const createProviderIcon = (label: string) =>
   L.divIcon({
@@ -47,74 +43,70 @@ const userIcon = L.divIcon({
   iconAnchor: [8, 8],
 });
 
-interface MapHomeProps {
-  onSelectCategory: (categoryId: string) => void;
-  onSelectProvider: (provider: ServiceProvider) => void;
-}
-
-/** Invalidate map size when the sheet opens/closes */
-const MapResizer = ({ trigger }: { trigger: boolean }) => {
-  const map = useMap();
-  useEffect(() => {
-    setTimeout(() => map.invalidateSize(), 350);
-  }, [trigger, map]);
-  return null;
-};
-
 const MapHome = ({ onSelectCategory, onSelectProvider }: MapHomeProps) => {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const iconsRef = useRef<Map<string, L.DivIcon>>(new Map());
+  const mapRef = useRef<L.Map | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const getIcon = (p: ServiceProvider) => {
-    if (!iconsRef.current.has(p.id)) {
-      iconsRef.current.set(p.id, createProviderIcon(p.image));
-    }
-    return iconsRef.current.get(p.id)!;
-  };
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const map = L.map(containerRef.current, {
+      center: [MAP_CENTER.lat, MAP_CENTER.lng],
+      zoom: 14,
+      zoomControl: false,
+      attributionControl: false,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    }).addTo(map);
+
+    // User location marker
+    L.marker([MAP_CENTER.lat, MAP_CENTER.lng], { icon: userIcon }).addTo(map);
+
+    // Provider markers
+    providers.forEach((p) => {
+      const marker = L.marker([p.lat, p.lng], { icon: createProviderIcon(p.image) }).addTo(map);
+      marker.bindPopup(
+        `<div style="min-width:160px;font-family:inherit;">
+          <p style="font-weight:700;font-size:14px;margin:0 0 4px;">${p.name}</p>
+          <div style="display:flex;align-items:center;gap:4px;font-size:12px;color:#6b7280;">
+            <span>⭐ ${p.rating}</span>
+            <span>·</span>
+            <span>${p.distance}</span>
+          </div>
+          <p class="booka-popup-link" style="font-size:12px;color:hsl(215 90% 52%);font-weight:600;margin:6px 0 0;cursor:pointer;">View profile →</p>
+        </div>`,
+        { closeButton: false }
+      );
+      marker.on("popupopen", () => {
+        setTimeout(() => {
+          const link = document.querySelector(".booka-popup-link");
+          if (link) {
+            (link as HTMLElement).onclick = () => onSelectProvider(p);
+          }
+        }, 0);
+      });
+    });
+
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [onSelectProvider]);
+
+  // Invalidate size when sheet opens/closes
+  useEffect(() => {
+    setTimeout(() => mapRef.current?.invalidateSize(), 350);
+  }, [sheetOpen]);
 
   return (
     <div className="relative h-[calc(100vh-4rem)] overflow-hidden">
       {/* Leaflet Map */}
-      <div className="absolute inset-0 z-0">
-        <MapContainer
-          center={[MAP_CENTER.lat, MAP_CENTER.lng]}
-          zoom={14}
-          zoomControl={false}
-          attributionControl={false}
-          className="w-full h-full"
-          style={{ background: "hsl(215 25% 94%)" }}
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-          />
-          <MapResizer trigger={sheetOpen} />
-
-          {/* User location */}
-          <Marker position={[MAP_CENTER.lat, MAP_CENTER.lng]} icon={userIcon} />
-
-          {/* Provider markers */}
-          {providers.map((p) => (
-            <Marker key={p.id} position={[p.lat, p.lng]} icon={getIcon(p)}>
-              <Popup className="booka-popup" minWidth={180} maxWidth={220}>
-                <button
-                  onClick={() => onSelectProvider(p)}
-                  className="w-full text-left"
-                >
-                  <p className="font-bold text-sm text-foreground leading-tight">{p.name}</p>
-                  <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                    <Star size={12} className="fill-amber-400 text-amber-400" />
-                    <span>{p.rating}</span>
-                    <span className="mx-1">·</span>
-                    <span>{p.distance}</span>
-                  </div>
-                  <p className="text-xs text-primary font-semibold mt-1.5">View profile →</p>
-                </button>
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
-      </div>
+      <div ref={containerRef} className="absolute inset-0 z-0" style={{ background: "hsl(215 25% 94%)" }} />
 
       {/* Bottom search sheet */}
       <div
