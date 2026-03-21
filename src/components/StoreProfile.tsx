@@ -87,7 +87,7 @@ const StoreProfile = ({ provider, onBack, onBook }: StoreProfileProps) => {
           Available Slots
         </h2>
         <div className="grid grid-cols-2 gap-2.5">
-          {defaultTimeSlots.map((ts, i) => (
+          {provider.timeSlots.map((ts, i) => (
             <button
               key={ts.id}
               disabled={!ts.available}

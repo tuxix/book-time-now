@@ -103,7 +103,7 @@ const ProviderDashboard = () => {
           Time Slot Configuration
         </h2>
         <div className="space-y-2">
-          {defaultTimeSlots.map((slot) => (
+          {provider.timeSlots.map((slot) => (
             <div
               key={slot.id}
               className="bg-card rounded-2xl p-4 booka-shadow-sm flex items-center justify-between"
