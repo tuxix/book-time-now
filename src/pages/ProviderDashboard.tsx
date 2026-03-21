@@ -26,8 +26,9 @@ const statusStyles: Record<string, { bg: string; text: string; icon: typeof Cloc
 const ProviderDashboard = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState(mockBookings);
+  const provider = providers[0]; // default to first provider
   const [enabledSlots, setEnabledSlots] = useState<Set<string>>(
-    new Set(defaultTimeSlots.map((s) => s.id))
+    new Set(provider.timeSlots.map((s) => s.id))
   );
 
   const toggleSlot = (id: string) => {
