@@ -14,7 +14,7 @@ const StoreProfile = ({ provider, onBack, onBook }: StoreProfileProps) => {
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
   const dates = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i));
-  const slot = defaultTimeSlots.find((s) => s.id === selectedSlot);
+  const slot = provider.timeSlots.find((s) => s.id === selectedSlot);
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-background pb-28">
