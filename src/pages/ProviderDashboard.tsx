@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Clock, User, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { defaultTimeSlots } from "@/data/mockData";
+import { providers } from "@/data/mockData";
 import { format } from "date-fns";
 
 interface DashboardBooking {
