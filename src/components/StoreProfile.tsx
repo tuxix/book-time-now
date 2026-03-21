@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Star, MapPin, Phone, Clock } from "lucide-react";
 import { format, addDays } from "date-fns";
-import { type ServiceProvider, defaultTimeSlots, type TimeSlot } from "@/data/mockData";
+import { type ServiceProvider, type TimeSlot } from "@/data/mockData";
 
 interface StoreProfileProps {
   provider: ServiceProvider;
