@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Clock, User, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { defaultTimeSlots } from "@/data/mockData";
+import { providers } from "@/data/mockData";
 import { format } from "date-fns";
 
 interface DashboardBooking {
@@ -26,8 +26,9 @@ const statusStyles: Record<string, { bg: string; text: string; icon: typeof Cloc
 const ProviderDashboard = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState(mockBookings);
+  const provider = providers[0]; // default to first provider
   const [enabledSlots, setEnabledSlots] = useState<Set<string>>(
-    new Set(defaultTimeSlots.map((s) => s.id))
+    new Set(provider.timeSlots.map((s) => s.id))
   );
 
   const toggleSlot = (id: string) => {
@@ -102,7 +103,7 @@ const ProviderDashboard = () => {
           Time Slot Configuration
         </h2>
         <div className="space-y-2">
-          {defaultTimeSlots.map((slot) => (
+          {provider.timeSlots.map((slot) => (
             <div
               key={slot.id}
               className="bg-card rounded-2xl p-4 booka-shadow-sm flex items-center justify-between"

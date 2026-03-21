@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Star, MapPin, Phone, Clock } from "lucide-react";
 import { format, addDays } from "date-fns";
-import { type ServiceProvider, defaultTimeSlots, type TimeSlot } from "@/data/mockData";
+import { type ServiceProvider, type TimeSlot } from "@/data/mockData";
 
 interface StoreProfileProps {
   provider: ServiceProvider;
@@ -14,7 +14,7 @@ const StoreProfile = ({ provider, onBack, onBook }: StoreProfileProps) => {
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
   const dates = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i));
-  const slot = defaultTimeSlots.find((s) => s.id === selectedSlot);
+  const slot = provider.timeSlots.find((s) => s.id === selectedSlot);
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-background pb-28">
@@ -87,7 +87,7 @@ const StoreProfile = ({ provider, onBack, onBook }: StoreProfileProps) => {
           Available Slots
         </h2>
         <div className="grid grid-cols-2 gap-2.5">
-          {defaultTimeSlots.map((ts, i) => (
+          {provider.timeSlots.map((ts, i) => (
             <button
               key={ts.id}
               disabled={!ts.available}
