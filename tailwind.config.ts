@@ -47,6 +47,18 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        booka: {
+          deep: "hsl(var(--booka-blue-deep))",
+          blue: "hsl(var(--booka-blue))",
+          light: "hsl(var(--booka-blue-light))",
+          glow: "hsl(var(--booka-blue-glow))",
+          surface: "hsl(var(--booka-surface))",
+          "surface-raised": "hsl(var(--booka-surface-raised))",
+          "text-primary": "hsl(var(--booka-text-primary))",
+          "text-secondary": "hsl(var(--booka-text-secondary))",
+          success: "hsl(var(--booka-success))",
+          warning: "hsl(var(--booka-warning))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
