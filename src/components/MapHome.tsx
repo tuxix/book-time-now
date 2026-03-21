@@ -1,50 +1,124 @@
-import { useState } from "react";
-import { MapPin, ChevronRight } from "lucide-react";
-import mapBg from "@/assets/map-bg.jpg";
-import { providers, categories, type ServiceProvider } from "@/data/mockData";
+import { useState, useEffect, useRef } from "react";
+import { MapPin, ChevronRight, Star } from "lucide-react";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { providers, categories, MAP_CENTER, type ServiceProvider } from "@/data/mockData";
+
+// Fix default marker icon issue with bundlers
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+const createProviderIcon = (label: string) =>
+  L.divIcon({
+    className: "",
+    html: `<div style="
+      width:36px;height:36px;border-radius:50%;
+      background:hsl(215 90% 52%);color:#fff;
+      display:flex;align-items:center;justify-content:center;
+      font-size:10px;font-weight:700;
+      border:2px solid #fff;
+      box-shadow:0 2px 8px rgba(0,0,0,.25);
+    ">${label}</div>
+    <div style="
+      width:0;height:0;margin:-2px auto 0;
+      border-left:6px solid transparent;
+      border-right:6px solid transparent;
+      border-top:8px solid hsl(215 90% 52%);
+    "></div>`,
+    iconSize: [36, 46],
+    iconAnchor: [18, 46],
+    popupAnchor: [0, -48],
+  });
+
+const userIcon = L.divIcon({
+  className: "",
+  html: `<div style="
+    width:16px;height:16px;border-radius:50%;
+    background:hsl(215 90% 52%);
+    border:3px solid #fff;
+    box-shadow:0 0 0 4px hsl(215 90% 52% / .3), 0 2px 6px rgba(0,0,0,.2);
+  "></div>`,
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
 
 interface MapHomeProps {
   onSelectCategory: (categoryId: string) => void;
   onSelectProvider: (provider: ServiceProvider) => void;
 }
 
+/** Invalidate map size when the sheet opens/closes */
+const MapResizer = ({ trigger }: { trigger: boolean }) => {
+  const map = useMap();
+  useEffect(() => {
+    setTimeout(() => map.invalidateSize(), 350);
+  }, [trigger, map]);
+  return null;
+};
+
 const MapHome = ({ onSelectCategory, onSelectProvider }: MapHomeProps) => {
   const [sheetOpen, setSheetOpen] = useState(false);
+  const iconsRef = useRef<Map<string, L.DivIcon>>(new Map());
+
+  const getIcon = (p: ServiceProvider) => {
+    if (!iconsRef.current.has(p.id)) {
+      iconsRef.current.set(p.id, createProviderIcon(p.image));
+    }
+    return iconsRef.current.get(p.id)!;
+  };
 
   return (
     <div className="relative h-[calc(100vh-4rem)] overflow-hidden">
-      {/* Map background */}
-      <div className="absolute inset-0">
-        <img src={mapBg} alt="" className="w-full h-full object-cover" />
-
-        {/* User location dot */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-          <div className="w-4 h-4 rounded-full bg-primary border-[3px] border-primary-foreground booka-shadow" />
-          <div
-            className="absolute inset-0 w-4 h-4 rounded-full bg-primary/40"
-            style={{ animation: "pulse-ring 2s ease-out infinite" }}
+      {/* Leaflet Map */}
+      <div className="absolute inset-0 z-0">
+        <MapContainer
+          center={[MAP_CENTER.lat, MAP_CENTER.lng]}
+          zoom={14}
+          zoomControl={false}
+          attributionControl={false}
+          className="w-full h-full"
+          style={{ background: "hsl(215 25% 94%)" }}
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
           />
-        </div>
+          <MapResizer trigger={sheetOpen} />
 
-        {/* Provider pins */}
-        {providers.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => onSelectProvider(p)}
-            className="absolute z-10 group transition-transform duration-200 hover:scale-110 active:scale-95"
-            style={{ top: p.pinPosition.top, left: p.pinPosition.left }}
-          >
-            <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center booka-shadow text-primary-foreground text-[10px] font-bold border-2 border-primary-foreground">
-              {p.image}
-            </div>
-            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-primary" />
-          </button>
-        ))}
+          {/* User location */}
+          <Marker position={[MAP_CENTER.lat, MAP_CENTER.lng]} icon={userIcon} />
+
+          {/* Provider markers */}
+          {providers.map((p) => (
+            <Marker key={p.id} position={[p.lat, p.lng]} icon={getIcon(p)}>
+              <Popup className="booka-popup" minWidth={180} maxWidth={220}>
+                <button
+                  onClick={() => onSelectProvider(p)}
+                  className="w-full text-left"
+                >
+                  <p className="font-bold text-sm text-foreground leading-tight">{p.name}</p>
+                  <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                    <Star size={12} className="fill-amber-400 text-amber-400" />
+                    <span>{p.rating}</span>
+                    <span className="mx-1">·</span>
+                    <span>{p.distance}</span>
+                  </div>
+                  <p className="text-xs text-primary font-semibold mt-1.5">View profile →</p>
+                </button>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
       </div>
 
       {/* Bottom search sheet */}
       <div
-        className={`absolute bottom-0 left-0 right-0 z-20 bg-card rounded-t-3xl transition-all duration-500 ease-out ${
+        className={`absolute bottom-0 left-0 right-0 z-[1000] bg-card rounded-t-3xl transition-all duration-500 ease-out ${
           sheetOpen ? "h-[60vh]" : "h-auto"
         }`}
         style={{ boxShadow: "0 -8px 30px hsl(215 25% 15% / 0.1)" }}
@@ -66,7 +140,7 @@ const MapHome = ({ onSelectCategory, onSelectProvider }: MapHomeProps) => {
 
         {/* Categories */}
         {sheetOpen && (
-          <div className="px-4 pb-8 fade-in">
+          <div className="px-4 pb-8 fade-in overflow-y-auto" style={{ maxHeight: "calc(60vh - 6rem)" }}>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
               Browse Services
             </p>
