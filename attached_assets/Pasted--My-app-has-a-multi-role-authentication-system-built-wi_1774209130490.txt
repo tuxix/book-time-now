@@ -1,0 +1,19 @@
+"My app has a multi-role authentication system built with React, Supabase, and TypeScript. Please read all existing code carefully before making any changes and do not duplicate anything that already works. Here is everything that needs to be fixed and added:
+
+AUTHENTICATION & PROFILE CREATION 1. Profile creation is broken — when a user signs up and selects either 'Customer' or 'Store' role, the profile is not being saved to the Supabase profiles table. Fix the signup flow so the role is saved correctly on account creation. 2. Add a database trigger that automatically creates a profile row in the profiles table whenever a new user signs up, so profile creation is never missed. 3. Users who sign in via Google OAuth and have no profile should be shown a role selection screen (Customer or Store) and have that role saved to the profiles table before proceeding anywhere else. 4. The useAuth hook must have a loading state that shows a loading spinner while the Supabase session and user profile/role are being fetched. Nothing should render until both are ready. 5. If a user's session expires, redirect them to the login screen gracefully without showing a blank screen. 6. Make sure refreshing the page mid-session does not log the user out or cause a blank screen.
+
+ROLE-BASED ROUTING 7. After login, Customers must be redirected to the store browsing and booking screen. Stores must be redirected to their dashboard. If no profile exists yet, redirect to the role selection screen.
+
+STORE EXPERIENCE 8. After a Store account is created, the store owner must be able to fill in their store name, category, description, address, and phone number before the dashboard loads. 9. The store dashboard must show all incoming reservations with the ability to update each reservation status from scheduled → in progress → completed. 10. Stores must be able to add and remove available time slots per day of the week from their profile or settings page. 11. Stores must not be bookable outside their set available time slots. 12. The store dashboard must display the store's average star rating and total review count.
+
+CUSTOMER EXPERIENCE 13. Customers must be able to browse a list of stores and search by name and category. 14. Customers must be able to select a store, pick a date, pick an available time slot, and confirm a reservation that gets saved to the reservations table. 15. Customers must not be able to double-book a time slot that is already taken by another customer. 16. Customers must be able to see their upcoming and past reservations in a booking history screen. 17. Customers must only see the option to leave a review after a reservation has been marked as completed by the store.
+
+ERROR HANDLING 18. Show clear, user-friendly error messages when signup, login, booking, or any form submission fails. Never show a blank screen or fail silently.
+
+SECURITY 19. Make sure Row Level Security (RLS) policies are correctly set on all tables — profiles, stores, store_time_slots, reservations, and reviews — so users can only read and edit their own data.
+
+GENERAL 20. Make sure the entire app is fully responsive and works correctly on mobile screen sizes.
+
+
+
+The database already has these tables: profiles, stores, store_time_slots, reservations, and reviews. Check all existing code first and do not overwrite anything that is already working correctly."

@@ -5,7 +5,7 @@ import type { User, Session } from "@supabase/supabase-js";
 interface AuthContext {
   user: User | null;
   session: Session | null;
-  profile: { role: string; full_name: string } | null;
+  profile: { role: string } | null;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -15,8 +15,17 @@ const Ctx = createContext<AuthContext | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<{ role: string; full_name: string } | null>(null);
+  const [profile, setProfile] = useState<{ role: string } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle();
+    setProfile(data ?? null);
+  };
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, sess) => {
@@ -24,12 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(sess?.user ?? null);
 
       if (sess?.user) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("role, full_name")
-          .eq("user_id", sess.user.id)
-          .maybeSingle();
-        setProfile(data ?? null);
+        await fetchProfile(sess.user.id);
       } else {
         setProfile(null);
       }
@@ -46,6 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setUser(null);
+    setSession(null);
   };
 
   return (

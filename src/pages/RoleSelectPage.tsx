@@ -14,26 +14,32 @@ const RoleSelectPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (!fullName.trim()) {
+      toast.error("Please enter your name.");
+      return;
+    }
     setLoading(true);
     try {
-      const { error } = await supabase.from("profiles").insert({
-        user_id: user.id,
+      // Update auth metadata with name
+      await supabase.auth.updateUser({ data: { full_name: fullName.trim(), role } });
+
+      const { error: profileError } = await supabase.from("profiles").insert({
+        id: user.id,
         role,
-        full_name: fullName,
       });
-      if (error) throw error;
+      if (profileError && profileError.code !== "23505") throw profileError;
 
       if (role === "store") {
-        await supabase.from("stores").insert({
+        const { error: storeError } = await supabase.from("stores").insert({
           user_id: user.id,
-          name: fullName,
+          name: fullName.trim(),
         });
+        if (storeError && storeError.code !== "23505") throw storeError;
       }
 
-      // Reload to pick up profile
       window.location.reload();
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -80,7 +86,11 @@ const RoleSelectPage = () => {
               <p className="text-xs font-normal mt-1 opacity-80">Manage your business</p>
             </button>
           </div>
-          <Button type="submit" className="w-full h-12 rounded-xl font-semibold" disabled={loading || !fullName}>
+          <Button
+            type="submit"
+            className="w-full h-12 rounded-xl font-semibold"
+            disabled={loading || !fullName.trim()}
+          >
             {loading ? "Setting up..." : "Continue"}
           </Button>
         </form>

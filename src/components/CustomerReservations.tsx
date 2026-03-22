@@ -28,24 +28,44 @@ const CustomerReservations = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [reviewTarget, setReviewTarget] = useState<Reservation | null>(null);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("reservations")
-      .select("*, stores(name, address)")
-      .eq("customer_id", user.id)
-      .order("reservation_date", { ascending: false });
-    if (data) setReservations(data as unknown as Reservation[]);
+    setLoading(true);
+    const [resResult, reviewResult] = await Promise.all([
+      supabase
+        .from("reservations")
+        .select("*, stores(name, address)")
+        .eq("customer_id", user.id)
+        .order("reservation_date", { ascending: false }),
+      supabase
+        .from("reviews")
+        .select("reservation_id")
+        .eq("customer_id", user.id),
+    ]);
 
-    const { data: reviews } = await supabase
-      .from("reviews")
-      .select("reservation_id")
-      .eq("customer_id", user.id);
-    if (reviews) setReviewedIds(new Set(reviews.map((r) => r.reservation_id)));
+    if (resResult.data) setReservations(resResult.data as unknown as Reservation[]);
+    if (reviewResult.data) setReviewedIds(new Set(reviewResult.data.map((r) => r.reservation_id)));
+    setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [user]);
+  useEffect(() => {
+    fetchData();
+  }, [user]);
+
+  if (loading) {
+    return (
+      <div className="px-5 pt-6">
+        <h1 className="text-xl font-bold mb-4">My Bookings</h1>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 rounded-2xl bg-secondary animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-5 pt-6">
@@ -66,16 +86,22 @@ const CustomerReservations = () => {
             >
               <div className="flex items-center justify-between mb-2">
                 <p className="font-semibold text-foreground text-sm">{r.stores?.name || "Store"}</p>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[r.status] || ""}`}>
+                <span
+                  className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    statusColors[r.status] || "bg-muted text-muted-foreground"
+                  }`}
+                >
                   {r.status.replace("_", " ")}
                 </span>
               </div>
               <div className="space-y-1 text-xs text-muted-foreground">
                 <p className="flex items-center gap-1.5">
-                  <Calendar size={12} /> {format(parseISO(r.reservation_date), "MMM d, yyyy")}
+                  <Calendar size={12} />
+                  {format(parseISO(r.reservation_date), "MMM d, yyyy")}
                 </p>
                 <p className="flex items-center gap-1.5">
-                  <Clock size={12} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
+                  <Clock size={12} />
+                  {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
                 </p>
                 {r.stores?.address && (
                   <p className="flex items-center gap-1.5">
@@ -91,6 +117,10 @@ const CustomerReservations = () => {
                 >
                   <Star size={14} /> Leave a Review
                 </button>
+              )}
+
+              {r.status === "completed" && reviewedIds.has(r.id) && (
+                <p className="mt-2 text-xs text-muted-foreground text-center">✓ Review submitted</p>
               )}
             </div>
           ))}

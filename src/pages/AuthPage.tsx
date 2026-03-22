@@ -20,35 +20,46 @@ const AuthPage = () => {
     setLoading(true);
     try {
       if (mode === "signup") {
+        if (!fullName.trim()) {
+          toast.error("Please enter your full name.");
+          return;
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName, role } },
+          options: { data: { full_name: fullName.trim(), role } },
         });
         if (error) throw error;
 
         if (data.user) {
           const { error: profileError } = await supabase.from("profiles").insert({
-            user_id: data.user.id,
+            id: data.user.id,
             role,
-            full_name: fullName,
           });
-          if (profileError) throw profileError;
+          if (profileError && profileError.code !== "23505") throw profileError;
 
           if (role === "store") {
-            await supabase.from("stores").insert({
+            const { error: storeError } = await supabase.from("stores").insert({
               user_id: data.user.id,
-              name: fullName,
+              name: fullName.trim(),
             });
+            if (storeError && storeError.code !== "23505") throw storeError;
           }
         }
-        toast.success("Check your email to verify your account!");
+
+        toast.success("Account created! Check your email to verify.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        if (error) {
+          if (error.message.includes("Invalid login credentials")) {
+            throw new Error("Incorrect email or password.");
+          }
+          throw error;
+        }
       }
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -57,9 +68,7 @@ const AuthPage = () => {
   const handleGoogleLogin = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin },
     });
     if (error) toast.error(error.message);
   };
@@ -112,6 +121,7 @@ const AuthPage = () => {
               </div>
             </>
           )}
+
           <Input
             type="email"
             placeholder="Email"
@@ -128,7 +138,7 @@ const AuthPage = () => {
             minLength={6}
           />
           <Button type="submit" className="w-full h-12 rounded-xl font-semibold" disabled={loading}>
-            {loading ? "..." : mode === "login" ? "Sign In" : "Sign Up"}
+            {loading ? "Please wait..." : mode === "login" ? "Sign In" : "Sign Up"}
           </Button>
         </form>
 
@@ -145,6 +155,7 @@ const AuthPage = () => {
           variant="outline"
           className="w-full h-12 rounded-xl font-medium gap-2"
           onClick={handleGoogleLogin}
+          type="button"
         >
           <svg width="18" height="18" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -158,6 +169,7 @@ const AuthPage = () => {
         <p className="text-center text-sm text-muted-foreground">
           {mode === "login" ? "Don't have an account?" : "Already have an account?"}{" "}
           <button
+            type="button"
             onClick={() => setMode(mode === "login" ? "signup" : "login")}
             className="text-primary font-semibold hover:underline"
           >
