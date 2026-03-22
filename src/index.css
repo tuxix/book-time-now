@@ -123,3 +123,76 @@
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
 }
+
+/* ── Leaflet map overrides ────────────────────────────────────────────────── */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  font-family: inherit;
+}
+
+/* Prevent Leaflet z-index from fighting the bottom nav */
+.leaflet-pane         { z-index: 10 !important; }
+.leaflet-tile-pane    { z-index: 10 !important; }
+.leaflet-overlay-pane { z-index: 20 !important; }
+.leaflet-marker-pane  { z-index: 30 !important; }
+.leaflet-popup-pane   { z-index: 40 !important; }
+.leaflet-control      { z-index: 50 !important; }
+
+/* ── User location: pulsing blue dot ─────────────────────────────────────── */
+.booka-user-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: hsl(213 80% 50%);
+  border: 2.5px solid #fff;
+  box-shadow: 0 0 0 3px hsl(213 80% 50% / 0.25);
+  position: relative;
+}
+
+.booka-user-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: hsl(213 80% 50% / 0.25);
+  animation: booka-pulse 1.8s ease-out infinite;
+}
+
+@keyframes booka-pulse {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+/* ── Store map pins ──────────────────────────────────────────────────────── */
+.booka-pin {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: hsl(213 80% 50%);
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.booka-pin:hover {
+  transform: scale(1.15);
+}
+
+.booka-pin--active {
+  background: hsl(215 80% 22%);
+  transform: scale(1.2);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.booka-pin span {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  line-height: 1;
+  pointer-events: none;
+}

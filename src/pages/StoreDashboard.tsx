@@ -58,6 +58,8 @@ interface StoreData {
   category: string;
   rating: number;
   review_count: number;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -68,13 +70,13 @@ const statusConfig: Record<
   string,
   { bg: string; icon: typeof Clock; next: string | null }
 > = {
-  scheduled: { bg: "bg-blue-100 text-blue-700", icon: Clock, next: "in_progress" },
-  in_progress: { bg: "bg-amber-100 text-amber-700", icon: Play, next: "completed" },
-  completed: { bg: "bg-green-100 text-green-700", icon: CheckCircle2, next: null },
-  cancelled: { bg: "bg-red-100 text-red-700", icon: Clock, next: null },
+  scheduled:  { bg: "bg-blue-100 text-blue-700",   icon: Clock,         next: "in_progress" },
+  in_progress:{ bg: "bg-amber-100 text-amber-700", icon: Play,          next: "completed" },
+  completed:  { bg: "bg-green-100 text-green-700", icon: CheckCircle2,  next: null },
+  cancelled:  { bg: "bg-red-100 text-red-700",     icon: Clock,         next: null },
 };
 
-// ─── Store Setup Screen (shown on first login if store profile is incomplete) ───
+// ─── Store Setup Screen ───────────────────────────────────────────────────────
 const StoreSetupScreen = ({
   initialName,
   userId,
@@ -89,6 +91,8 @@ const StoreSetupScreen = ({
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -107,6 +111,8 @@ const StoreSetupScreen = ({
           description: description.trim(),
           address: address.trim(),
           phone: phone.trim(),
+          latitude: lat ? parseFloat(lat) : null,
+          longitude: lng ? parseFloat(lng) : null,
         })
         .eq("user_id", userId)
         .select()
@@ -137,6 +143,7 @@ const StoreSetupScreen = ({
 
         <form onSubmit={handleSave} className="space-y-3 slide-up">
           <Input
+            data-testid="input-setup-name"
             placeholder="Store name *"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -144,6 +151,7 @@ const StoreSetupScreen = ({
             required
           />
           <Input
+            data-testid="input-setup-category"
             placeholder="Category — e.g. Barber, Salon, Spa *"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -151,6 +159,7 @@ const StoreSetupScreen = ({
             required
           />
           <Textarea
+            data-testid="input-setup-description"
             placeholder="Description (optional)"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -158,23 +167,48 @@ const StoreSetupScreen = ({
             rows={3}
           />
           <Input
+            data-testid="input-setup-address"
             placeholder="Address (optional)"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             className="rounded-xl"
           />
           <Input
+            data-testid="input-setup-phone"
             placeholder="Phone number (optional)"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             className="rounded-xl"
           />
+          <div className="flex gap-2">
+            <Input
+              data-testid="input-setup-lat"
+              type="number"
+              step="any"
+              placeholder="Latitude (e.g. 17.997)"
+              value={lat}
+              onChange={(e) => setLat(e.target.value)}
+              className="rounded-xl"
+            />
+            <Input
+              data-testid="input-setup-lng"
+              type="number"
+              step="any"
+              placeholder="Longitude (e.g. -76.793)"
+              value={lng}
+              onChange={(e) => setLng(e.target.value)}
+              className="rounded-xl"
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground px-1">
+            Latitude &amp; longitude place your pin on the customer map. Leave blank to use an approximate position.
+          </p>
           <Button
             type="submit"
             className="w-full h-12 rounded-xl font-semibold mt-2"
             disabled={saving || !name.trim() || !category.trim()}
           >
-            {saving ? "Saving..." : "Go to Dashboard"}
+            {saving ? "Saving…" : "Go to Dashboard"}
           </Button>
         </form>
       </div>
@@ -198,15 +232,17 @@ const StoreDashboard = () => {
   const [slotStart, setSlotStart] = useState("");
   const [slotEnd, setSlotEnd] = useState("");
 
-  // Profile edit
+  // Profile edit fields
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editAddr, setEditAddr] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [editLat, setEditLat] = useState("");
+  const [editLng, setEditLng] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Load store — create if missing (handles email-confirmation signup edge case)
+  // ── Load store, auto-create if missing ──────────────────────────────────
   useEffect(() => {
     if (!user) return;
 
@@ -218,18 +254,20 @@ const StoreDashboard = () => {
         .maybeSingle();
 
       if (error) {
+        console.error("[Booka] store load error:", error.message, error.code);
         toast.error("Failed to load store data. Please refresh.");
         setLoadingStore(false);
         return;
       }
 
       if (!data) {
-        // Store record was not created at signup (e.g. email confirmation was required).
+        // Store record wasn't created at signup (e.g. email confirmation required).
         // Create it now that the user is authenticated.
         const name =
           user.user_metadata?.full_name ||
           user.email?.split("@")[0] ||
           "My Store";
+
         const { data: newStore, error: createError } = await supabase
           .from("stores")
           .insert({ user_id: user.id, name })
@@ -237,7 +275,8 @@ const StoreDashboard = () => {
           .single();
 
         if (createError) {
-          toast.error("Could not initialize your store. Please refresh.");
+          console.error("[Booka] store create error:", createError.message);
+          toast.error("Could not initialise your store. Please refresh.");
           setLoadingStore(false);
           return;
         }
@@ -246,40 +285,39 @@ const StoreDashboard = () => {
       } else {
         const s = data as StoreData;
         setStore(s);
-        // Show setup if store has no category yet
         setNeedsSetup(!s.category?.trim());
         setEditName(s.name || "");
         setEditDesc(s.description || "");
         setEditAddr(s.address || "");
         setEditPhone(s.phone || "");
         setEditCategory(s.category || "");
+        setEditLat(s.latitude != null ? String(s.latitude) : "");
+        setEditLng(s.longitude != null ? String(s.longitude) : "");
       }
 
       setLoadingStore(false);
     })();
   }, [user]);
 
-  // Fetch reservations & slots once store is known
+  // ── Fetch reservations & slots once store is ready ───────────────────────
   useEffect(() => {
     if (!store || needsSetup) return;
 
-    // Reservations — label each with a customer identifier
     supabase
       .from("reservations")
       .select("id, reservation_date, start_time, end_time, status, fee, customer_id")
       .eq("store_id", store.id)
       .order("reservation_date", { ascending: false })
-      .then(({ data }) => {
-        if (!data) return;
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("[Booka] reservations load error:", error.message);
+          return;
+        }
         setReservations(
-          data.map((r, i) => ({
-            ...r,
-            customer_label: `Customer #${i + 1}`,
-          }))
+          (data ?? []).map((r, i) => ({ ...r, customer_label: `Customer #${i + 1}` }))
         );
       });
 
-    // Time slots
     supabase
       .from("store_time_slots")
       .select("*")
@@ -290,6 +328,7 @@ const StoreDashboard = () => {
       });
   }, [store, needsSetup]);
 
+  // ── Status cycling ───────────────────────────────────────────────────────
   const cycleStatus = async (id: string, current: string) => {
     const cfg = statusConfig[current];
     if (!cfg?.next) return;
@@ -307,6 +346,7 @@ const StoreDashboard = () => {
     toast.success(`Marked as ${cfg.next.replace("_", " ")}`);
   };
 
+  // ── Time slot management ─────────────────────────────────────────────────
   const addSlot = async () => {
     if (!store || !slotStart || !slotEnd) return;
     if (slotStart >= slotEnd) {
@@ -324,7 +364,8 @@ const StoreDashboard = () => {
       .select()
       .single();
     if (error) {
-      toast.error("Failed to add slot.");
+      console.error("[Booka] slot insert error:", error.message, error.code);
+      toast.error(`Failed to add slot: ${error.message}`);
       return;
     }
     setSlots((prev) => [...prev, data as TimeSlot]);
@@ -343,6 +384,7 @@ const StoreDashboard = () => {
     setSlots((prev) => prev.filter((s) => s.id !== id));
   };
 
+  // ── Profile save ─────────────────────────────────────────────────────────
   const saveProfile = async () => {
     if (!store) return;
     if (!editName.trim()) {
@@ -356,13 +398,16 @@ const StoreDashboard = () => {
       address: editAddr.trim(),
       phone: editPhone.trim(),
       category: editCategory.trim(),
+      latitude: editLat ? parseFloat(editLat) : null,
+      longitude: editLng ? parseFloat(editLng) : null,
     };
     const { error } = await supabase
       .from("stores")
       .update(updates)
       .eq("id", store.id);
     if (error) {
-      toast.error("Failed to save. Please try again.");
+      console.error("[Booka] profile save error:", error.message, error.code);
+      toast.error(`Failed to save: ${error.message}`);
     } else {
       toast.success("Profile updated");
       setStore({ ...store, ...updates });
@@ -372,11 +417,11 @@ const StoreDashboard = () => {
 
   const tabs: { id: Tab; label: string; icon: typeof Calendar }[] = [
     { id: "reservations", label: "Bookings", icon: Calendar },
-    { id: "slots", label: "Slots", icon: Clock },
-    { id: "profile", label: "Profile", icon: Settings },
+    { id: "slots",        label: "Slots",    icon: Clock },
+    { id: "profile",      label: "Profile",  icon: Settings },
   ];
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // ── Loading ──────────────────────────────────────────────────────────────
   if (loadingStore) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -385,26 +430,28 @@ const StoreDashboard = () => {
     );
   }
 
-  // ── First-run setup ────────────────────────────────────────────────────────
+  // ── First-run setup ──────────────────────────────────────────────────────
   if (needsSetup && store) {
     return (
       <StoreSetupScreen
         initialName={store.name}
         userId={user!.id}
-        onComplete={(updatedStore) => {
-          setStore(updatedStore);
-          setEditName(updatedStore.name);
-          setEditDesc(updatedStore.description);
-          setEditAddr(updatedStore.address);
-          setEditPhone(updatedStore.phone);
-          setEditCategory(updatedStore.category);
+        onComplete={(updated) => {
+          setStore(updated);
+          setEditName(updated.name);
+          setEditDesc(updated.description);
+          setEditAddr(updated.address);
+          setEditPhone(updated.phone);
+          setEditCategory(updated.category);
+          setEditLat(updated.latitude != null ? String(updated.latitude) : "");
+          setEditLng(updated.longitude != null ? String(updated.longitude) : "");
           setNeedsSetup(false);
         }}
       />
     );
   }
 
-  // ── Main dashboard ─────────────────────────────────────────────────────────
+  // ── Main dashboard ───────────────────────────────────────────────────────
   return (
     <div className="max-w-lg mx-auto min-h-screen bg-background pb-20">
       {/* Header */}
@@ -412,28 +459,23 @@ const StoreDashboard = () => {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs text-muted-foreground">Store Dashboard</p>
-            <h1 className="text-lg font-bold text-foreground">
-              {store?.name || "My Store"}
-            </h1>
+            <h1 className="text-lg font-bold text-foreground">{store?.name || "My Store"}</h1>
           </div>
           {store && store.review_count > 0 && (
             <div className="flex items-center gap-1 text-sm">
               <Star size={14} className="text-amber-500 fill-amber-500" />
               <span className="font-medium">{store.rating}</span>
-              <span className="text-muted-foreground text-xs">
-                ({store.review_count})
-              </span>
+              <span className="text-muted-foreground text-xs">({store.review_count})</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Reservations tab */}
+      {/* ── Reservations tab ── */}
       {tab === "reservations" && (
         <div className="px-5 pt-4">
           <h2 className="text-sm font-semibold mb-3 text-muted-foreground">
-            {reservations.length}{" "}
-            {reservations.length === 1 ? "reservation" : "reservations"}
+            {reservations.length} {reservations.length === 1 ? "reservation" : "reservations"}
           </h2>
           {reservations.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
@@ -449,15 +491,14 @@ const StoreDashboard = () => {
                 return (
                   <div
                     key={r.id}
+                    data-testid={`card-reservation-${r.id}`}
                     className="p-4 rounded-2xl bg-card booka-shadow-sm slide-up"
-                    style={{
-                      animationDelay: `${i * 60}ms`,
-                      animationFillMode: "both",
-                    }}
+                    style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <p className="font-semibold text-sm">{r.customer_label}</p>
                       <button
+                        data-testid={`button-status-${r.id}`}
                         onClick={() => cycleStatus(r.id, r.status)}
                         disabled={!canAdvance}
                         className={`text-xs font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1 transition-all active:scale-95 ${cfg.bg} ${canAdvance ? "cursor-pointer" : "cursor-default opacity-70"}`}
@@ -467,13 +508,11 @@ const StoreDashboard = () => {
                       </button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {r.reservation_date} · {r.start_time.slice(0, 5)} –{" "}
-                      {r.end_time.slice(0, 5)}
+                      {r.reservation_date} · {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
                     </p>
                     {canAdvance && (
                       <p className="text-[10px] text-muted-foreground mt-1">
-                        Tap status to advance →{" "}
-                        {cfg.next!.replace("_", " ")}
+                        Tap to advance → {cfg.next!.replace("_", " ")}
                       </p>
                     )}
                   </div>
@@ -484,14 +523,13 @@ const StoreDashboard = () => {
         </div>
       )}
 
-      {/* Slots tab */}
+      {/* ── Slots tab ── */}
       {tab === "slots" && (
         <div className="px-5 pt-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-muted-foreground">
-              Time Slots
-            </h2>
+            <h2 className="text-sm font-semibold text-muted-foreground">Time Slots</h2>
             <Button
+              data-testid="button-add-slot"
               size="sm"
               variant="outline"
               className="rounded-xl gap-1 text-xs"
@@ -517,6 +555,7 @@ const StoreDashboard = () => {
               {slots.map((s) => (
                 <div
                   key={s.id}
+                  data-testid={`card-slot-${s.id}`}
                   className="flex items-center justify-between p-3 rounded-xl bg-card booka-shadow-sm"
                 >
                   <div className="flex items-center gap-2">
@@ -528,6 +567,7 @@ const StoreDashboard = () => {
                     </span>
                   </div>
                   <button
+                    data-testid={`button-remove-slot-${s.id}`}
                     onClick={() => removeSlot(s.id)}
                     className="p-1.5 rounded-lg hover:bg-destructive/10 active:scale-95 transition-all"
                   >
@@ -539,7 +579,7 @@ const StoreDashboard = () => {
           )}
 
           <Dialog open={slotDialog} onOpenChange={setSlotDialog}>
-            <DialogContent className="max-w-xs rounded-2xl">
+            <DialogContent className="max-w-xs rounded-2xl" aria-describedby={undefined}>
               <DialogHeader>
                 <DialogTitle>Add Time Slot</DialogTitle>
               </DialogHeader>
@@ -550,20 +590,20 @@ const StoreDashboard = () => {
                   </SelectTrigger>
                   <SelectContent>
                     {DAYS.map((d, i) => (
-                      <SelectItem key={i} value={String(i)}>
-                        {d}
-                      </SelectItem>
+                      <SelectItem key={i} value={String(i)}>{d}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <div className="flex gap-2">
                   <Input
+                    data-testid="input-slot-start"
                     type="time"
                     value={slotStart}
                     onChange={(e) => setSlotStart(e.target.value)}
                     className="rounded-xl"
                   />
                   <Input
+                    data-testid="input-slot-end"
                     type="time"
                     value={slotEnd}
                     onChange={(e) => setSlotEnd(e.target.value)}
@@ -571,6 +611,7 @@ const StoreDashboard = () => {
                   />
                 </div>
                 <Button
+                  data-testid="button-save-slot"
                   className="w-full rounded-xl"
                   onClick={addSlot}
                   disabled={!slotStart || !slotEnd}
@@ -583,25 +624,26 @@ const StoreDashboard = () => {
         </div>
       )}
 
-      {/* Profile tab */}
+      {/* ── Profile tab ── */}
       {tab === "profile" && (
         <div className="px-5 pt-4 space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground">
-            Store Profile
-          </h2>
+          <h2 className="text-sm font-semibold text-muted-foreground">Store Profile</h2>
           <Input
+            data-testid="input-profile-name"
             placeholder="Store name *"
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             className="rounded-xl"
           />
           <Input
+            data-testid="input-profile-category"
             placeholder="Category (e.g. Barber, Salon)"
             value={editCategory}
             onChange={(e) => setEditCategory(e.target.value)}
             className="rounded-xl"
           />
           <Textarea
+            data-testid="input-profile-description"
             placeholder="Description"
             value={editDesc}
             onChange={(e) => setEditDesc(e.target.value)}
@@ -609,25 +651,52 @@ const StoreDashboard = () => {
             rows={3}
           />
           <Input
+            data-testid="input-profile-address"
             placeholder="Address"
             value={editAddr}
             onChange={(e) => setEditAddr(e.target.value)}
             className="rounded-xl"
           />
           <Input
+            data-testid="input-profile-phone"
             placeholder="Phone"
             value={editPhone}
             onChange={(e) => setEditPhone(e.target.value)}
             className="rounded-xl"
           />
+          <div className="flex gap-2">
+            <Input
+              data-testid="input-profile-lat"
+              type="number"
+              step="any"
+              placeholder="Latitude"
+              value={editLat}
+              onChange={(e) => setEditLat(e.target.value)}
+              className="rounded-xl"
+            />
+            <Input
+              data-testid="input-profile-lng"
+              type="number"
+              step="any"
+              placeholder="Longitude"
+              value={editLng}
+              onChange={(e) => setEditLng(e.target.value)}
+              className="rounded-xl"
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground px-1">
+            Latitude &amp; longitude set your exact pin on the customer map.
+          </p>
           <Button
+            data-testid="button-save-profile"
             className="w-full rounded-xl"
             onClick={saveProfile}
             disabled={saving}
           >
-            {saving ? "Saving..." : "Save Changes"}
+            {saving ? "Saving…" : "Save Changes"}
           </Button>
           <Button
+            data-testid="button-sign-out"
             variant="outline"
             className="w-full rounded-xl gap-2 text-destructive border-destructive/30 hover:bg-destructive/5"
             onClick={signOut}
@@ -643,6 +712,7 @@ const StoreDashboard = () => {
           {tabs.map((t) => (
             <button
               key={t.id}
+              data-testid={`tab-${t.id}`}
               onClick={() => setTab(t.id)}
               className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all duration-200 active:scale-95"
             >
