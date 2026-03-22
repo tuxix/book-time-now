@@ -1,12 +1,34 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Clock, CheckCircle2, Play, Calendar, Settings, LogOut, Plus, Trash2, Star } from "lucide-react";
+import {
+  Clock,
+  CheckCircle2,
+  Play,
+  Calendar,
+  Settings,
+  LogOut,
+  Plus,
+  Trash2,
+  Star,
+  Store,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 
 interface Reservation {
@@ -16,7 +38,7 @@ interface Reservation {
   end_time: string;
   status: string;
   fee: number;
-  customer_name: string;
+  customer_label: string;
 }
 
 interface TimeSlot {
@@ -42,13 +64,125 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 type Tab = "reservations" | "slots" | "profile";
 
-const statusConfig: Record<string, { bg: string; icon: typeof Clock; next: string }> = {
+const statusConfig: Record<
+  string,
+  { bg: string; icon: typeof Clock; next: string | null }
+> = {
   scheduled: { bg: "bg-blue-100 text-blue-700", icon: Clock, next: "in_progress" },
   in_progress: { bg: "bg-amber-100 text-amber-700", icon: Play, next: "completed" },
-  completed: { bg: "bg-green-100 text-green-700", icon: CheckCircle2, next: "completed" },
-  cancelled: { bg: "bg-red-100 text-red-700", icon: Clock, next: "cancelled" },
+  completed: { bg: "bg-green-100 text-green-700", icon: CheckCircle2, next: null },
+  cancelled: { bg: "bg-red-100 text-red-700", icon: Clock, next: null },
 };
 
+// ─── Store Setup Screen (shown on first login if store profile is incomplete) ───
+const StoreSetupScreen = ({
+  initialName,
+  userId,
+  onComplete,
+}: {
+  initialName: string;
+  userId: string;
+  onComplete: (store: StoreData) => void;
+}) => {
+  const [name, setName] = useState(initialName);
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !category.trim()) {
+      toast.error("Store name and category are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from("stores")
+        .update({
+          name: name.trim(),
+          category: category.trim(),
+          description: description.trim(),
+          address: address.trim(),
+          phone: phone.trim(),
+        })
+        .eq("user_id", userId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      toast.success("Store profile saved!");
+      onComplete(data as StoreData);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 py-12">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center space-y-2 fade-in">
+          <div className="w-14 h-14 rounded-2xl booka-gradient flex items-center justify-center mx-auto mb-3">
+            <Store size={28} className="text-primary-foreground" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">Set up your store</h1>
+          <p className="text-sm text-muted-foreground">
+            Complete your profile so customers can find and book you.
+          </p>
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-3 slide-up">
+          <Input
+            placeholder="Store name *"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="rounded-xl"
+            required
+          />
+          <Input
+            placeholder="Category — e.g. Barber, Salon, Spa *"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="rounded-xl"
+            required
+          />
+          <Textarea
+            placeholder="Description (optional)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="rounded-xl resize-none"
+            rows={3}
+          />
+          <Input
+            placeholder="Address (optional)"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            className="rounded-xl"
+          />
+          <Input
+            placeholder="Phone number (optional)"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="rounded-xl"
+          />
+          <Button
+            type="submit"
+            className="w-full h-12 rounded-xl font-semibold mt-2"
+            disabled={saving || !name.trim() || !category.trim()}
+          >
+            {saving ? "Saving..." : "Go to Dashboard"}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
 const StoreDashboard = () => {
   const { user, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>("reservations");
@@ -56,6 +190,7 @@ const StoreDashboard = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [loadingStore, setLoadingStore] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState(false);
 
   // Slot dialog
   const [slotDialog, setSlotDialog] = useState(false);
@@ -71,61 +206,80 @@ const StoreDashboard = () => {
   const [editCategory, setEditCategory] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Load store — create if missing (handles email-confirmation signup edge case)
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from("stores")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          toast.error("Failed to load store data.");
-        } else if (data) {
-          const s = data as StoreData;
-          setStore(s);
-          setEditName(s.name || "");
-          setEditDesc(s.description || "");
-          setEditAddr(s.address || "");
-          setEditPhone(s.phone || "");
-          setEditCategory(s.category || "");
-        }
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("stores")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        toast.error("Failed to load store data. Please refresh.");
         setLoadingStore(false);
-      });
+        return;
+      }
+
+      if (!data) {
+        // Store record was not created at signup (e.g. email confirmation was required).
+        // Create it now that the user is authenticated.
+        const name =
+          user.user_metadata?.full_name ||
+          user.email?.split("@")[0] ||
+          "My Store";
+        const { data: newStore, error: createError } = await supabase
+          .from("stores")
+          .insert({ user_id: user.id, name })
+          .select()
+          .single();
+
+        if (createError) {
+          toast.error("Could not initialize your store. Please refresh.");
+          setLoadingStore(false);
+          return;
+        }
+        setStore(newStore as StoreData);
+        setNeedsSetup(true);
+      } else {
+        const s = data as StoreData;
+        setStore(s);
+        // Show setup if store has no category yet
+        setNeedsSetup(!s.category?.trim());
+        setEditName(s.name || "");
+        setEditDesc(s.description || "");
+        setEditAddr(s.address || "");
+        setEditPhone(s.phone || "");
+        setEditCategory(s.category || "");
+      }
+
+      setLoadingStore(false);
+    })();
   }, [user]);
 
+  // Fetch reservations & slots once store is known
   useEffect(() => {
-    if (!store) return;
+    if (!store || needsSetup) return;
 
+    // Reservations — label each with a customer identifier
     supabase
       .from("reservations")
       .select("id, reservation_date, start_time, end_time, status, fee, customer_id")
       .eq("store_id", store.id)
       .order("reservation_date", { ascending: false })
-      .then(async ({ data, error }) => {
-        if (error || !data) return;
-
-        // Fetch customer names from auth metadata via profiles join or fallback
-        const enriched: Reservation[] = await Promise.all(
-          data.map(async (r) => {
-            // Try to get name from profiles → auth metadata via RPC or direct
-            let customerName = "Customer";
-            const { data: profileData } = await supabase
-              .from("profiles")
-              .select("id")
-              .eq("id", r.customer_id)
-              .maybeSingle();
-            if (profileData) {
-              // Name lives in auth.users metadata; we can't access it server-side
-              // Use customer email prefix as fallback — store owners see "Customer #id"
-              customerName = `Customer`;
-            }
-            return { ...r, customer_name: customerName };
-          })
+      .then(({ data }) => {
+        if (!data) return;
+        setReservations(
+          data.map((r, i) => ({
+            ...r,
+            customer_label: `Customer #${i + 1}`,
+          }))
         );
-        setReservations(enriched);
       });
 
+    // Time slots
     supabase
       .from("store_time_slots")
       .select("*")
@@ -134,20 +288,23 @@ const StoreDashboard = () => {
       .then(({ data }) => {
         if (data) setSlots(data as TimeSlot[]);
       });
-  }, [store]);
+  }, [store, needsSetup]);
 
   const cycleStatus = async (id: string, current: string) => {
-    const next = statusConfig[current]?.next;
-    if (!next || next === current) return;
-    const { error } = await supabase.from("reservations").update({ status: next }).eq("id", id);
+    const cfg = statusConfig[current];
+    if (!cfg?.next) return;
+    const { error } = await supabase
+      .from("reservations")
+      .update({ status: cfg.next })
+      .eq("id", id);
     if (error) {
       toast.error("Failed to update status.");
       return;
     }
     setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: next } : r))
+      prev.map((r) => (r.id === id ? { ...r, status: cfg.next! } : r))
     );
-    toast.success(`Updated to ${next.replace("_", " ")}`);
+    toast.success(`Marked as ${cfg.next.replace("_", " ")}`);
   };
 
   const addSlot = async () => {
@@ -193,28 +350,22 @@ const StoreDashboard = () => {
       return;
     }
     setSaving(true);
+    const updates = {
+      name: editName.trim(),
+      description: editDesc.trim(),
+      address: editAddr.trim(),
+      phone: editPhone.trim(),
+      category: editCategory.trim(),
+    };
     const { error } = await supabase
       .from("stores")
-      .update({
-        name: editName.trim(),
-        description: editDesc.trim(),
-        address: editAddr.trim(),
-        phone: editPhone.trim(),
-        category: editCategory.trim(),
-      })
+      .update(updates)
       .eq("id", store.id);
     if (error) {
       toast.error("Failed to save. Please try again.");
     } else {
       toast.success("Profile updated");
-      setStore({
-        ...store,
-        name: editName.trim(),
-        description: editDesc.trim(),
-        address: editAddr.trim(),
-        phone: editPhone.trim(),
-        category: editCategory.trim(),
-      });
+      setStore({ ...store, ...updates });
     }
     setSaving(false);
   };
@@ -225,6 +376,7 @@ const StoreDashboard = () => {
     { id: "profile", label: "Profile", icon: Settings },
   ];
 
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loadingStore) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -233,29 +385,55 @@ const StoreDashboard = () => {
     );
   }
 
+  // ── First-run setup ────────────────────────────────────────────────────────
+  if (needsSetup && store) {
+    return (
+      <StoreSetupScreen
+        initialName={store.name}
+        userId={user!.id}
+        onComplete={(updatedStore) => {
+          setStore(updatedStore);
+          setEditName(updatedStore.name);
+          setEditDesc(updatedStore.description);
+          setEditAddr(updatedStore.address);
+          setEditPhone(updatedStore.phone);
+          setEditCategory(updatedStore.category);
+          setNeedsSetup(false);
+        }}
+      />
+    );
+  }
+
+  // ── Main dashboard ─────────────────────────────────────────────────────────
   return (
     <div className="max-w-lg mx-auto min-h-screen bg-background pb-20">
+      {/* Header */}
       <div className="sticky top-0 z-30 bg-card/95 backdrop-blur-md border-b border-border px-5 py-3">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs text-muted-foreground">Store Dashboard</p>
-            <h1 className="text-lg font-bold text-foreground">{store?.name || "My Store"}</h1>
+            <h1 className="text-lg font-bold text-foreground">
+              {store?.name || "My Store"}
+            </h1>
           </div>
-          {store && (store.rating > 0 || store.review_count > 0) && (
+          {store && store.review_count > 0 && (
             <div className="flex items-center gap-1 text-sm">
               <Star size={14} className="text-amber-500 fill-amber-500" />
               <span className="font-medium">{store.rating}</span>
-              <span className="text-muted-foreground text-xs">({store.review_count})</span>
+              <span className="text-muted-foreground text-xs">
+                ({store.review_count})
+              </span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Reservations */}
+      {/* Reservations tab */}
       {tab === "reservations" && (
         <div className="px-5 pt-4">
           <h2 className="text-sm font-semibold mb-3 text-muted-foreground">
-            {reservations.length} reservation{reservations.length !== 1 ? "s" : ""}
+            {reservations.length}{" "}
+            {reservations.length === 1 ? "reservation" : "reservations"}
           </h2>
           {reservations.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
@@ -267,25 +445,37 @@ const StoreDashboard = () => {
               {reservations.map((r, i) => {
                 const cfg = statusConfig[r.status] || statusConfig.scheduled;
                 const Icon = cfg.icon;
+                const canAdvance = cfg.next !== null;
                 return (
                   <div
                     key={r.id}
                     className="p-4 rounded-2xl bg-card booka-shadow-sm slide-up"
-                    style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
+                    style={{
+                      animationDelay: `${i * 60}ms`,
+                      animationFillMode: "both",
+                    }}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <p className="font-semibold text-sm">{r.customer_name}</p>
+                      <p className="font-semibold text-sm">{r.customer_label}</p>
                       <button
                         onClick={() => cycleStatus(r.id, r.status)}
-                        className={`text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1 ${cfg.bg} transition-all active:scale-95`}
-                        disabled={r.status === "completed" || r.status === "cancelled"}
+                        disabled={!canAdvance}
+                        className={`text-xs font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1 transition-all active:scale-95 ${cfg.bg} ${canAdvance ? "cursor-pointer" : "cursor-default opacity-70"}`}
                       >
-                        <Icon size={12} /> {r.status.replace("_", " ")}
+                        <Icon size={12} />
+                        {r.status.replace("_", " ")}
                       </button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {r.reservation_date} · {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
+                      {r.reservation_date} · {r.start_time.slice(0, 5)} –{" "}
+                      {r.end_time.slice(0, 5)}
                     </p>
+                    {canAdvance && (
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Tap status to advance →{" "}
+                        {cfg.next!.replace("_", " ")}
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -294,11 +484,13 @@ const StoreDashboard = () => {
         </div>
       )}
 
-      {/* Time Slots */}
+      {/* Slots tab */}
       {tab === "slots" && (
         <div className="px-5 pt-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-muted-foreground">Time Slots</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Time Slots
+            </h2>
             <Button
               size="sm"
               variant="outline"
@@ -358,7 +550,9 @@ const StoreDashboard = () => {
                   </SelectTrigger>
                   <SelectContent>
                     {DAYS.map((d, i) => (
-                      <SelectItem key={i} value={String(i)}>{d}</SelectItem>
+                      <SelectItem key={i} value={String(i)}>
+                        {d}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -389,12 +583,14 @@ const StoreDashboard = () => {
         </div>
       )}
 
-      {/* Profile */}
+      {/* Profile tab */}
       {tab === "profile" && (
-        <div className="px-5 pt-4 space-y-4">
-          <h2 className="text-sm font-semibold text-muted-foreground">Store Profile</h2>
+        <div className="px-5 pt-4 space-y-3">
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            Store Profile
+          </h2>
           <Input
-            placeholder="Store Name *"
+            placeholder="Store name *"
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             className="rounded-xl"
@@ -441,6 +637,7 @@ const StoreDashboard = () => {
         </div>
       )}
 
+      {/* Bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border booka-shadow-lg">
         <div className="max-w-lg mx-auto flex items-center justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           {tabs.map((t) => (
@@ -452,12 +649,19 @@ const StoreDashboard = () => {
               <t.icon
                 size={22}
                 strokeWidth={tab === t.id ? 2.5 : 1.8}
-                color={tab === t.id ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))"}
+                color={
+                  tab === t.id
+                    ? "hsl(var(--booka-blue))"
+                    : "hsl(var(--booka-text-secondary))"
+                }
               />
               <span
                 className="text-[10px] font-medium"
                 style={{
-                  color: tab === t.id ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))",
+                  color:
+                    tab === t.id
+                      ? "hsl(var(--booka-blue))"
+                      : "hsl(var(--booka-text-secondary))",
                 }}
               >
                 {t.label}

@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 const RoleSelectPage = () => {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const [role, setRole] = useState<"customer" | "store">("customer");
-  const [fullName, setFullName] = useState("");
+  const [fullName, setFullName] = useState(
+    user?.user_metadata?.full_name || ""
+  );
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -20,27 +22,30 @@ const RoleSelectPage = () => {
     }
     setLoading(true);
     try {
-      // Update auth metadata with name
-      await supabase.auth.updateUser({ data: { full_name: fullName.trim(), role } });
-
-      const { error: profileError } = await supabase.from("profiles").insert({
-        id: user.id,
-        role,
+      // Save name to auth metadata
+      const { error: metaError } = await supabase.auth.updateUser({
+        data: { full_name: fullName.trim(), role },
       });
+      if (metaError) throw metaError;
+
+      // Create profile row — trigger may have already created it; ON CONFLICT DO NOTHING
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({ id: user.id, role });
       if (profileError && profileError.code !== "23505") throw profileError;
 
+      // Create store record if store role
       if (role === "store") {
-        const { error: storeError } = await supabase.from("stores").insert({
-          user_id: user.id,
-          name: fullName.trim(),
-        });
+        const { error: storeError } = await supabase
+          .from("stores")
+          .insert({ user_id: user.id, name: fullName.trim() });
         if (storeError && storeError.code !== "23505") throw storeError;
       }
 
-      window.location.reload();
+      // Refresh profile in auth context so routing updates without a full page reload
+      await refreshProfile();
     } catch (err: any) {
       toast.error(err.message || "Something went wrong. Please try again.");
-    } finally {
       setLoading(false);
     }
   };
@@ -50,7 +55,9 @@ const RoleSelectPage = () => {
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2 fade-in">
           <h1 className="text-2xl font-bold text-foreground">Almost there!</h1>
-          <p className="text-sm text-muted-foreground">Choose how you'll use Booka</p>
+          <p className="text-sm text-muted-foreground">
+            Choose how you'll use Booka
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 slide-up">
@@ -71,7 +78,9 @@ const RoleSelectPage = () => {
               }`}
             >
               🧑 Customer
-              <p className="text-xs font-normal mt-1 opacity-80">Browse & book services</p>
+              <p className="text-xs font-normal mt-1 opacity-80">
+                Browse & book services
+              </p>
             </button>
             <button
               type="button"
@@ -83,7 +92,9 @@ const RoleSelectPage = () => {
               }`}
             >
               🏪 Store
-              <p className="text-xs font-normal mt-1 opacity-80">Manage your business</p>
+              <p className="text-xs font-normal mt-1 opacity-80">
+                Manage your business
+              </p>
             </button>
           </div>
           <Button
