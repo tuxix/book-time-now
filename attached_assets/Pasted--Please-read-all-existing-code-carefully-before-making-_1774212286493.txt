@@ -1,0 +1,33 @@
+"Please read all existing code carefully before making any changes. Here is everything that needs to be fixed in one go:
+
+DATABASE & TABLES 1. The app is showing 'Could not find the table public.stores in the schema cache'. Generate and run the complete SQL to create all missing tables — stores, store_time_slots, reservations, and reviews — with the correct columns, RLS policies, and triggers. Then verify every Supabase query in the code matches the exact column names in those tables and fix any mismatches.
+
+STORE SIDE 2. Store profile save is broken — when a store owner fills in their name, category, description, address and phone and hits save, nothing gets saved to the stores table. Fix the insert and update query, make sure it links to the logged in user's profile ID, and make sure RLS allows the store owner to insert and update their own store row. 3. Time slots are not saving — when a store owner creates a time slot it appears on screen but is not saved to the store_time_slots table. Fix the insert query, make sure it links to the correct store ID, and make sure RLS allows the store owner to insert and delete their own time slots. 4. For both save issues: check exact column names match the code, make sure the store ID is fetched correctly before any insert, and show a clear visible error message if a save fails. 5. Store dashboard must load reservations correctly from the reservations table and show customer details.
+
+CUSTOMER SIDE — MAP 6. The customer home screen must be a full Waze/Uber style map interface using Leaflet.js (CDN: https://unpkg.com/leaflet@1.9.4/dist/leaflet.js). The map must fill at least 60% of the screen height. 7. Show the customer's current location as a pulsing blue dot. Request location permission on load and fall back to a default location if denied. 8. Each store in the stores table must appear as a round blue pin with the store's initials on the map, positioned at their address. Tapping a pin opens that store's booking page. 9. A draggable bottom sheet sits on top of the map. Default position shows a 'Where to?' search bar and a 2x2 category grid with emoji icons — Barber, Hair Salon, Dog Grooming, Nail Tech and any other categories stores have used. The sheet can be pulled up to show more and pushed down to show the full map. 10. Tapping 'Where to?' opens a search screen where customers can type a store name or category and see matching results as a list. 11. Tapping a category in the grid filters the map to show only pins for stores in that category. 12. Bottom navigation must have exactly four tabs: Explore, Search, Bookings, Profile.
+
+STORES NOT LOADING 13. The customer browse screen shows 'No stores available yet' even though stores exist in the database. Fix by:
+
+
+
+
+
+Checking the exact Supabase query fetching from the stores table
+
+
+
+Making sure the RLS policy on the stores table allows all authenticated users to read all store rows
+
+
+
+Adding a console log of the Supabase response so errors are visible
+
+
+
+Confirming stores load and appear as pins on the map after the fix
+
+ALL TABLES 14. Make sure all RLS policies are correct across all tables — profiles, stores, store_time_slots, reservations, reviews — so each role can only read and write their own data, except stores which should be readable by all authenticated users. 15. Make sure reviews save to the reviews table and automatically update the store's average rating and review count via a database trigger. 16. When a Customer makes a booking make sure it saves to the reservations table with the correct customer ID, store ID, date and time slot.
+
+
+
+Do not overwrite anything that is already working. Check existing code first, fix only what is broken, and confirm each fix works before moving to the next one."
