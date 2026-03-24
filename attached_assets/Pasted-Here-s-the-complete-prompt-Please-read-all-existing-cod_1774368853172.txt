@@ -1,0 +1,130 @@
+Here's the complete prompt:
+
+---
+
+*"Please read all existing code carefully before making any changes. Do not overwrite anything already working. Give me any SQL as a code block and wait for my confirmation before continuing. Here is everything that needs to be added:*
+
+***COMMITMENT FEE & PAYMENTS***
+*1. Before a booking is confirmed show a payment confirmation screen that displays:*
+- *Store name and selected time slot*
+- *Commitment fee amount*
+- *A note saying this deposit is deducted from your final service price*
+- *A Confirm and Pay button and a Cancel button*
+
+*2. Store owners can set their own commitment fee amount from the Dashboard Profile tab. Add a Commitment Fee field with a number input defaulting to J$750*
+
+*3. Give me this as a SQL code block to run first:*
+- *ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS commitment_fee numeric(10,2) NOT NULL DEFAULT 750;*
+
+*4. The commitment fee amount set by the store must show on the booking confirmation screen for that specific store*
+
+***CANCELLATION POLICY***
+*5. Store owners can set a cancellation window from the Dashboard Profile tab — options are 1 hour, 2 hours, 6 hours, 12 hours, 24 hours or 48 hours before the appointment*
+
+*6. Give me this as a SQL code block:*
+- *ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS cancellation_hours integer NOT NULL DEFAULT 24;*
+
+*7. When a customer tries to cancel a booking:*
+- *If they are outside the cancellation window — allow the cancellation and show a success message*
+- *If they are inside the cancellation window — show a warning saying they will forfeit their commitment fee and ask them to confirm before cancelling*
+- *If the appointment is less than 1 hour away — do not allow cancellation at all and show a message saying it is too late to cancel*
+
+*8. Show the cancellation policy clearly on the store profile page for example Free cancellation up to 24 hours before your appointment*
+
+***CUSTOMER FAVOURITES***
+*9. Add a heart icon button on every store card and store profile page. Tapping it saves or removes the store from the customer's favourites*
+
+*10. Give me this as a SQL code block:*
+```sql
+CREATE TABLE IF NOT EXISTS public.customer_favourites (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(customer_id, store_id)
+);
+
+ALTER TABLE public.customer_favourites ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Customers manage own favourites"
+  ON public.customer_favourites FOR ALL TO authenticated
+  USING (auth.uid() = customer_id)
+  WITH CHECK (auth.uid() = customer_id);
+```
+
+*11. Add a Favourites section on the customer Profile tab showing all saved stores as cards with name, category, rating and distance*
+
+***CUSTOMER BOOKING CANCELLATION***
+*12. In the customer Bookings tab add a Cancel Appointment button on each upcoming booking*
+*13. Show a confirmation dialog before cancelling that mentions the cancellation policy for that store*
+*14. Cancelled bookings should show a CANCELLED badge and move to the bottom of the bookings list*
+
+***ESTIMATED WAIT TIME***
+*15. On the customer booking screen show an estimated wait time for each time slot based on how many bookings are ahead of it that day. For example Estimated wait: 2 bookings ahead*
+
+***STORE ANNOUNCEMENTS***
+*16. Add an Announcement field on the Dashboard Profile tab where store owners can type a short message up to 100 characters*
+
+*17. Give me this as a SQL code block:*
+- *ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS announcement text NOT NULL DEFAULT '';*
+
+*18. If the store has an announcement show it as a highlighted banner at the top of their profile page on the customer side with a megaphone emoji 📢*
+
+***STORE PROFILE PHOTO***
+*19. Allow store owners to upload a profile photo or logo from the Dashboard Profile tab*
+*20. Give me this as a SQL code block:*
+- *ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS avatar_url text;*
+
+*21. If a store has uploaded a photo show it as their avatar on the map pin, store card and store profile page instead of the blue initials square. If no photo is uploaded fall back to the blue initials square as before*
+
+***STORE ANALYTICS***
+*22. Add an Analytics section on the Store Dashboard showing:*
+- *Total bookings this week*
+- *Total bookings this month*
+- *Busiest day of the week based on historical bookings*
+- *Most popular time slot*
+- *Average rating over time shown as a simple line or bar chart*
+- *Total unique customers served*
+
+***REVIEW RESPONSES***
+*23. Store owners can reply to customer reviews from the Dashboard. Add a Reply button under each review on the store dashboard*
+*24. The reply shows below the customer review on the store profile page indented with a store owner label*
+
+*25. Give me this as a SQL code block:*
+```sql
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS store_reply text;
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS store_reply_at timestamptz;
+```
+
+***REPORT BUTTON***
+*26. Add a small Report button on every store profile page*
+*27. Tapping it opens a dialog with a reason selector: Inappropriate content, Fake listing, Wrong information, Other*
+*28. Give me this as a SQL code block:*
+```sql
+CREATE TABLE IF NOT EXISTS public.store_reports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+  customer_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  reason text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.store_reports ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Customers can report stores"
+  ON public.store_reports FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = customer_id);
+```
+
+*29. After submitting a report show a thank you message saying we will review this store*
+
+***GENERAL***
+*30. Make sure all new features work correctly on mobile screen sizes*
+*31. Show loading skeletons while any new data is fetching*
+*32. All new toggles and settings on the dashboard must save immediately without needing a separate Save button*
+
+*Give me all SQL code blocks first in one message and wait for my confirmation that every one ran successfully before writing any code."*
+
+---
+
+Ready to paste!
