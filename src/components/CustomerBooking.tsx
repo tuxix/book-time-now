@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Star, MapPin, Clock, CheckCircle2, AlertCircle, Calendar, ChevronDown } from "lucide-react";
+import {
+  ArrowLeft, Star, MapPin, Clock, CheckCircle2, AlertCircle,
+  Calendar, ChevronDown, CreditCard, Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, addDays } from "date-fns";
 import { toast } from "sonner";
@@ -32,6 +35,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const { user } = useAuth();
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [takenSlotIds, setTakenSlotIds] = useState<Set<string>>(new Set());
+  const [existingBookings, setExistingBookings] = useState<{ start_time: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
@@ -39,6 +43,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const [loadingSlots, setLoadingSlots] = useState(true);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarDate, setCalendarDate] = useState<string | null>(null);
+  const [paymentStep, setPaymentStep] = useState(false);
 
   const dates = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i));
   const activeDateObj = calendarDate ? new Date(calendarDate + "T00:00:00") : dates[selectedDate];
@@ -50,9 +55,15 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     return h * 60 + m;
   };
 
+  const getWaitCount = (slot: TimeSlot) => {
+    const slotStart = timeToMins(slot.start_time);
+    return existingBookings.filter((b) => timeToMins(b.start_time) < slotStart).length;
+  };
+
   useEffect(() => {
     setLoadingSlots(true);
     setSelectedSlot(null);
+    setPaymentStep(false);
 
     Promise.all([
       supabase
@@ -69,25 +80,24 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         .neq("status", "cancelled"),
     ]).then(([slotsRes, reservationsRes]) => {
       const availableSlots = (slotsRes.data ?? []) as TimeSlot[];
+      const bookings = (reservationsRes.data ?? []) as { start_time: string; end_time: string }[];
       setSlots(availableSlots);
+      setExistingBookings(bookings);
 
       const buffer = store.buffer_minutes ?? 0;
-      const existingBookings = reservationsRes.data ?? [];
       const taken = new Set<string>();
-
       availableSlots.forEach((slot) => {
         const slotStart = timeToMins(slot.start_time);
         const slotEnd = timeToMins(slot.end_time);
-        for (const booking of existingBookings) {
-          const bookingStart = timeToMins(booking.start_time);
-          const bookingEnd = timeToMins(booking.end_time) + buffer;
+        for (const b of bookings) {
+          const bookingStart = timeToMins(b.start_time);
+          const bookingEnd = timeToMins(b.end_time) + buffer;
           if (slotStart < bookingEnd && slotEnd > bookingStart) {
             taken.add(slot.id);
             break;
           }
         }
       });
-
       setTakenSlotIds(taken);
       setLoadingSlots(false);
     });
@@ -112,6 +122,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         toast.error("That slot was just taken. Please choose another time.");
         setTakenSlotIds((prev) => new Set([...prev, slot.id]));
         setSelectedSlot(null);
+        setPaymentStep(false);
         return;
       }
 
@@ -129,19 +140,25 @@ const CustomerBooking = ({ store, onBack }: Props) => {
 
       if (error) throw error;
 
+      setPaymentStep(false);
       setConfirmed({
-        date: format(dates[selectedDate], "MMMM d, yyyy"),
+        date: format(activeDateObj, "MMMM d, yyyy"),
         startTime: slot.start_time.slice(0, 5),
         endTime: slot.end_time.slice(0, 5),
         ref: (inserted?.id as string)?.split("-")[0]?.toUpperCase() ?? "—",
       });
     } catch (err: any) {
       toast.error(err.message || "Booking failed. Please try again.");
+      setPaymentStep(false);
     } finally {
       setBooking(false);
     }
   };
 
+  const selectedSlotObj = slots.find((s) => s.id === selectedSlot);
+  const commitmentFee = store.commitment_fee ?? 750;
+
+  // ── Confirmed screen ──────────────────────────────────────────────────────
   if (confirmed) {
     return (
       <div className="absolute inset-x-0 top-0 bg-background flex flex-col items-center justify-center px-6 fade-in" style={{ bottom: 56, zIndex: 400 }}>
@@ -181,6 +198,57 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     );
   }
 
+  // ── Payment confirmation step ──────────────────────────────────────────────
+  if (paymentStep && selectedSlotObj) {
+    return (
+      <div className="absolute inset-x-0 top-0 bg-background flex flex-col items-center justify-center px-6 fade-in" style={{ bottom: 56, zIndex: 410 }}>
+        <div className="w-full max-w-xs text-center space-y-5">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+            <CreditCard size={30} className="text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Confirm Your Booking</h1>
+            <p className="text-sm text-muted-foreground mt-1">Review the details below</p>
+          </div>
+          <div className="p-5 rounded-2xl bg-card booka-shadow text-left space-y-3 w-full">
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Store</p>
+              <p className="text-sm font-semibold text-foreground mt-0.5">{store.name}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Date & Time</p>
+              <p className="text-sm font-semibold text-foreground mt-0.5">
+                {format(activeDateObj, "MMMM d, yyyy")} · {selectedSlotObj.start_time.slice(0, 5)} – {selectedSlotObj.end_time.slice(0, 5)}
+              </p>
+            </div>
+            <div className="pt-2 border-t border-border">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Commitment Fee</p>
+              <p className="text-2xl font-bold text-primary mt-0.5">J${commitmentFee.toFixed(0)}</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                This deposit will be deducted from your final service price at the store.
+              </p>
+            </div>
+          </div>
+          <Button
+            data-testid="button-confirm-pay"
+            className="w-full h-12 rounded-xl font-semibold"
+            onClick={handleBook}
+            disabled={booking}
+          >
+            {booking ? "Processing…" : "Confirm & Pay"}
+          </Button>
+          <button
+            onClick={() => setPaymentStep(false)}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main booking screen ────────────────────────────────────────────────────
   return (
     <div className="absolute inset-x-0 top-0 bg-background overflow-y-auto" style={{ bottom: 56, zIndex: 400, paddingBottom: 96 }}>
       {/* Header */}
@@ -194,9 +262,14 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       <div className="px-5 pt-4 space-y-6">
         {/* Store info */}
         <div className="flex items-start gap-4 fade-in">
-          <div className="w-14 h-14 rounded-2xl booka-gradient flex items-center justify-center text-primary-foreground font-bold text-base shrink-0">
-            {store.name.slice(0, 2).toUpperCase()}
-          </div>
+          {store.avatar_url ? (
+            <img src={store.avatar_url} alt={store.name}
+              className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+          ) : (
+            <div className="w-14 h-14 rounded-2xl booka-gradient flex items-center justify-center text-primary-foreground font-bold text-base shrink-0">
+              {store.name.slice(0, 2).toUpperCase()}
+            </div>
+          )}
           <div className="space-y-1">
             {(store.rating > 0 || store.review_count > 0) && (
               <div className="flex items-center gap-1.5">
@@ -225,7 +298,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             {dates.map((d, i) => (
               <button
                 key={i}
-                onClick={() => { setSelectedDate(i); setSelectedSlot(null); setCalendarDate(null); }}
+                onClick={() => { setSelectedDate(i); setSelectedSlot(null); setCalendarDate(null); setPaymentStep(false); }}
                 className={`flex flex-col items-center px-3 py-2 rounded-xl min-w-[52px] shrink-0 transition-all duration-200 active:scale-95 ${
                   !calendarDate && selectedDate === i
                     ? "bg-primary text-primary-foreground booka-shadow"
@@ -244,7 +317,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                 {format(new Date(calendarDate + "T00:00:00"), "EEEE, MMMM d, yyyy")}
               </span>
               <button
-                onClick={() => { setCalendarDate(null); setSelectedSlot(null); }}
+                onClick={() => { setCalendarDate(null); setSelectedSlot(null); setPaymentStep(false); }}
                 className="text-xs text-muted-foreground hover:text-foreground"
               >
                 ✕
@@ -264,7 +337,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           <h2 className="text-sm font-semibold mb-3">Available Slots</h2>
           {loadingSlots ? (
             <div className="grid grid-cols-2 gap-2">
-              {[1, 2, 3, 4].map((i) => <div key={i} className="h-12 rounded-xl bg-secondary animate-pulse" />)}
+              {[1, 2, 3, 4].map((i) => <div key={i} className="h-16 rounded-xl bg-secondary animate-pulse" />)}
             </div>
           ) : slots.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">No available slots for this day</p>
@@ -273,12 +346,13 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               {slots.map((slot) => {
                 const isTaken = takenSlotIds.has(slot.id);
                 const isSelected = selectedSlot === slot.id;
+                const waitCount = getWaitCount(slot);
                 return (
                   <button
                     key={slot.id}
                     onClick={() => !isTaken && setSelectedSlot(slot.id)}
                     disabled={isTaken}
-                    className={`py-3 px-4 rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-[0.97] ${
+                    className={`py-3 px-4 rounded-xl text-sm font-medium flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-[0.97] ${
                       isTaken
                         ? "bg-muted text-muted-foreground cursor-not-allowed line-through opacity-50"
                         : isSelected
@@ -286,8 +360,15 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                         : "bg-secondary text-secondary-foreground"
                     }`}
                   >
-                    {isTaken ? <AlertCircle size={13} /> : <Clock size={13} />}
-                    {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
+                    <span className="flex items-center gap-1.5">
+                      {isTaken ? <AlertCircle size={13} /> : <Clock size={13} />}
+                      {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
+                    </span>
+                    {!isTaken && waitCount > 0 && (
+                      <span className={`text-[10px] flex items-center gap-0.5 ${isSelected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                        <Users size={9} /> {waitCount} booking{waitCount > 1 ? "s" : ""} ahead
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -302,10 +383,9 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             <Button
               data-testid="button-confirm-booking"
               className="w-full h-12 rounded-xl font-semibold"
-              onClick={handleBook}
-              disabled={booking}
+              onClick={() => setPaymentStep(true)}
             >
-              {booking ? "Confirming…" : "Confirm Reservation"}
+              Confirm Reservation — J${commitmentFee.toFixed(0)}
             </Button>
           </div>
         </div>
@@ -317,6 +397,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           onSelectDate={(dateStr) => {
             setCalendarDate(dateStr);
             setSelectedSlot(null);
+            setPaymentStep(false);
             setCalendarOpen(false);
           }}
           onClose={() => setCalendarOpen(false)}

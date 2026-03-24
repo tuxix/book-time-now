@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Search, Calendar, User, MapPin, ChevronRight, Star,
-  X, Briefcase, Settings, HelpCircle, LogOut,
+  X, Briefcase, Settings, HelpCircle, LogOut, Heart,
 } from "lucide-react";
 import { CATEGORIES, distanceKm } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
@@ -26,8 +26,17 @@ function stableOffset(id: string, seed: number): number {
 
 type Tab = "explore" | "search" | "bookings" | "profile";
 
-// ── Profile tab (sub-component) ────────────────────────────────────────────
-const ProfileTab = ({ onSwitchToDashboard }: { onSwitchToDashboard?: () => void }) => {
+// ── Profile tab ───────────────────────────────────────────────────────────────
+interface ProfileTabProps {
+  onSwitchToDashboard?: () => void;
+  stores: Store[];
+  favStoreIds: Set<string>;
+  onToggleFav: (id: string) => void;
+  userLocation: [number, number] | null;
+  onViewStore: (store: Store) => void;
+}
+
+const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, userLocation, onViewStore }: ProfileTabProps) => {
   const { user, profile, signOut } = useAuth();
   const [newBookingCount, setNewBookingCount] = useState(0);
 
@@ -58,6 +67,8 @@ const ProfileTab = ({ onSwitchToDashboard }: { onSwitchToDashboard?: () => void 
     { icon: Settings, label: "Settings" },
     { icon: HelpCircle, label: "Help & Support" },
   ];
+
+  const favStores = stores.filter((s) => favStoreIds.has(s.id));
 
   return (
     <div className="absolute inset-x-0 top-0 overflow-y-auto bg-background fade-in" style={{ bottom: 56 }}>
@@ -104,6 +115,63 @@ const ProfileTab = ({ onSwitchToDashboard }: { onSwitchToDashboard?: () => void 
           </button>
         ))}
 
+        {/* Favourites section */}
+        <div className="pt-3">
+          <div className="flex items-center gap-2 mb-3">
+            <Heart size={15} className="text-red-500 fill-red-500" />
+            <h2 className="text-sm font-bold text-foreground">My Favourites</h2>
+            {favStores.length > 0 && (
+              <span className="text-xs text-muted-foreground">({favStores.length})</span>
+            )}
+          </div>
+          {favStores.length === 0 ? (
+            <div className="p-5 rounded-2xl bg-secondary text-center">
+              <Heart size={24} className="mx-auto mb-2 text-muted-foreground opacity-30" />
+              <p className="text-xs text-muted-foreground">Tap the heart icon on any store to save it here.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {favStores.map((store) => {
+                const dist = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, store.latitude, store.longitude);
+                return (
+                  <div key={store.id} className="flex items-center gap-3 p-3.5 rounded-2xl bg-card booka-shadow-sm">
+                    <button className="flex-1 flex items-center gap-3 text-left" onClick={() => onViewStore(store)}>
+                      {store.avatar_url ? (
+                        <img src={store.avatar_url} alt={store.name}
+                          className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                      ) : (
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
+                          {store.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{store.name}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <Star size={10} className="text-amber-400 fill-amber-400" />
+                          <span className="text-xs text-muted-foreground">
+                            {store.review_count > 0 ? store.rating : "New"}
+                          </span>
+                          {dist && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                              <MapPin size={9} /> {dist}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => onToggleFav(store.id)}
+                      className="p-2 rounded-xl hover:bg-secondary active:scale-95 transition-all shrink-0"
+                    >
+                      <Heart size={16} className="text-red-500 fill-red-500" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <button
           data-testid="button-sign-out"
           onClick={signOut}
@@ -117,10 +185,11 @@ const ProfileTab = ({ onSwitchToDashboard }: { onSwitchToDashboard?: () => void 
   );
 };
 
-// ── Main CustomerHome ───────────────────────────────────────────────────────
+// ── Main CustomerHome ─────────────────────────────────────────────────────────
 interface Props { onSwitchToDashboard?: () => void; }
 
 const CustomerHome = ({ onSwitchToDashboard }: Props) => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("explore");
   const [filterCat, setFilterCat] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<{ emoji: string; label: string } | null>(null);
@@ -130,6 +199,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   const [stores, setStores] = useState<Store[]>([]);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [favStoreIds, setFavStoreIds] = useState<Set<string>>(new Set());
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -150,12 +220,38 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   useEffect(() => {
     supabase
       .from("stores")
-      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings")
+      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, commitment_fee, cancellation_hours, announcement, avatar_url")
       .then(({ data, error }) => {
         console.log("[Booka] stores response:", { data, error });
         if (data) setStores(data as Store[]);
       });
   }, []);
+
+  // ── Fetch favourites ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("customer_favourites")
+      .select("store_id")
+      .eq("customer_id", user.id)
+      .then(({ data }) => {
+        if (data) setFavStoreIds(new Set(data.map((f) => f.store_id)));
+      });
+  }, [user]);
+
+  // ── Toggle favourite ──────────────────────────────────────────────────────
+  const toggleFav = useCallback(async (storeId: string) => {
+    if (!user) { toast.error("Sign in to save favourites"); return; }
+    const isFav = favStoreIds.has(storeId);
+    if (isFav) {
+      setFavStoreIds((prev) => { const n = new Set(prev); n.delete(storeId); return n; });
+      await supabase.from("customer_favourites").delete()
+        .eq("customer_id", user.id).eq("store_id", storeId);
+    } else {
+      setFavStoreIds((prev) => new Set([...prev, storeId]));
+      await supabase.from("customer_favourites").insert({ customer_id: user.id, store_id: storeId });
+    }
+  }, [user, favStoreIds]);
 
   // ── Map markers ───────────────────────────────────────────────────────────
   const refreshMarkers = useCallback(() => {
@@ -171,10 +267,12 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     displayed.forEach((store) => {
       const lat = store.latitude ?? DEFAULT_CENTER[0] + stableOffset(store.id, 0);
       const lng = store.longitude ?? DEFAULT_CENTER[1] + stableOffset(store.id, 1);
-      const initials = store.name.slice(0, 2).toUpperCase();
       const active = store.id === mapPinStore?.id;
       const closed = store.is_open === false;
-      const html = `<div class="booka-pin${active ? " booka-pin--active" : ""}${closed ? " booka-pin--closed" : ""}"><span>${initials}</span></div>`;
+      const inner = store.avatar_url
+        ? `<img src="${store.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" alt="" />`
+        : `<span>${store.name.slice(0, 2).toUpperCase()}</span>`;
+      const html = `<div class="booka-pin${active ? " booka-pin--active" : ""}${closed ? " booka-pin--closed" : ""}">${inner}</div>`;
       const icon = L.divIcon({ className: "", html, iconSize: [36, 36], iconAnchor: [18, 18] });
       const marker = L.marker([lat, lng], { icon }).addTo(map);
       marker.on("click", () => setMapPinStore(store));
@@ -272,14 +370,16 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
 
       {/* ── Map pin quick card ─────────────────────────────────────────────── */}
       {showMap && mapPinStore && (
-        <div
-          className="absolute inset-x-4 slide-up"
-          style={{ bottom: "calc(57% + 64px)", zIndex: 450 }}
-        >
+        <div className="absolute inset-x-4 slide-up" style={{ bottom: "calc(57% + 64px)", zIndex: 450 }}>
           <div className="bg-card rounded-2xl booka-shadow-lg p-3.5 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl booka-gradient flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
-              {mapPinStore.name.slice(0, 2).toUpperCase()}
-            </div>
+            {mapPinStore.avatar_url ? (
+              <img src={mapPinStore.avatar_url} alt={mapPinStore.name}
+                className="w-10 h-10 rounded-xl object-cover shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-xl booka-gradient flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
+                {mapPinStore.name.slice(0, 2).toUpperCase()}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <p className="font-semibold text-foreground text-sm truncate">{mapPinStore.name}</p>
@@ -302,7 +402,17 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
               className="text-xs font-semibold text-primary shrink-0"
               onClick={() => { setSelectedStore(mapPinStore); setMapPinStore(null); }}
             >
-              View Profile
+              View
+            </button>
+            <button
+              onClick={() => toggleFav(mapPinStore.id)}
+              className="p-1 rounded-lg hover:bg-secondary ml-0.5"
+            >
+              <Heart
+                size={15}
+                className={favStoreIds.has(mapPinStore.id) ? "text-red-500" : "text-muted-foreground"}
+                fill={favStoreIds.has(mapPinStore.id) ? "currentColor" : "none"}
+              />
             </button>
             <button
               onClick={() => setMapPinStore(null)}
@@ -332,10 +442,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
                 <span className="text-sm font-medium text-foreground flex-1">
                   {CATEGORIES.find((c) => c.label === filterCat)?.emoji} {filterCat}
                 </span>
-                <button
-                  onClick={() => setFilterCat(null)}
-                  className="text-xs text-primary font-semibold"
-                >
+                <button onClick={() => setFilterCat(null)} className="text-xs text-primary font-semibold">
                   Clear ×
                 </button>
               </div>
@@ -378,36 +485,50 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
             <div className="px-4 pb-4 space-y-2">
               <p className="text-xs text-muted-foreground mb-1">{filteredForSheet.length} nearby</p>
               {filteredForSheet.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No {filterCat} stores yet
-                </p>
+                <p className="text-sm text-muted-foreground text-center py-4">No {filterCat} stores yet</p>
               ) : (
                 filteredForSheet.map((store) => (
-                  <button
-                    key={store.id}
-                    onClick={() => setSelectedStore(store)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-secondary text-left transition-all active:scale-[0.98]"
-                  >
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
-                      {store.name.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-sm font-semibold text-foreground truncate">{store.name}</p>
-                        {store.is_open === false && (
-                          <span className="text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
-                        )}
-                        {store.is_open !== false && store.accepting_bookings === false && (
-                          <span className="text-[9px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full shrink-0">NO BOOKINGS</span>
-                        )}
+                  <div key={store.id} className="flex items-center gap-3 p-3 rounded-xl bg-secondary">
+                    <button
+                      className="flex-1 flex items-center gap-3 text-left"
+                      onClick={() => setSelectedStore(store)}
+                    >
+                      {store.avatar_url ? (
+                        <img src={store.avatar_url} alt={store.name}
+                          className="w-9 h-9 rounded-lg object-cover shrink-0" />
+                      ) : (
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
+                          {store.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-semibold text-foreground truncate">{store.name}</p>
+                          {store.is_open === false && (
+                            <span className="text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
+                          )}
+                          {store.is_open !== false && store.accepting_bookings === false && (
+                            <span className="text-[9px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full shrink-0">NO BOOKINGS</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Star size={10} className="text-amber-400 fill-amber-400" />
+                          {store.review_count > 0 ? store.rating : "New"}
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Star size={10} className="text-amber-400 fill-amber-400" />
-                        {store.review_count > 0 ? store.rating : "New"}
-                      </p>
-                    </div>
-                    <ChevronRight size={15} className="text-muted-foreground shrink-0" />
-                  </button>
+                      <ChevronRight size={15} className="text-muted-foreground shrink-0" />
+                    </button>
+                    <button
+                      onClick={() => toggleFav(store.id)}
+                      className="p-1.5 rounded-lg hover:bg-muted active:scale-95 shrink-0"
+                    >
+                      <Heart
+                        size={14}
+                        className={favStoreIds.has(store.id) ? "text-red-500" : "text-muted-foreground"}
+                        fill={favStoreIds.has(store.id) ? "currentColor" : "none"}
+                      />
+                    </button>
+                  </div>
                 ))
               )}
             </div>
@@ -423,6 +544,8 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
           userLocation={userLocation}
           onBack={() => setSelectedCategory(null)}
           onSelect={(store) => setSelectedStore(store as Store)}
+          favStoreIds={favStoreIds}
+          onToggleFav={toggleFav}
         />
       )}
 
@@ -432,6 +555,8 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
           userLocation={userLocation}
           onBack={() => setSelectedStore(null)}
           onBook={() => setBookingStore(selectedStore)}
+          isFav={favStoreIds.has(selectedStore.id)}
+          onToggleFav={() => toggleFav(selectedStore.id)}
         />
       )}
 
@@ -444,6 +569,8 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
         <SearchScreen
           userLocation={userLocation}
           onSelectStore={(store) => setSelectedStore(store as Store)}
+          favStoreIds={favStoreIds}
+          onToggleFav={toggleFav}
         />
       )}
 
@@ -452,7 +579,14 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
       )}
 
       {activeTab === "profile" && !selectedStore && !bookingStore && (
-        <ProfileTab onSwitchToDashboard={onSwitchToDashboard} />
+        <ProfileTab
+          onSwitchToDashboard={onSwitchToDashboard}
+          stores={stores}
+          favStoreIds={favStoreIds}
+          onToggleFav={toggleFav}
+          userLocation={userLocation}
+          onViewStore={(store) => { setSelectedStore(store); }}
+        />
       )}
 
       {/* ── Bottom nav ──────────────────────────────────────────────────────── */}

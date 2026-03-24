@@ -1,4 +1,4 @@
-import { ArrowLeft, Star, MapPin } from "lucide-react";
+import { ArrowLeft, Star, MapPin, Heart } from "lucide-react";
 import { distanceKm } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
 
@@ -8,9 +8,11 @@ interface Props {
   userLocation: [number, number] | null;
   onBack: () => void;
   onSelect: (store: Store) => void;
+  favStoreIds?: Set<string>;
+  onToggleFav?: (id: string) => void;
 }
 
-const CategoryResults = ({ category, stores, userLocation, onBack, onSelect }: Props) => {
+const CategoryResults = ({ category, stores, userLocation, onBack, onSelect, favStoreIds, onToggleFav }: Props) => {
   const raw = stores.filter((s) => s.category === category.label);
   const filtered = [
     ...raw.filter((s) => s.is_open !== false),
@@ -44,44 +46,64 @@ const CategoryResults = ({ category, stores, userLocation, onBack, onSelect }: P
               userLocation?.[0] ?? null, userLocation?.[1] ?? null,
               store.latitude, store.longitude
             );
+            const isFav = favStoreIds?.has(store.id) ?? false;
             return (
-              <button
+              <div
                 key={store.id}
                 data-testid={`card-category-store-${store.id}`}
-                onClick={() => onSelect(store)}
-                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98]"
+                className="flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm"
               >
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
-                  {store.name.slice(0, 2).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-foreground text-sm">{store.name}</p>
-                    {store.is_open === false && (
-                      <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full">CLOSED</span>
-                    )}
-                    {store.is_open !== false && store.accepting_bookings === false && (
-                      <span className="text-[10px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full">NO BOOKINGS</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <div className="flex items-center gap-0.5">
-                      <Star size={11} className="text-amber-400 fill-amber-400" />
-                      <span className="text-xs text-muted-foreground">
-                        {store.review_count > 0 ? store.rating : "New"}
-                      </span>
+                <button className="flex-1 flex items-center gap-3 text-left" onClick={() => onSelect(store)}>
+                  {store.avatar_url ? (
+                    <img src={store.avatar_url} alt={store.name}
+                      className="w-12 h-12 rounded-xl object-cover shrink-0" />
+                  ) : (
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
+                      {store.name.slice(0, 2).toUpperCase()}
                     </div>
-                    {dist && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                        <MapPin size={10} /> {dist}
-                      </span>
-                    )}
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-foreground text-sm">{store.name}</p>
+                      {store.is_open === false && (
+                        <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full">CLOSED</span>
+                      )}
+                      {store.is_open !== false && store.accepting_bookings === false && (
+                        <span className="text-[10px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full">NO BOOKINGS</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <div className="flex items-center gap-0.5">
+                        <Star size={11} className="text-amber-400 fill-amber-400" />
+                        <span className="text-xs text-muted-foreground">
+                          {store.review_count > 0 ? store.rating : "New"}
+                        </span>
+                      </div>
+                      {dist && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                          <MapPin size={10} /> {dist}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <svg className="w-4 h-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
+                  <svg className="w-4 h-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+                {onToggleFav && (
+                  <button
+                    data-testid={`button-fav-${store.id}`}
+                    onClick={(e) => { e.stopPropagation(); onToggleFav(store.id); }}
+                    className="p-2 rounded-xl hover:bg-secondary active:scale-95 transition-all shrink-0"
+                  >
+                    <Heart
+                      size={16}
+                      className={isFav ? "text-red-500" : "text-muted-foreground"}
+                      fill={isFav ? "currentColor" : "none"}
+                    />
+                  </button>
+                )}
+              </div>
             );
           })
         )}

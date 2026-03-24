@@ -44,11 +44,15 @@ npm run build # production build
 
 All tables live in Supabase (managed via Supabase dashboard):
 - `profiles` — user profiles with `role` column (customer/store)
-- `stores` — store listings with `is_open boolean`, `buffer_minutes integer`, `accepting_bookings boolean DEFAULT true`
+- `stores` — store listings; columns: `is_open`, `buffer_minutes`, `accepting_bookings`, `commitment_fee` (J$, default 750), `cancellation_hours` (default 24), `announcement` (text), `avatar_url` (text)
 - `store_time_slots` — available booking slots (`store_id`, `day_of_week`, `start_time`, `end_time`, `is_available`)
 - `reservations` — bookings (`customer_id`, `store_id`, `reservation_date`, `start_time`, `end_time`, `status`, `fee`)
-- `reviews` — post-visit reviews (`reservation_id`, `customer_id`, `store_id`, `rating`, `comment`, `reviewer_name`)
-- `store_closed_dates` — per-date closures (`store_id`, `closed_date date`, `reason text`, `is_holiday boolean`); UNIQUE(store_id, closed_date); `reason='Open'` is sentinel for holiday override (store is open)
+- `reviews` — post-visit reviews; includes `reviewer_name`, `store_reply`, `store_reply_at` columns
+- `store_closed_dates` — per-date closures; `reason='Open'` = holiday override (store working on holiday)
+- `customer_favourites` — UNIQUE(customer_id, store_id); customers save favourite stores
+- `store_reports` — customer reports on stores (`store_id`, `customer_id`, `reason`, `created_at`)
+
+**Supabase Storage**: `store-avatars` bucket (must be created as public in Supabase Dashboard > Storage).
 
 Row Level Security (RLS) is enabled on all tables.
 

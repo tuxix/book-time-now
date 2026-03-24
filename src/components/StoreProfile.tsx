@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Star, MapPin, Phone, Clock, MessageSquare } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  ArrowLeft, Star, MapPin, Phone, Clock, MessageSquare, Heart, Flag,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { getCategoryEmoji, distanceKm, timeAgo } from "@/lib/categories";
+import { toast } from "sonner";
 
 export interface Store {
   id: string;
@@ -18,6 +25,10 @@ export interface Store {
   is_open: boolean;
   buffer_minutes: number;
   accepting_bookings?: boolean;
+  commitment_fee?: number;
+  cancellation_hours?: number;
+  announcement?: string;
+  avatar_url?: string;
 }
 
 interface Review {
@@ -26,6 +37,8 @@ interface Review {
   comment: string;
   created_at: string;
   reviewer_name?: string;
+  store_reply?: string;
+  store_reply_at?: string;
 }
 
 interface TimeSlot {
@@ -36,19 +49,27 @@ interface TimeSlot {
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const REPORT_REASONS = ["Inappropriate content", "Fake listing", "Wrong information", "Other"];
 
 interface Props {
   store: Store;
   userLocation: [number, number] | null;
   onBack: () => void;
   onBook: () => void;
+  isFav?: boolean;
+  onToggleFav?: () => void;
 }
 
-const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
+const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav }: Props) => {
+  const { user } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
   const [liveRating, setLiveRating] = useState({ rating: store.rating, count: store.review_count });
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
 
   const fetchReviews = async () => {
     const { data } = await supabase
@@ -86,6 +107,23 @@ const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
     return () => { supabase.removeChannel(channel); };
   }, [store.id]);
 
+  const submitReport = async () => {
+    if (!user) return;
+    setSubmittingReport(true);
+    try {
+      const { error } = await supabase.from("store_reports").insert({
+        store_id: store.id,
+        customer_id: user.id,
+        reason: reportReason,
+      });
+      if (error) throw error;
+      setReportSubmitted(true);
+    } catch {
+      toast.error("Could not submit report. Please try again.");
+    }
+    setSubmittingReport(false);
+  };
+
   const dist = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, store.latitude, store.longitude);
   const emoji = getCategoryEmoji(store.category);
 
@@ -104,31 +142,57 @@ const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
     </div>
   );
 
+  const Avatar = ({ size = "w-16 h-16" }: { size?: string }) => store.avatar_url ? (
+    <img src={store.avatar_url} alt={store.name}
+      className={`${size} rounded-2xl object-cover shrink-0`} />
+  ) : (
+    <div className={`${size} rounded-2xl booka-gradient flex items-center justify-center text-primary-foreground font-bold text-xl shrink-0`}>
+      {store.name.slice(0, 2).toUpperCase()}
+    </div>
+  );
+
   return (
     <div className="absolute inset-x-0 top-0 overflow-y-auto bg-background fade-in" style={{ bottom: 56, zIndex: 300 }}>
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
+      <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-2">
         <button onClick={onBack} data-testid="button-back-profile"
           className="p-2 -ml-2 rounded-xl hover:bg-secondary active:scale-95 transition-all">
           <ArrowLeft size={20} />
         </button>
-        <h1 className="font-bold text-foreground truncate">{store.name}</h1>
+        <h1 className="font-bold text-foreground truncate flex-1">{store.name}</h1>
+        {onToggleFav !== undefined && (
+          <button
+            data-testid="button-toggle-fav"
+            onClick={onToggleFav}
+            className="p-2 rounded-xl hover:bg-secondary active:scale-95 transition-all"
+          >
+            <Heart
+              size={20}
+              className={isFav ? "text-red-500" : "text-muted-foreground"}
+              fill={isFav ? "currentColor" : "none"}
+            />
+          </button>
+        )}
       </div>
+
+      {/* Announcement banner */}
+      {!!store.announcement && (
+        <div className="mx-4 mt-4 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-start gap-2.5">
+          <span className="text-lg leading-none mt-0.5">📢</span>
+          <p className="text-sm text-amber-800 dark:text-amber-200 font-medium leading-relaxed">{store.announcement}</p>
+        </div>
+      )}
 
       {/* Hero card */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl booka-gradient flex items-center justify-center text-primary-foreground font-bold text-xl shrink-0">
-            {store.name.slice(0, 2).toUpperCase()}
-          </div>
+          <Avatar />
           <div className="flex-1 min-w-0">
             <h2 className="text-xl font-bold text-foreground leading-tight">{store.name}</h2>
             <p className="text-sm text-muted-foreground mt-0.5">{emoji} {store.category}</p>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {!store.is_open && (
-                <span className="text-xs font-bold bg-red-500 text-white px-2 py-0.5 rounded-full">
-                  CLOSED
-                </span>
+                <span className="text-xs font-bold bg-red-500 text-white px-2 py-0.5 rounded-full">CLOSED</span>
               )}
               {liveRating.count > 0 ? (
                 <>
@@ -148,9 +212,11 @@ const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
             </div>
           </div>
         </div>
+
         {store.description && (
           <p className="text-sm text-muted-foreground mt-4 leading-relaxed">{store.description}</p>
         )}
+
         <div className="mt-3 space-y-1.5">
           {store.address && (
             <p className="text-sm text-muted-foreground flex items-center gap-2">
@@ -160,6 +226,12 @@ const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
           {store.phone && (
             <p className="text-sm text-muted-foreground flex items-center gap-2">
               <Phone size={14} className="text-primary shrink-0" /> {store.phone}
+            </p>
+          )}
+          {(store.cancellation_hours ?? 0) > 0 && (
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Clock size={14} className="text-green-500 shrink-0" />
+              Free cancellation up to {store.cancellation_hours} hour{store.cancellation_hours! > 1 ? "s" : ""} before your appointment
             </p>
           )}
         </div>
@@ -193,7 +265,7 @@ const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
       <div className="h-2 bg-secondary" />
 
       {/* Reviews */}
-      <div className="px-5 py-4 pb-32">
+      <div className="px-5 py-4 pb-36">
         <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
           <MessageSquare size={16} className="text-primary" />
           Reviews
@@ -224,10 +296,27 @@ const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
                 {review.comment && (
                   <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{review.comment}</p>
                 )}
+                {review.store_reply && (
+                  <div className="mt-3 ml-2 pl-3 border-l-2 border-primary/30">
+                    <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1">Owner Reply</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{review.store_reply}</p>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
+
+        {/* Report link */}
+        <div className="mt-6 pt-4 border-t border-border">
+          <button
+            data-testid="button-report-store"
+            onClick={() => { setReportOpen(true); setReportSubmitted(false); setReportReason(REPORT_REASONS[0]); }}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors"
+          >
+            <Flag size={12} /> Report this store
+          </button>
+        </div>
       </div>
 
       {/* Fixed Book Now */}
@@ -254,8 +343,58 @@ const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
               Book Now
             </Button>
           )}
+          {(store.commitment_fee ?? 0) > 0 && store.is_open && store.accepting_bookings !== false && (
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              J${(store.commitment_fee!).toFixed(0)} commitment fee · applied to your final service price
+            </p>
+          )}
         </div>
       </div>
+
+      {/* Report dialog */}
+      <Dialog open={reportOpen} onOpenChange={(o) => { if (!o) setReportOpen(false); }}>
+        <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Report Store</DialogTitle>
+          </DialogHeader>
+          {reportSubmitted ? (
+            <div className="py-4 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                <Flag size={20} className="text-green-600" />
+              </div>
+              <p className="font-semibold text-foreground">Thank you for your report</p>
+              <p className="text-sm text-muted-foreground">We will review this store and take appropriate action.</p>
+              <Button className="w-full rounded-xl" onClick={() => setReportOpen(false)}>Done</Button>
+            </div>
+          ) : (
+            <div className="space-y-3 pt-1">
+              <p className="text-sm text-muted-foreground">Select a reason for your report:</p>
+              <div className="space-y-2">
+                {REPORT_REASONS.map((reason) => (
+                  <button
+                    key={reason}
+                    onClick={() => setReportReason(reason)}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all active:scale-[0.98] ${
+                      reportReason === reason
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-foreground"
+                    }`}
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
+              <Button
+                className="w-full rounded-xl"
+                onClick={submitReport}
+                disabled={submittingReport}
+              >
+                {submittingReport ? "Submitting…" : "Submit Report"}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

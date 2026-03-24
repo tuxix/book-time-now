@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, Clock, Star, MapPin, X } from "lucide-react";
+import { Search, Clock, Star, MapPin, X, Heart } from "lucide-react";
 import { getCategoryEmoji, distanceKm } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
 
 interface Props {
   userLocation: [number, number] | null;
   onSelectStore: (store: Store) => void;
+  favStoreIds?: Set<string>;
+  onToggleFav?: (id: string) => void;
 }
 
 const RECENT_KEY = "booka_recent_searches";
@@ -18,7 +20,7 @@ const addRecent = (q: string) => {
   localStorage.setItem(RECENT_KEY, JSON.stringify([q, ...items].slice(0, 6)));
 };
 
-const SearchScreen = ({ userLocation, onSelectStore }: Props) => {
+const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }: Props) => {
   const [query, setQuery] = useState("");
   const [allStores, setAllStores] = useState<Store[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>(getRecent());
@@ -27,7 +29,7 @@ const SearchScreen = ({ userLocation, onSelectStore }: Props) => {
   useEffect(() => {
     supabase
       .from("stores")
-      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings")
+      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, commitment_fee, cancellation_hours, announcement, avatar_url")
       .then(({ data }) => { if (data) setAllStores(data as Store[]); });
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
@@ -47,39 +49,60 @@ const SearchScreen = ({ userLocation, onSelectStore }: Props) => {
 
   const StoreCard = ({ store }: { store: Store }) => {
     const dist = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, store.latitude, store.longitude);
+    const isFav = favStoreIds?.has(store.id) ?? false;
     return (
-      <button
-        data-testid={`card-search-store-${store.id}`}
-        onClick={() => handleSelect(store)}
-        className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98]"
-      >
-        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
-          {store.name.slice(0, 2).toUpperCase()}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-foreground text-sm truncate">{store.name}</p>
-            {store.is_open === false && (
-              <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
-            )}
-            {store.is_open !== false && store.accepting_bookings === false && (
-              <span className="text-[10px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full shrink-0">NO BOOKINGS</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <span className="text-xs text-muted-foreground">{getCategoryEmoji(store.category)} {store.category}</span>
-            <div className="flex items-center gap-0.5">
-              <Star size={10} className="text-amber-400 fill-amber-400" />
-              <span className="text-xs text-muted-foreground">{store.review_count > 0 ? store.rating : "New"}</span>
+      <div className="flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm">
+        <button
+          data-testid={`card-search-store-${store.id}`}
+          onClick={() => handleSelect(store)}
+          className="flex-1 flex items-center gap-3 text-left"
+        >
+          {store.avatar_url ? (
+            <img src={store.avatar_url} alt={store.name}
+              className="w-11 h-11 rounded-xl object-cover shrink-0" />
+          ) : (
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
+              {store.name.slice(0, 2).toUpperCase()}
             </div>
-            {dist && (
-              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                <MapPin size={10} /> {dist}
-              </span>
-            )}
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-semibold text-foreground text-sm truncate">{store.name}</p>
+              {store.is_open === false && (
+                <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
+              )}
+              {store.is_open !== false && store.accepting_bookings === false && (
+                <span className="text-[10px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full shrink-0">NO BOOKINGS</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <span className="text-xs text-muted-foreground">{getCategoryEmoji(store.category)} {store.category}</span>
+              <div className="flex items-center gap-0.5">
+                <Star size={10} className="text-amber-400 fill-amber-400" />
+                <span className="text-xs text-muted-foreground">{store.review_count > 0 ? store.rating : "New"}</span>
+              </div>
+              {dist && (
+                <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                  <MapPin size={10} /> {dist}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      </button>
+        </button>
+        {onToggleFav && (
+          <button
+            data-testid={`button-fav-search-${store.id}`}
+            onClick={() => onToggleFav(store.id)}
+            className="p-2 rounded-xl hover:bg-secondary active:scale-95 transition-all shrink-0"
+          >
+            <Heart
+              size={16}
+              className={isFav ? "text-red-500" : "text-muted-foreground"}
+              fill={isFav ? "currentColor" : "none"}
+            />
+          </button>
+        )}
+      </div>
     );
   };
 
