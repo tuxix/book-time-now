@@ -30,6 +30,8 @@ interface Reservation {
   fee: number;
   customer_id: string;
   customer_label: string;
+  customer_name?: string;
+  customer_phone?: string;
 }
 
 interface TimeSlot {
@@ -418,7 +420,23 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         .order("created_at", { ascending: false }),
     ]);
     if (resRes.data) {
-      setReservations(resRes.data.map((r, i) => ({ ...r, customer_label: `Customer #${i + 1}` })));
+      const reservationData = resRes.data;
+      const customerIds = [...new Set(reservationData.map((r) => r.customer_id as string))];
+      const { data: profilesData } = customerIds.length
+        ? await supabase.from("profiles").select("id, full_name, phone").in("id", customerIds)
+        : { data: [] };
+      const profileMap = new Map((profilesData ?? []).map((p) => [p.id, p]));
+      setReservations(
+        reservationData.map((r, i) => {
+          const profile = profileMap.get(r.customer_id);
+          return {
+            ...r,
+            customer_label: profile?.full_name || `Customer #${i + 1}`,
+            customer_name: profile?.full_name ?? undefined,
+            customer_phone: profile?.phone ?? undefined,
+          };
+        })
+      );
     }
     if (slotsRes.data) setSlots(slotsRes.data as TimeSlot[]);
     if (reviewsRes.data) setStoreReviews(reviewsRes.data as StoreReview[]);
@@ -773,18 +791,28 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         className="p-4 rounded-2xl bg-card booka-shadow-sm slide-up"
         style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
       >
-        <div className="flex items-center justify-between mb-1.5">
-          <p className="font-semibold text-sm">{r.customer_label}</p>
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex-1 min-w-0 mr-2">
+            <p className="font-semibold text-sm truncate">{r.customer_name || r.customer_label}</p>
+            {r.customer_phone && (
+              <a
+                href={`tel:${r.customer_phone}`}
+                className="text-xs text-primary font-medium flex items-center gap-1 mt-0.5 hover:underline"
+              >
+                📞 {r.customer_phone}
+              </a>
+            )}
+          </div>
           <button
             data-testid={`button-status-${r.id}`}
             onClick={() => cycleStatus(r.id, r.status)}
             disabled={!canAdvance}
-            className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all active:scale-95 ${cfg.bg} ${canAdvance ? "cursor-pointer hover:opacity-90" : "cursor-default opacity-80"}`}
+            className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all active:scale-95 shrink-0 ${cfg.bg} ${canAdvance ? "cursor-pointer hover:opacity-90" : "cursor-default opacity-80"}`}
           >
             {cfg.label}
           </button>
         </div>
-        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1.5">
           <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
           {r.reservation_date !== TODAY && ` · ${r.reservation_date}`}
         </p>

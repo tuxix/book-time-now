@@ -12,6 +12,7 @@ const AuthPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [role, setRole] = useState<"customer" | "store">("customer");
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +41,7 @@ const AuthPage = () => {
         // We attempt a manual insert as a belt-and-suspenders fallback —
         // if it fails for any reason (RLS, duplicate) we silently ignore it.
         if (data.user) {
-          await supabase.from("profiles").insert({ id: data.user.id, role }).then(() => {});
+          await supabase.from("profiles").upsert({ id: data.user.id, role, full_name: fullName.trim(), phone: phone.trim() || null }, { onConflict: "id" }).then(() => {});
 
           // Attempt store record creation — if this fails (e.g. no session yet
           // because email confirmation is required) StoreDashboard creates it on first load.
@@ -103,6 +104,12 @@ const AuthPage = () => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
+              />
+              <Input
+                type="tel"
+                placeholder="Phone number (so stores can reach you)"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
               />
               <div className="flex gap-2">
                 <button
