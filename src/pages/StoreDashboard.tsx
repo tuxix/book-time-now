@@ -115,7 +115,7 @@ const statusConfig: Record<string, { bg: string; label: string; next: string | n
   scheduled:   { bg: "bg-blue-500 text-white",   label: "Scheduled",   next: "in_progress", prev: null },
   in_progress: { bg: "bg-orange-500 text-white", label: "In Progress", next: "completed",   prev: "scheduled" },
   completed:   { bg: "bg-green-500 text-white",  label: "Completed",   next: null,          prev: "in_progress" },
-  cancelled:   { bg: "bg-red-400 text-white",    label: "Cancelled",   next: null,          prev: "scheduled" },
+  cancelled:   { bg: "bg-red-400 text-white",    label: "Cancelled",   next: null,          prev: null },
 };
 
 async function geocodeAddress(addr: string): Promise<{ lat: number; lng: number } | null> {
