@@ -3,8 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Clock, Calendar, Settings, LogOut,
-  Plus, Trash2, Store, ArrowLeft, Pencil, RefreshCw,
+  Plus, Trash2, Store, ArrowLeft, Pencil, RefreshCw, CalendarDays,
 } from "lucide-react";
+import StoreCalendar from "@/components/StoreCalendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,6 +50,7 @@ interface StoreData {
   longitude: number | null;
   is_open: boolean;
   buffer_minutes: number;
+  accepting_bookings?: boolean;
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -226,7 +228,7 @@ const StoreSetupScreen = ({
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const { user, signOut } = useAuth();
-  const [tab, setTab] = useState<"reservations" | "slots" | "profile">("reservations");
+  const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar">("reservations");
   const [store, setStore] = useState<StoreData | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [slots, setSlots] = useState<TimeSlot[]>([]);
@@ -234,8 +236,10 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
+  const [acceptingBookings, setAcceptingBookings] = useState(true);
   const [bufferMinutes, setBufferMinutes] = useState(15);
   const [togglingOpen, setTogglingOpen] = useState(false);
+  const [togglingAccepting, setTogglingAccepting] = useState(false);
 
   // Slot add dialog
   const [slotDialog, setSlotDialog] = useState(false);
@@ -292,6 +296,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         setEditPhone(s.phone || "");
         setEditCategory(s.category || "");
         setIsOpen(s.is_open !== false);
+        setAcceptingBookings(s.accepting_bookings !== false);
         setBufferMinutes(s.buffer_minutes ?? 15);
       }
       setLoadingStore(false);
@@ -344,6 +349,18 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     setIsOpen(next);
     setTogglingOpen(false);
     toast.success(next ? "Store is now OPEN" : "Store is now CLOSED");
+  };
+
+  // ── Accepting bookings toggle ─────────────────────────────────────────
+  const toggleAccepting = async () => {
+    if (!store || togglingAccepting) return;
+    setTogglingAccepting(true);
+    const next = !acceptingBookings;
+    const { error } = await supabase.from("stores").update({ accepting_bookings: next }).eq("id", store.id);
+    if (error) { toast.error("Failed to update booking status."); setTogglingAccepting(false); return; }
+    setAcceptingBookings(next);
+    setTogglingAccepting(false);
+    toast.success(next ? "Now accepting new bookings" : "Bookings paused");
   };
 
   // ── Buffer minutes save ────────────────────────────────────────────────
@@ -525,6 +542,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const navTabs = [
     { id: "reservations" as const, label: "Bookings", icon: Calendar },
     { id: "slots" as const, label: "Slots", icon: Clock },
+    { id: "calendar" as const, label: "Calendar", icon: CalendarDays },
     { id: "profile" as const, label: "Profile", icon: Settings },
   ];
 
@@ -551,18 +569,29 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         </div>
       </div>
 
-      {/* ── Open / Closed toggle ─────────────────────────────────────────── */}
-      <div className="px-5 py-3 border-b border-border bg-card">
+      {/* ── Toggles ──────────────────────────────────────────────────────── */}
+      <div className="px-5 py-3 border-b border-border bg-card space-y-2">
         <button
           data-testid="button-toggle-open"
           onClick={toggleOpen}
           disabled={togglingOpen}
-          className={`w-full py-3 rounded-2xl font-bold text-white flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-[0.98] ${
+          className={`w-full py-2.5 rounded-2xl font-bold text-white flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-[0.98] text-sm ${
             isOpen ? "bg-green-500" : "bg-red-500"
           } ${togglingOpen ? "opacity-70" : ""}`}
         >
-          <div className="w-2.5 h-2.5 rounded-full bg-white" />
-          {isOpen ? "OPEN — Accepting Bookings" : "CLOSED — Not Accepting Bookings"}
+          <div className="w-2 h-2 rounded-full bg-white" />
+          {isOpen ? "Store OPEN" : "Store CLOSED"}
+        </button>
+        <button
+          data-testid="button-toggle-accepting"
+          onClick={toggleAccepting}
+          disabled={togglingAccepting}
+          className={`w-full py-2.5 rounded-2xl font-bold text-white flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-[0.98] text-sm ${
+            acceptingBookings ? "bg-blue-500" : "bg-slate-500"
+          } ${togglingAccepting ? "opacity-70" : ""}`}
+        >
+          <div className="w-2 h-2 rounded-full bg-white" />
+          {acceptingBookings ? "Accepting New Bookings" : "Bookings Paused"}
         </button>
       </div>
 
@@ -780,6 +809,11 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
         );
       })()}
+
+      {/* ── Calendar tab ──────────────────────────────────────────────────── */}
+      {tab === "calendar" && store && (
+        <StoreCalendar storeId={store.id} />
+      )}
 
       {/* ── Profile tab ───────────────────────────────────────────────────── */}
       {tab === "profile" && (

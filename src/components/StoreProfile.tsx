@@ -17,6 +17,7 @@ export interface Store {
   longitude: number | null;
   is_open: boolean;
   buffer_minutes: number;
+  accepting_bookings?: boolean;
 }
 
 interface Review {
@@ -232,17 +233,25 @@ const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
       {/* Fixed Book Now */}
       <div className="fixed inset-x-0 p-4 bg-card/95 backdrop-blur-md border-t border-border" style={{ bottom: 56, zIndex: 310 }}>
         <div className="max-w-lg mx-auto">
-          {store.is_open ? (
-            <Button data-testid="button-book-now" className="w-full h-12 rounded-xl font-semibold text-base" onClick={onBook}>
-              Book Now
-            </Button>
-          ) : (
+          {!store.is_open ? (
             <Button
               data-testid="button-store-closed"
               className="w-full h-12 rounded-xl font-semibold text-base bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted"
               disabled
             >
               Store Currently Closed
+            </Button>
+          ) : store.accepting_bookings === false ? (
+            <Button
+              data-testid="button-not-accepting"
+              className="w-full h-12 rounded-xl font-semibold text-base bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted"
+              disabled
+            >
+              Not Taking Bookings Right Now
+            </Button>
+          ) : (
+            <Button data-testid="button-book-now" className="w-full h-12 rounded-xl font-semibold text-base" onClick={onBook}>
+              Book Now
             </Button>
           )}
         </div>

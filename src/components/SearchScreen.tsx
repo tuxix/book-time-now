@@ -27,7 +27,7 @@ const SearchScreen = ({ userLocation, onSelectStore }: Props) => {
   useEffect(() => {
     supabase
       .from("stores")
-      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes")
+      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings")
       .then(({ data }) => { if (data) setAllStores(data as Store[]); });
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
@@ -61,6 +61,9 @@ const SearchScreen = ({ userLocation, onSelectStore }: Props) => {
             <p className="font-semibold text-foreground text-sm truncate">{store.name}</p>
             {store.is_open === false && (
               <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
+            )}
+            {store.is_open !== false && store.accepting_bookings === false && (
+              <span className="text-[10px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full shrink-0">NO BOOKINGS</span>
             )}
           </div>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">

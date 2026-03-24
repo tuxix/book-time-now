@@ -153,6 +153,13 @@ const CustomerReservations = () => {
                   )}
                 </div>
 
+                {r.status === "cancelled" && (
+                  <div className="mt-3 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800">
+                    <p className="text-xs text-red-600 dark:text-red-400 font-medium text-center">
+                      This appointment was cancelled. Please rebook at your convenience.
+                    </p>
+                  </div>
+                )}
                 {r.status === "completed" && !reviewedIds.has(r.id) && (
                   <button
                     onClick={() => setReviewTarget(r)}

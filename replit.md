@@ -17,13 +17,16 @@ A mobile-first booking app built with React + Vite + Supabase.
 - `src/hooks/useAuth.tsx` — Supabase auth context
 - `src/lib/categories.ts` — CATEGORIES array, distanceKm, timeAgo, getCategoryEmoji utilities
 - `src/pages/CustomerHome.tsx` — full-screen Leaflet map + bottom sheet + 4-tab nav (Explore/Search/Bookings/Profile)
-- `src/pages/StoreDashboard.tsx` — dark-header dashboard; Bookings/Slots/Profile tabs; Nominatim geocoding
+- `src/pages/StoreDashboard.tsx` — dark-header dashboard; Bookings/Slots/Calendar/Profile tabs; two toggles (open/closed + accepting bookings)
 - `src/components/StoreProfile.tsx` — Supabase-connected profile with live reviews (realtime) and available hours
 - `src/components/CategoryResults.tsx` — filtered store list for a selected category
 - `src/components/SearchScreen.tsx` — full-text store search with localStorage recent history
 - `src/components/CustomerBooking.tsx` — date picker + slot picker + booking confirmation card with ref #
-- `src/components/CustomerReservations.tsx` — live reservations with pull-to-refresh + realtime updates + review trigger
+- `src/components/CustomerReservations.tsx` — live reservations with pull-to-refresh + realtime updates + review trigger; cancelled notice
 - `src/components/ReviewDialog.tsx` — star rating + comment form; inserts reviewer_name from user metadata
+- `src/components/StoreCalendar.tsx` — store dashboard Calendar tab; monthly view; mark/unmark dates; block date ranges; holiday awareness
+- `src/components/CustomerCalendar.tsx` — full-screen date picker modal in CustomerBooking; green/red/grey date status
+- `src/lib/holidays.ts` — Jamaican public holiday calculator (Easter algorithm + fixed dates)
 
 ## Environment Variables (Secrets)
 
@@ -41,10 +44,11 @@ npm run build # production build
 
 All tables live in Supabase (managed via Supabase dashboard):
 - `profiles` — user profiles with `role` column (customer/store)
-- `stores` — store listings (`user_id`, `name`, `category`, `description`, `address`, `phone`, `latitude`, `longitude`, `rating`, `review_count`)
+- `stores` — store listings with `is_open boolean`, `buffer_minutes integer`, `accepting_bookings boolean DEFAULT true`
 - `store_time_slots` — available booking slots (`store_id`, `day_of_week`, `start_time`, `end_time`, `is_available`)
 - `reservations` — bookings (`customer_id`, `store_id`, `reservation_date`, `start_time`, `end_time`, `status`, `fee`)
 - `reviews` — post-visit reviews (`reservation_id`, `customer_id`, `store_id`, `rating`, `comment`, `reviewer_name`)
+- `store_closed_dates` — per-date closures (`store_id`, `closed_date date`, `reason text`, `is_holiday boolean`); UNIQUE(store_id, closed_date); `reason='Open'` is sentinel for holiday override (store is open)
 
 Row Level Security (RLS) is enabled on all tables.
 

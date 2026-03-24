@@ -60,6 +60,9 @@ const CategoryResults = ({ category, stores, userLocation, onBack, onSelect }: P
                     {store.is_open === false && (
                       <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full">CLOSED</span>
                     )}
+                    {store.is_open !== false && store.accepting_bookings === false && (
+                      <span className="text-[10px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full">NO BOOKINGS</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <div className="flex items-center gap-0.5">

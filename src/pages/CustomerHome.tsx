@@ -150,7 +150,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   useEffect(() => {
     supabase
       .from("stores")
-      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes")
+      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings")
       .then(({ data, error }) => {
         console.log("[Booka] stores response:", { data, error });
         if (data) setStores(data as Store[]);
@@ -281,7 +281,12 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
               {mapPinStore.name.slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-foreground text-sm truncate">{mapPinStore.name}</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="font-semibold text-foreground text-sm truncate">{mapPinStore.name}</p>
+                {mapPinStore.accepting_bookings === false && mapPinStore.is_open !== false && (
+                  <span className="text-[9px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full shrink-0">NO BOOKINGS</span>
+                )}
+              </div>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <Star size={11} className="text-amber-400 fill-amber-400" />
                 <span className="text-xs text-muted-foreground">
@@ -391,6 +396,9 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
                         <p className="text-sm font-semibold text-foreground truncate">{store.name}</p>
                         {store.is_open === false && (
                           <span className="text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
+                        )}
+                        {store.is_open !== false && store.accepting_bookings === false && (
+                          <span className="text-[9px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full shrink-0">NO BOOKINGS</span>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground flex items-center gap-1">

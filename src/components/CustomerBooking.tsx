@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowLeft, Star, MapPin, Clock, CheckCircle2, AlertCircle, Calendar } from "lucide-react";
+import { ArrowLeft, Star, MapPin, Clock, CheckCircle2, AlertCircle, Calendar, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, addDays } from "date-fns";
 import { toast } from "sonner";
 import { type Store } from "@/components/StoreProfile";
+import CustomerCalendar from "@/components/CustomerCalendar";
 
 interface TimeSlot {
   id: string;
@@ -36,10 +37,13 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const [booking, setBooking] = useState(false);
   const [confirmed, setConfirmed] = useState<ConfirmedDetails | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(true);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarDate, setCalendarDate] = useState<string | null>(null);
 
   const dates = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i));
-  const dayOfWeek = dates[selectedDate].getDay();
-  const selectedDateStr = format(dates[selectedDate], "yyyy-MM-dd");
+  const activeDateObj = calendarDate ? new Date(calendarDate + "T00:00:00") : dates[selectedDate];
+  const dayOfWeek = activeDateObj.getDay();
+  const selectedDateStr = calendarDate ?? format(dates[selectedDate], "yyyy-MM-dd");
 
   const timeToMins = (t: string) => {
     const [h, m] = t.split(":").map(Number);
@@ -87,7 +91,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       setTakenSlotIds(taken);
       setLoadingSlots(false);
     });
-  }, [store.id, store.buffer_minutes, dayOfWeek, selectedDateStr]);
+  }, [store.id, store.buffer_minutes, dayOfWeek, selectedDateStr, calendarDate]);
 
   const handleBook = async () => {
     const slot = slots.find((s) => s.id === selectedSlot);
@@ -221,9 +225,9 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             {dates.map((d, i) => (
               <button
                 key={i}
-                onClick={() => { setSelectedDate(i); setSelectedSlot(null); }}
+                onClick={() => { setSelectedDate(i); setSelectedSlot(null); setCalendarDate(null); }}
                 className={`flex flex-col items-center px-3 py-2 rounded-xl min-w-[52px] shrink-0 transition-all duration-200 active:scale-95 ${
-                  selectedDate === i
+                  !calendarDate && selectedDate === i
                     ? "bg-primary text-primary-foreground booka-shadow"
                     : "bg-secondary text-secondary-foreground"
                 }`}
@@ -233,6 +237,26 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               </button>
             ))}
           </div>
+          {calendarDate && (
+            <div className="flex items-center gap-2 mt-2 px-1 py-2 rounded-xl bg-primary/10">
+              <Calendar size={13} className="text-primary shrink-0" />
+              <span className="text-xs font-semibold text-primary flex-1">
+                {format(new Date(calendarDate + "T00:00:00"), "EEEE, MMMM d, yyyy")}
+              </span>
+              <button
+                onClick={() => { setCalendarDate(null); setSelectedSlot(null); }}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => setCalendarOpen(true)}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-secondary text-secondary-foreground text-xs font-semibold transition-all active:scale-[0.98]"
+          >
+            <ChevronDown size={13} /> More Dates
+          </button>
         </div>
 
         {/* Time slots */}
@@ -285,6 +309,18 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             </Button>
           </div>
         </div>
+      )}
+
+      {calendarOpen && (
+        <CustomerCalendar
+          store={store}
+          onSelectDate={(dateStr) => {
+            setCalendarDate(dateStr);
+            setSelectedSlot(null);
+            setCalendarOpen(false);
+          }}
+          onClose={() => setCalendarOpen(false)}
+        />
       )}
     </div>
   );
