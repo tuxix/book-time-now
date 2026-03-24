@@ -1,35 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  Clock,
-  CheckCircle2,
-  Play,
-  Calendar,
-  Settings,
-  LogOut,
-  Plus,
-  Trash2,
-  Star,
-  Store,
+  Clock, CheckCircle2, Play, Calendar, Settings, LogOut,
+  Plus, Trash2, Store, ArrowLeft, Pencil, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { CATEGORIES } from "@/lib/categories";
 
 interface Reservation {
   id: string;
@@ -63,20 +51,36 @@ interface StoreData {
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const TODAY = format(new Date(), "yyyy-MM-dd");
 
-type Tab = "reservations" | "slots" | "profile";
+const DEFAULT_TIMES: [string, string][] = [
+  ["09:00", "10:00"],
+  ["10:00", "11:00"],
+  ["11:00", "12:00"],
+  ["13:00", "14:00"],
+  ["14:00", "15:00"],
+  ["15:00", "16:00"],
+];
 
-const statusConfig: Record<
-  string,
-  { bg: string; icon: typeof Clock; next: string | null }
-> = {
-  scheduled:  { bg: "bg-blue-100 text-blue-700",   icon: Clock,         next: "in_progress" },
-  in_progress:{ bg: "bg-amber-100 text-amber-700", icon: Play,          next: "completed" },
-  completed:  { bg: "bg-green-100 text-green-700", icon: CheckCircle2,  next: null },
-  cancelled:  { bg: "bg-red-100 text-red-700",     icon: Clock,         next: null },
+const statusConfig: Record<string, { bg: string; label: string; next: string | null }> = {
+  scheduled:   { bg: "bg-blue-500 text-white",   label: "Scheduled",   next: "in_progress" },
+  in_progress: { bg: "bg-orange-500 text-white", label: "In Progress", next: "completed" },
+  completed:   { bg: "bg-green-500 text-white",  label: "Completed",   next: null },
+  cancelled:   { bg: "bg-red-400 text-white",    label: "Cancelled",   next: null },
 };
 
-// ─── Store Setup Screen ───────────────────────────────────────────────────────
+async function geocodeAddress(addr: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`
+    );
+    const data = await res.json();
+    if (data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch {}
+  return null;
+}
+
+// ── Store Setup Screen ────────────────────────────────────────────────────────
 const StoreSetupScreen = ({
   initialName,
   userId,
@@ -84,15 +88,13 @@ const StoreSetupScreen = ({
 }: {
   initialName: string;
   userId: string;
-  onComplete: (store: StoreData) => void;
+  onComplete: (store: StoreData, slots: TimeSlot[]) => void;
 }) => {
   const [name, setName] = useState(initialName);
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -105,22 +107,33 @@ const StoreSetupScreen = ({
     try {
       const { data, error } = await supabase
         .from("stores")
-        .update({
-          name: name.trim(),
-          category: category.trim(),
-          description: description.trim(),
-          address: address.trim(),
-          phone: phone.trim(),
-          latitude: lat ? parseFloat(lat) : null,
-          longitude: lng ? parseFloat(lng) : null,
-        })
+        .update({ name: name.trim(), category, description: description.trim(), address: address.trim(), phone: phone.trim() })
         .eq("user_id", userId)
         .select()
         .single();
 
       if (error) throw error;
+
+      // Geocode address in background
+      if (address.trim()) {
+        geocodeAddress(address.trim()).then((coords) => {
+          if (coords) {
+            supabase.from("stores").update({ latitude: coords.lat, longitude: coords.lng }).eq("user_id", userId);
+          }
+        });
+      }
+
+      // Insert default time slots for all 7 days
+      const slotRows: object[] = [];
+      for (let day = 0; day <= 6; day++) {
+        for (const [start, end] of DEFAULT_TIMES) {
+          slotRows.push({ store_id: data.id, day_of_week: day, start_time: start, end_time: end });
+        }
+      }
+      const { data: insertedSlots } = await supabase.from("store_time_slots").insert(slotRows).select();
+
       toast.success("Store profile saved!");
-      onComplete(data as StoreData);
+      onComplete(data as StoreData, (insertedSlots ?? []) as TimeSlot[]);
     } catch (err: any) {
       toast.error(err.message || "Failed to save. Please try again.");
     } finally {
@@ -135,13 +148,13 @@ const StoreSetupScreen = ({
           <div className="w-14 h-14 rounded-2xl booka-gradient flex items-center justify-center mx-auto mb-3">
             <Store size={28} className="text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Set up your store</h1>
+          <h1 className="text-2xl font-bold">Set up your store</h1>
           <p className="text-sm text-muted-foreground">
             Complete your profile so customers can find and book you.
           </p>
         </div>
 
-        <form onSubmit={handleSave} className="space-y-3 slide-up">
+        <form onSubmit={handleSave} className="space-y-4 slide-up">
           <Input
             data-testid="input-setup-name"
             placeholder="Store name *"
@@ -150,14 +163,29 @@ const StoreSetupScreen = ({
             className="rounded-xl"
             required
           />
-          <Input
-            data-testid="input-setup-category"
-            placeholder="Category — e.g. Barber, Salon, Spa *"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="rounded-xl"
-            required
-          />
+
+          {/* Category grid */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Category *</p>
+            <div className="grid grid-cols-4 gap-2">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.label}
+                  type="button"
+                  onClick={() => setCategory(cat.label)}
+                  className={`flex flex-col items-center gap-1 p-2.5 rounded-xl transition-all active:scale-95 ${
+                    category === cat.label
+                      ? "bg-primary text-primary-foreground booka-shadow"
+                      : "bg-secondary"
+                  }`}
+                >
+                  <span className="text-xl">{cat.emoji}</span>
+                  <span className="text-[9px] font-bold text-center leading-tight">{cat.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <Textarea
             data-testid="input-setup-description"
             placeholder="Description (optional)"
@@ -168,7 +196,7 @@ const StoreSetupScreen = ({
           />
           <Input
             data-testid="input-setup-address"
-            placeholder="Address (optional)"
+            placeholder="Address (used to place you on the map)"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             className="rounded-xl"
@@ -180,33 +208,11 @@ const StoreSetupScreen = ({
             onChange={(e) => setPhone(e.target.value)}
             className="rounded-xl"
           />
-          <div className="flex gap-2">
-            <Input
-              data-testid="input-setup-lat"
-              type="number"
-              step="any"
-              placeholder="Latitude (e.g. 17.997)"
-              value={lat}
-              onChange={(e) => setLat(e.target.value)}
-              className="rounded-xl"
-            />
-            <Input
-              data-testid="input-setup-lng"
-              type="number"
-              step="any"
-              placeholder="Longitude (e.g. -76.793)"
-              value={lng}
-              onChange={(e) => setLng(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
-          <p className="text-[11px] text-muted-foreground px-1">
-            Latitude &amp; longitude place your pin on the customer map. Leave blank to use an approximate position.
-          </p>
+
           <Button
             type="submit"
             className="w-full h-12 rounded-xl font-semibold mt-2"
-            disabled={saving || !name.trim() || !category.trim()}
+            disabled={saving || !name.trim() || !category}
           >
             {saving ? "Saving…" : "Go to Dashboard"}
           </Button>
@@ -216,70 +222,60 @@ const StoreSetupScreen = ({
   );
 };
 
-// ─── Main Dashboard ───────────────────────────────────────────────────────────
-const StoreDashboard = () => {
+// ── Main Dashboard ────────────────────────────────────────────────────────────
+const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const { user, signOut } = useAuth();
-  const [tab, setTab] = useState<Tab>("reservations");
+  const [tab, setTab] = useState<"reservations" | "slots" | "profile">("reservations");
   const [store, setStore] = useState<StoreData | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [loadingStore, setLoadingStore] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Slot dialog
+  // Slot add dialog
   const [slotDialog, setSlotDialog] = useState(false);
   const [slotDay, setSlotDay] = useState("1");
   const [slotStart, setSlotStart] = useState("");
   const [slotEnd, setSlotEnd] = useState("");
 
-  // Profile edit fields
+  // Slot edit dialog
+  const [editSlot, setEditSlot] = useState<TimeSlot | null>(null);
+  const [editDay, setEditDay] = useState("1");
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+
+  // Profile edit
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editAddr, setEditAddr] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editCategory, setEditCategory] = useState("");
-  const [editLat, setEditLat] = useState("");
-  const [editLng, setEditLng] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // ── Load store, auto-create if missing ──────────────────────────────────
+  // Pull to refresh
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const touchStartY = useRef(0);
+
+  // ── Load store ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
-
     (async () => {
       const { data, error } = await supabase
-        .from("stores")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
+        .from("stores").select("*").eq("user_id", user.id).maybeSingle();
 
       if (error) {
-        console.error("[Booka] store load error:", error.message, error.code);
-        toast.error("Failed to load store data. Please refresh.");
+        console.error("[Booka] store load error:", error.message);
+        toast.error("Failed to load store data.");
         setLoadingStore(false);
         return;
       }
 
       if (!data) {
-        // Store record wasn't created at signup (e.g. email confirmation required).
-        // Create it now that the user is authenticated.
-        const name =
-          user.user_metadata?.full_name ||
-          user.email?.split("@")[0] ||
-          "My Store";
-
-        const { data: newStore, error: createError } = await supabase
-          .from("stores")
-          .insert({ user_id: user.id, name })
-          .select()
-          .single();
-
-        if (createError) {
-          console.error("[Booka] store create error:", createError.message);
-          toast.error("Could not initialise your store. Please refresh.");
-          setLoadingStore(false);
-          return;
-        }
+        const name = (user.user_metadata?.full_name as string | undefined) || user.email?.split("@")[0] || "My Store";
+        const { data: newStore, error: cErr } = await supabase
+          .from("stores").insert({ user_id: user.id, name }).select().single();
+        if (cErr) { toast.error("Could not initialise your store."); setLoadingStore(false); return; }
         setStore(newStore as StoreData);
         setNeedsSetup(true);
       } else {
@@ -291,137 +287,131 @@ const StoreDashboard = () => {
         setEditAddr(s.address || "");
         setEditPhone(s.phone || "");
         setEditCategory(s.category || "");
-        setEditLat(s.latitude != null ? String(s.latitude) : "");
-        setEditLng(s.longitude != null ? String(s.longitude) : "");
       }
-
       setLoadingStore(false);
     })();
   }, [user]);
 
-  // ── Fetch reservations & slots once store is ready ───────────────────────
-  useEffect(() => {
+  // ── Fetch reservations & slots ─────────────────────────────────────────
+  const fetchData = async () => {
     if (!store || needsSetup) return;
-
-    supabase
-      .from("reservations")
-      .select("id, reservation_date, start_time, end_time, status, fee, customer_id")
-      .eq("store_id", store.id)
-      .order("reservation_date", { ascending: false })
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("[Booka] reservations load error:", error.message);
-          return;
-        }
-        setReservations(
-          (data ?? []).map((r, i) => ({ ...r, customer_label: `Customer #${i + 1}` }))
-        );
-      });
-
-    supabase
-      .from("store_time_slots")
-      .select("*")
-      .eq("store_id", store.id)
-      .order("day_of_week")
-      .then(({ data }) => {
-        if (data) setSlots(data as TimeSlot[]);
-      });
-  }, [store, needsSetup]);
-
-  // ── Status cycling ───────────────────────────────────────────────────────
-  const cycleStatus = async (id: string, current: string) => {
-    const cfg = statusConfig[current];
-    if (!cfg?.next) return;
-    const { error } = await supabase
-      .from("reservations")
-      .update({ status: cfg.next })
-      .eq("id", id);
-    if (error) {
-      toast.error("Failed to update status.");
-      return;
+    const [resRes, slotsRes] = await Promise.all([
+      supabase
+        .from("reservations")
+        .select("id, reservation_date, start_time, end_time, status, fee, customer_id")
+        .eq("store_id", store.id)
+        .order("reservation_date", { ascending: false }),
+      supabase
+        .from("store_time_slots")
+        .select("*")
+        .eq("store_id", store.id)
+        .order("day_of_week")
+        .order("start_time"),
+    ]);
+    if (resRes.data) {
+      setReservations(
+        resRes.data.map((r, i) => ({ ...r, customer_label: `Customer #${i + 1}` }))
+      );
     }
-    setReservations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: cfg.next! } : r))
-    );
-    toast.success(`Marked as ${cfg.next.replace("_", " ")}`);
+    if (slotsRes.data) setSlots(slotsRes.data as TimeSlot[]);
+    setRefreshing(false);
   };
 
-  // ── Time slot management ─────────────────────────────────────────────────
+  useEffect(() => { fetchData(); }, [store, needsSetup]);
+
+  // Pull-to-refresh
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartY.current = e.touches[0].clientY; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const diff = e.changedTouches[0].clientY - touchStartY.current;
+    if (diff > 70 && el.scrollTop === 0 && !refreshing) { setRefreshing(true); fetchData(); }
+  };
+
+  // ── Status cycling ─────────────────────────────────────────────────────
+  const cycleStatus = async (id: string, current: string) => {
+    const next = statusConfig[current]?.next;
+    if (!next) return;
+    const { error } = await supabase.from("reservations").update({ status: next }).eq("id", id);
+    if (error) { toast.error("Failed to update status."); return; }
+    setReservations((prev) => prev.map((r) => (r.id === id ? { ...r, status: next } : r)));
+    toast.success(`Marked as ${next.replace("_", " ")}`);
+  };
+
+  // ── Slot management ────────────────────────────────────────────────────
   const addSlot = async () => {
     if (!store || !slotStart || !slotEnd) return;
-    if (slotStart >= slotEnd) {
-      toast.error("End time must be after start time.");
-      return;
-    }
+    if (slotStart >= slotEnd) { toast.error("End time must be after start time."); return; }
     const { data, error } = await supabase
       .from("store_time_slots")
-      .insert({
-        store_id: store.id,
-        day_of_week: parseInt(slotDay),
-        start_time: slotStart,
-        end_time: slotEnd,
-      })
-      .select()
-      .single();
-    if (error) {
-      console.error("[Booka] slot insert error:", error.message, error.code);
-      toast.error(`Failed to add slot: ${error.message}`);
-      return;
-    }
+      .insert({ store_id: store.id, day_of_week: parseInt(slotDay), start_time: slotStart, end_time: slotEnd })
+      .select().single();
+    if (error) { toast.error(`Failed to add slot: ${error.message}`); return; }
     setSlots((prev) => [...prev, data as TimeSlot]);
-    setSlotDialog(false);
-    setSlotStart("");
-    setSlotEnd("");
+    setSlotDialog(false); setSlotStart(""); setSlotEnd("");
     toast.success("Slot added");
   };
 
   const removeSlot = async (id: string) => {
     const { error } = await supabase.from("store_time_slots").delete().eq("id", id);
-    if (error) {
-      toast.error("Failed to remove slot.");
-      return;
-    }
+    if (error) { toast.error("Failed to remove slot."); return; }
     setSlots((prev) => prev.filter((s) => s.id !== id));
   };
 
-  // ── Profile save ─────────────────────────────────────────────────────────
+  const toggleSlot = async (id: string, current: boolean) => {
+    const { error } = await supabase.from("store_time_slots").update({ is_available: !current }).eq("id", id);
+    if (error) { toast.error("Failed to update slot."); return; }
+    setSlots((prev) => prev.map((s) => (s.id === id ? { ...s, is_available: !current } : s)));
+  };
+
+  const openEditSlot = (s: TimeSlot) => {
+    setEditSlot(s);
+    setEditDay(String(s.day_of_week));
+    setEditStart(s.start_time.slice(0, 5));
+    setEditEnd(s.end_time.slice(0, 5));
+  };
+
+  const saveEditSlot = async () => {
+    if (!editSlot || !editStart || !editEnd) return;
+    if (editStart >= editEnd) { toast.error("End time must be after start time."); return; }
+    const { error } = await supabase
+      .from("store_time_slots")
+      .update({ day_of_week: parseInt(editDay), start_time: editStart, end_time: editEnd })
+      .eq("id", editSlot.id);
+    if (error) { toast.error("Failed to update slot."); return; }
+    setSlots((prev) => prev.map((s) =>
+      s.id === editSlot.id ? { ...s, day_of_week: parseInt(editDay), start_time: editStart, end_time: editEnd } : s
+    ));
+    setEditSlot(null);
+    toast.success("Slot updated");
+  };
+
+  // ── Profile save ───────────────────────────────────────────────────────
   const saveProfile = async () => {
-    if (!store) return;
-    if (!editName.trim()) {
-      toast.error("Store name is required.");
-      return;
-    }
+    if (!store || !editName.trim()) { toast.error("Store name is required."); return; }
     setSaving(true);
     const updates = {
-      name: editName.trim(),
-      description: editDesc.trim(),
-      address: editAddr.trim(),
-      phone: editPhone.trim(),
-      category: editCategory.trim(),
-      latitude: editLat ? parseFloat(editLat) : null,
-      longitude: editLng ? parseFloat(editLng) : null,
+      name: editName.trim(), description: editDesc.trim(),
+      address: editAddr.trim(), phone: editPhone.trim(), category: editCategory,
     };
-    const { error } = await supabase
-      .from("stores")
-      .update(updates)
-      .eq("id", store.id);
-    if (error) {
-      console.error("[Booka] profile save error:", error.message, error.code);
-      toast.error(`Failed to save: ${error.message}`);
-    } else {
-      toast.success("Profile updated");
-      setStore({ ...store, ...updates });
+    const { error } = await supabase.from("stores").update(updates).eq("id", store.id);
+    if (error) { toast.error(`Failed to save: ${error.message}`); setSaving(false); return; }
+    toast.success("Profile updated");
+    setStore({ ...store, ...updates });
+
+    // Geocode address in background
+    if (editAddr.trim()) {
+      geocodeAddress(editAddr.trim()).then((coords) => {
+        if (coords) {
+          supabase.from("stores").update({ latitude: coords.lat, longitude: coords.lng }).eq("id", store.id);
+          setStore((prev) => prev ? { ...prev, latitude: coords.lat, longitude: coords.lng } : prev);
+        }
+      });
     }
     setSaving(false);
   };
 
-  const tabs: { id: Tab; label: string; icon: typeof Calendar }[] = [
-    { id: "reservations", label: "Bookings", icon: Calendar },
-    { id: "slots",        label: "Slots",    icon: Clock },
-    { id: "profile",      label: "Profile",  icon: Settings },
-  ];
-
-  // ── Loading ──────────────────────────────────────────────────────────────
+  // ── Loading ────────────────────────────────────────────────────────────
   if (loadingStore) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -430,125 +420,145 @@ const StoreDashboard = () => {
     );
   }
 
-  // ── First-run setup ──────────────────────────────────────────────────────
   if (needsSetup && store) {
     return (
       <StoreSetupScreen
         initialName={store.name}
         userId={user!.id}
-        onComplete={(updated) => {
+        onComplete={(updated, defaultSlots) => {
           setStore(updated);
-          setEditName(updated.name);
-          setEditDesc(updated.description);
-          setEditAddr(updated.address);
-          setEditPhone(updated.phone);
+          setEditName(updated.name); setEditDesc(updated.description);
+          setEditAddr(updated.address); setEditPhone(updated.phone);
           setEditCategory(updated.category);
-          setEditLat(updated.latitude != null ? String(updated.latitude) : "");
-          setEditLng(updated.longitude != null ? String(updated.longitude) : "");
+          setSlots(defaultSlots);
           setNeedsSetup(false);
         }}
       />
     );
   }
 
-  // ── Main dashboard ───────────────────────────────────────────────────────
+  const todayReservations = reservations.filter((r) => r.reservation_date === TODAY);
+  const pastReservations = reservations.filter((r) => r.reservation_date !== TODAY);
+
+  const ReservationCard = ({ r, i }: { r: Reservation; i: number }) => {
+    const cfg = statusConfig[r.status] || statusConfig.scheduled;
+    const canAdvance = cfg.next !== null;
+    return (
+      <div
+        key={r.id}
+        data-testid={`card-reservation-${r.id}`}
+        className="p-4 rounded-2xl bg-card booka-shadow-sm slide-up"
+        style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
+      >
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="font-semibold text-sm">{r.customer_label}</p>
+          <button
+            data-testid={`button-status-${r.id}`}
+            onClick={() => cycleStatus(r.id, r.status)}
+            disabled={!canAdvance}
+            className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all active:scale-95 ${cfg.bg} ${canAdvance ? "cursor-pointer" : "cursor-default opacity-80"}`}
+          >
+            {cfg.label}
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+          <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
+          {r.reservation_date !== TODAY && ` · ${r.reservation_date}`}
+        </p>
+        {canAdvance && (
+          <p className="text-[10px] text-muted-foreground mt-1">Tap status to advance →</p>
+        )}
+      </div>
+    );
+  };
+
+  const navTabs = [
+    { id: "reservations" as const, label: "Bookings", icon: Calendar },
+    { id: "slots" as const, label: "Slots", icon: Clock },
+    { id: "profile" as const, label: "Profile", icon: Settings },
+  ];
+
   return (
-    <div className="max-w-lg mx-auto min-h-screen bg-background pb-20">
-      {/* Header */}
-      <div className="sticky top-0 z-30 bg-card/95 backdrop-blur-md border-b border-border px-5 py-3">
+    <div className="max-w-lg mx-auto min-h-screen bg-background pb-20 flex flex-col">
+      {/* ── Dark blue header ─────────────────────────────────────────────── */}
+      <div
+        className="sticky top-0 z-30 px-5 py-4"
+        style={{ background: "hsl(var(--booka-blue-deep))" }}
+      >
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-muted-foreground">Store Dashboard</p>
-            <h1 className="text-lg font-bold text-foreground">{store?.name || "My Store"}</h1>
+            <p className="text-xs text-white/70 font-medium">Business Dashboard</p>
+            <h1 className="text-lg font-bold text-white">{store?.name || "My Store"}</h1>
+            <p className="text-xs text-white/60 mt-0.5">{format(new Date(), "EEEE, MMM d")}</p>
           </div>
-          {store && store.review_count > 0 && (
-            <div className="flex items-center gap-1 text-sm">
-              <Star size={14} className="text-amber-500 fill-amber-500" />
-              <span className="font-medium">{store.rating}</span>
-              <span className="text-muted-foreground text-xs">({store.review_count})</span>
-            </div>
-          )}
+          <button
+            data-testid="button-back-to-app"
+            onClick={onBack}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-semibold active:scale-95 transition-all"
+          >
+            <ArrowLeft size={14} /> Back to App
+          </button>
         </div>
       </div>
 
-      {/* ── Reservations tab ── */}
+      {/* ── Reservations tab ─────────────────────────────────────────────── */}
       {tab === "reservations" && (
-        <div className="px-5 pt-4">
-          <h2 className="text-sm font-semibold mb-3 text-muted-foreground">
-            {reservations.length} {reservations.length === 1 ? "reservation" : "reservations"}
-          </h2>
-          {reservations.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Calendar size={36} className="mx-auto mb-3 opacity-40" />
-              <p className="text-sm">No reservations yet</p>
+        <div
+          ref={scrollRef}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          className="flex-1 overflow-y-auto px-5 pt-4"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Today's Bookings</h2>
+            <button
+              onClick={() => { setRefreshing(true); fetchData(); }}
+              className={`p-1.5 rounded-lg hover:bg-secondary ${refreshing ? "animate-spin" : ""}`}
+            >
+              <RefreshCw size={14} className="text-muted-foreground" />
+            </button>
+          </div>
+
+          {todayReservations.length === 0 ? (
+            <div className="p-4 rounded-2xl bg-secondary text-center mb-5">
+              <p className="text-sm text-muted-foreground">No bookings today</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {reservations.map((r, i) => {
-                const cfg = statusConfig[r.status] || statusConfig.scheduled;
-                const Icon = cfg.icon;
-                const canAdvance = cfg.next !== null;
-                return (
-                  <div
-                    key={r.id}
-                    data-testid={`card-reservation-${r.id}`}
-                    className="p-4 rounded-2xl bg-card booka-shadow-sm slide-up"
-                    style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="font-semibold text-sm">{r.customer_label}</p>
-                      <button
-                        data-testid={`button-status-${r.id}`}
-                        onClick={() => cycleStatus(r.id, r.status)}
-                        disabled={!canAdvance}
-                        className={`text-xs font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1 transition-all active:scale-95 ${cfg.bg} ${canAdvance ? "cursor-pointer" : "cursor-default opacity-70"}`}
-                      >
-                        <Icon size={12} />
-                        {r.status.replace("_", " ")}
-                      </button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {r.reservation_date} · {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
-                    </p>
-                    {canAdvance && (
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        Tap to advance → {cfg.next!.replace("_", " ")}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
+            <div className="space-y-3 mb-5">
+              {todayReservations.map((r, i) => <ReservationCard key={r.id} r={r} i={i} />)}
             </div>
+          )}
+
+          {pastReservations.length > 0 && (
+            <>
+              <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">All Bookings</h2>
+              <div className="space-y-3">
+                {pastReservations.map((r, i) => <ReservationCard key={r.id} r={r} i={i} />)}
+              </div>
+            </>
           )}
         </div>
       )}
 
-      {/* ── Slots tab ── */}
+      {/* ── Slots tab ─────────────────────────────────────────────────────── */}
       {tab === "slots" && (
-        <div className="px-5 pt-4">
+        <div className="flex-1 overflow-y-auto px-5 pt-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-muted-foreground">Time Slots</h2>
+            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Time Slot Configuration</h2>
             <Button
               data-testid="button-add-slot"
               size="sm"
-              variant="outline"
-              className="rounded-xl gap-1 text-xs"
+              className="rounded-xl gap-1 text-xs h-8"
               onClick={() => setSlotDialog(true)}
             >
-              <Plus size={14} /> Add Slot
+              <Plus size={13} /> Add
             </Button>
           </div>
 
           {slots.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Clock size={36} className="mx-auto mb-3 opacity-40" />
+            <div className="text-center py-12 text-muted-foreground">
+              <Clock size={32} className="mx-auto mb-2 opacity-40" />
               <p className="text-sm">No time slots configured</p>
-              <button
-                onClick={() => setSlotDialog(true)}
-                className="mt-2 text-xs text-primary font-semibold hover:underline"
-              >
-                Add your first slot
-              </button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -556,78 +566,83 @@ const StoreDashboard = () => {
                 <div
                   key={s.id}
                   data-testid={`card-slot-${s.id}`}
-                  className="flex items-center justify-between p-3 rounded-xl bg-card booka-shadow-sm"
+                  className={`flex items-center gap-3 p-3 rounded-xl bg-card booka-shadow-sm ${!s.is_available ? "opacity-50" : ""}`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                      {DAYS[s.day_of_week]}
-                    </span>
-                    <span className="text-sm">
-                      {s.start_time.slice(0, 5)} – {s.end_time.slice(0, 5)}
-                    </span>
+                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full shrink-0 w-10 text-center">
+                    {DAYS[s.day_of_week]}
+                  </span>
+                  <div className="flex items-center gap-1 text-sm flex-1 min-w-0">
+                    <Clock size={12} className="text-muted-foreground shrink-0" />
+                    <span className="font-medium">{s.start_time.slice(0, 5)} – {s.end_time.slice(0, 5)}</span>
                   </div>
+                  <Switch
+                    checked={s.is_available}
+                    onCheckedChange={() => toggleSlot(s.id, s.is_available)}
+                  />
+                  <button
+                    onClick={() => openEditSlot(s)}
+                    className="p-1.5 rounded-lg hover:bg-secondary active:scale-95 transition-all"
+                  >
+                    <Pencil size={13} className="text-muted-foreground" />
+                  </button>
                   <button
                     data-testid={`button-remove-slot-${s.id}`}
                     onClick={() => removeSlot(s.id)}
                     className="p-1.5 rounded-lg hover:bg-destructive/10 active:scale-95 transition-all"
                   >
-                    <Trash2 size={14} className="text-destructive" />
+                    <Trash2 size={13} className="text-destructive" />
                   </button>
                 </div>
               ))}
             </div>
           )}
 
+          {/* Add slot dialog */}
           <Dialog open={slotDialog} onOpenChange={setSlotDialog}>
             <DialogContent className="max-w-xs rounded-2xl" aria-describedby={undefined}>
-              <DialogHeader>
-                <DialogTitle>Add Time Slot</DialogTitle>
-              </DialogHeader>
+              <DialogHeader><DialogTitle>Add Time Slot</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <Select value={slotDay} onValueChange={setSlotDay}>
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {DAYS.map((d, i) => (
-                      <SelectItem key={i} value={String(i)}>{d}</SelectItem>
-                    ))}
+                    {DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <div className="flex gap-2">
-                  <Input
-                    data-testid="input-slot-start"
-                    type="time"
-                    value={slotStart}
-                    onChange={(e) => setSlotStart(e.target.value)}
-                    className="rounded-xl"
-                  />
-                  <Input
-                    data-testid="input-slot-end"
-                    type="time"
-                    value={slotEnd}
-                    onChange={(e) => setSlotEnd(e.target.value)}
-                    className="rounded-xl"
-                  />
+                  <Input data-testid="input-slot-start" type="time" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} className="rounded-xl" />
+                  <Input data-testid="input-slot-end" type="time" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} className="rounded-xl" />
                 </div>
-                <Button
-                  data-testid="button-save-slot"
-                  className="w-full rounded-xl"
-                  onClick={addSlot}
-                  disabled={!slotStart || !slotEnd}
-                >
-                  Save Slot
-                </Button>
+                <Button className="w-full rounded-xl" onClick={addSlot} disabled={!slotStart || !slotEnd}>Save Slot</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit slot dialog */}
+          <Dialog open={!!editSlot} onOpenChange={(o) => { if (!o) setEditSlot(null); }}>
+            <DialogContent className="max-w-xs rounded-2xl" aria-describedby={undefined}>
+              <DialogHeader><DialogTitle>Edit Time Slot</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <Select value={editDay} onValueChange={setEditDay}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <div className="flex gap-2">
+                  <Input type="time" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="rounded-xl" />
+                  <Input type="time" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="rounded-xl" />
+                </div>
+                <Button className="w-full rounded-xl" onClick={saveEditSlot} disabled={!editStart || !editEnd}>Update Slot</Button>
               </div>
             </DialogContent>
           </Dialog>
         </div>
       )}
 
-      {/* ── Profile tab ── */}
+      {/* ── Profile tab ───────────────────────────────────────────────────── */}
       {tab === "profile" && (
-        <div className="px-5 pt-4 space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground">Store Profile</h2>
+        <div className="flex-1 overflow-y-auto px-5 pt-4 space-y-3 pb-4">
+          <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Store Profile</h2>
           <Input
             data-testid="input-profile-name"
             placeholder="Store name *"
@@ -635,13 +650,29 @@ const StoreDashboard = () => {
             onChange={(e) => setEditName(e.target.value)}
             className="rounded-xl"
           />
-          <Input
-            data-testid="input-profile-category"
-            placeholder="Category (e.g. Barber, Salon)"
-            value={editCategory}
-            onChange={(e) => setEditCategory(e.target.value)}
-            className="rounded-xl"
-          />
+
+          {/* Category grid */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Category</p>
+            <div className="grid grid-cols-4 gap-2">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.label}
+                  type="button"
+                  onClick={() => setEditCategory(cat.label)}
+                  className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-95 ${
+                    editCategory === cat.label
+                      ? "bg-primary text-primary-foreground booka-shadow"
+                      : "bg-secondary"
+                  }`}
+                >
+                  <span className="text-lg">{cat.emoji}</span>
+                  <span className="text-[8px] font-bold text-center leading-tight">{cat.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <Textarea
             data-testid="input-profile-description"
             placeholder="Description"
@@ -652,7 +683,7 @@ const StoreDashboard = () => {
           />
           <Input
             data-testid="input-profile-address"
-            placeholder="Address"
+            placeholder="Address (auto-placed on map when saved)"
             value={editAddr}
             onChange={(e) => setEditAddr(e.target.value)}
             className="rounded-xl"
@@ -664,29 +695,7 @@ const StoreDashboard = () => {
             onChange={(e) => setEditPhone(e.target.value)}
             className="rounded-xl"
           />
-          <div className="flex gap-2">
-            <Input
-              data-testid="input-profile-lat"
-              type="number"
-              step="any"
-              placeholder="Latitude"
-              value={editLat}
-              onChange={(e) => setEditLat(e.target.value)}
-              className="rounded-xl"
-            />
-            <Input
-              data-testid="input-profile-lng"
-              type="number"
-              step="any"
-              placeholder="Longitude"
-              value={editLng}
-              onChange={(e) => setEditLng(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
-          <p className="text-[11px] text-muted-foreground px-1">
-            Latitude &amp; longitude set your exact pin on the customer map.
-          </p>
+
           <Button
             data-testid="button-save-profile"
             className="w-full rounded-xl"
@@ -695,6 +704,7 @@ const StoreDashboard = () => {
           >
             {saving ? "Saving…" : "Save Changes"}
           </Button>
+
           <Button
             data-testid="button-sign-out"
             variant="outline"
@@ -706,10 +716,10 @@ const StoreDashboard = () => {
         </div>
       )}
 
-      {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border booka-shadow-lg">
+      {/* ── Bottom nav ────────────────────────────────────────────────────── */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border">
         <div className="max-w-lg mx-auto flex items-center justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-          {tabs.map((t) => (
+          {navTabs.map((t) => (
             <button
               key={t.id}
               data-testid={`tab-${t.id}`}
@@ -719,20 +729,11 @@ const StoreDashboard = () => {
               <t.icon
                 size={22}
                 strokeWidth={tab === t.id ? 2.5 : 1.8}
-                color={
-                  tab === t.id
-                    ? "hsl(var(--booka-blue))"
-                    : "hsl(var(--booka-text-secondary))"
-                }
+                color={tab === t.id ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))"}
               />
               <span
                 className="text-[10px] font-medium"
-                style={{
-                  color:
-                    tab === t.id
-                      ? "hsl(var(--booka-blue))"
-                      : "hsl(var(--booka-text-secondary))",
-                }}
+                style={{ color: tab === t.id ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))" }}
               >
                 {t.label}
               </span>

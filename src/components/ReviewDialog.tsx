@@ -23,18 +23,24 @@ const ReviewDialog = ({ reservation, onClose, onSubmitted }: Props) => {
     if (!user || rating === 0) return;
     setLoading(true);
     try {
+      const reviewerName =
+        (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
+        user.email?.split("@")[0] ||
+        "Customer";
+
       const { error } = await supabase.from("reviews").insert({
         reservation_id: reservation.id,
         customer_id: user.id,
         store_id: reservation.store_id,
         rating,
         comment,
+        reviewer_name: reviewerName,
       });
       if (error) throw error;
       toast.success("Review submitted!");
       onSubmitted();
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || "Failed to submit review.");
     } finally {
       setLoading(false);
     }
@@ -61,18 +67,18 @@ const ReviewDialog = ({ reservation, onClose, onSubmitted }: Props) => {
             >
               <Star
                 size={32}
-                className={`${
+                className={
                   n <= (hover || rating)
                     ? "text-amber-400 fill-amber-400"
                     : "text-border"
-                } transition-colors duration-150`}
+                }
               />
             </button>
           ))}
         </div>
 
         <Textarea
-          placeholder="Tell us about your experience..."
+          placeholder="Tell us about your experience…"
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           className="rounded-xl resize-none"
@@ -84,7 +90,7 @@ const ReviewDialog = ({ reservation, onClose, onSubmitted }: Props) => {
           onClick={handleSubmit}
           disabled={rating === 0 || loading}
         >
-          {loading ? "Submitting..." : "Submit Review"}
+          {loading ? "Submitting…" : "Submit Review"}
         </Button>
       </div>
     </div>
