@@ -1,0 +1,56 @@
+Really smart ideas! The one time code especially adds a professional touch — like a check-in system. Here's the prompt to paste into Replit:
+
+---
+
+*"Please read all existing code carefully before making any changes. Do not overwrite anything already working. Give me any SQL as a code block and wait for my confirmation before continuing. Here is everything that needs to be added:*
+
+***ARRIVED STATUS***
+*1. Add a new status called arrived to the reservations table. Give me this as a SQL code block to run first:*
+```sql
+ALTER TABLE public.reservations
+DROP CONSTRAINT IF EXISTS reservations_status_check;
+
+ALTER TABLE public.reservations
+ADD CONSTRAINT reservations_status_check
+CHECK (status IN ('scheduled', 'arrived', 'in_progress', 'completed', 'cancelled'));
+```
+
+*2. The full status cycle for store owners is now:*
+- *Scheduled → Arrived — happens when the customer checks in*
+- *Arrived → In Progress — only unlocked when the customer provides the correct one time code*
+- *In Progress → Completed*
+- *Any status can be reverted one step backward except Cancelled and Scheduled*
+
+*3. On the customer Bookings tab add a Check In button that appears on bookings where the status is Scheduled and the appointment is today. Tapping it changes the status to Arrived and reveals a one time code to the customer*
+
+*4. The one time code must be:*
+- *4 digits*
+- *Randomly generated when the customer taps Check In*
+- *Saved to the reservations table*
+- *Valid for that booking only*
+- *Shown clearly to the customer on their booking card after checking in — for example Your check-in code is 4823 — show this to your service provider*
+
+*5. Give me this as a SQL code block:*
+- *ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS checkin_code text;*
+
+*6. On the store dashboard when a booking shows Arrived status, show an Enter Code button next to it. Tapping it opens a 4 digit code input dialog. If the code matches the checkin_code in the database the status advances to In Progress. If the code is wrong show an error saying incorrect code please try again*
+
+*7. The store owner cannot manually advance a booking from Arrived to In Progress without entering the correct customer code — the button to advance status must be locked until the correct code is entered*
+
+***SAME DAY CANCELLATION BY STORE***
+*8. On the store dashboard booking cards add a Cancel for Customer button that only appears on same day bookings where the status is Scheduled or Arrived*
+
+*9. When the store owner taps Cancel for Customer:*
+- *Show a confirmation dialog saying Are you sure you want to cancel this appointment on behalf of the customer*
+- *After confirming, update the reservation status to Cancelled*
+- *Show a visible notice on the customer Bookings tab saying your appointment at [store name] on [date] was cancelled by the store*
+
+*10. Regular customers still cannot cancel same day bookings themselves — that restriction stays in place*
+
+*11. On the store dashboard make it clear which cancellations were done by the store versus by the customer — show Cancelled by Store or Cancelled by Customer as the badge label*
+
+*Check all existing code before making changes. Give me all SQL code blocks first and wait for my confirmation before writing any code."*
+
+---
+
+Let me know what Replit says!
