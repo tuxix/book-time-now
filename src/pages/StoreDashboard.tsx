@@ -2,13 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  Clock, CheckCircle2, Play, Calendar, Settings, LogOut,
+  Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, Pencil, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -240,15 +239,15 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // Slot add dialog
   const [slotDialog, setSlotDialog] = useState(false);
-  const [slotDay, setSlotDay] = useState("1");
   const [slotStart, setSlotStart] = useState("");
   const [slotEnd, setSlotEnd] = useState("");
+  const [slotDays, setSlotDays] = useState<number[]>([]);
 
   // Slot edit dialog
-  const [editSlot, setEditSlot] = useState<TimeSlot | null>(null);
-  const [editDay, setEditDay] = useState("1");
+  const [editGroupIds, setEditGroupIds] = useState<string[] | null>(null);
   const [editStart, setEditStart] = useState("");
   const [editEnd, setEditEnd] = useState("");
+  const [editDays, setEditDays] = useState<number[]>([]);
 
   // Profile edit
   const [editName, setEditName] = useState("");
@@ -365,52 +364,76 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     toast.success(`Marked as ${next.replace("_", " ")}`);
   };
 
+  // ── Slot helpers ────────────────────────────────────────────────────────
+  interface GroupedSlot { startTime: string; endTime: string; days: number[]; ids: string[]; }
+
+  const groupSlots = (raw: TimeSlot[]): GroupedSlot[] => {
+    const map = new Map<string, GroupedSlot>();
+    for (const s of raw) {
+      const key = `${s.start_time}|${s.end_time}`;
+      if (!map.has(key)) map.set(key, { startTime: s.start_time, endTime: s.end_time, days: [], ids: [] });
+      const g = map.get(key)!;
+      g.days.push(s.day_of_week);
+      g.ids.push(s.id);
+    }
+    const groups = Array.from(map.values());
+    groups.forEach((g) => g.days.sort((a, b) => a - b));
+    groups.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    return groups;
+  };
+
+  const formatDays = (days: number[]) => {
+    const sorted = [...days].sort((a, b) => a - b);
+    if (sorted.length === 7) return "Every Day";
+    return sorted.map((d) => DAYS[d]).join(", ");
+  };
+
+  const fmt12 = (t: string) => {
+    const [hStr, mStr] = t.split(":");
+    let h = parseInt(hStr);
+    const m = mStr;
+    const suffix = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    return `${h}:${m} ${suffix}`;
+  };
+
   // ── Slot management ────────────────────────────────────────────────────
   const addSlot = async () => {
-    if (!store || !slotStart || !slotEnd) return;
+    if (!store || !slotStart || !slotEnd || slotDays.length === 0) return;
     if (slotStart >= slotEnd) { toast.error("End time must be after start time."); return; }
-    const { data, error } = await supabase
-      .from("store_time_slots")
-      .insert({ store_id: store.id, day_of_week: parseInt(slotDay), start_time: slotStart, end_time: slotEnd })
-      .select().single();
-    if (error) { toast.error(`Failed to add slot: ${error.message}`); return; }
-    setSlots((prev) => [...prev, data as TimeSlot]);
-    setSlotDialog(false); setSlotStart(""); setSlotEnd("");
-    toast.success("Slot added");
+    const rows = slotDays.map((day) => ({ store_id: store.id, day_of_week: day, start_time: slotStart, end_time: slotEnd }));
+    const { data, error } = await supabase.from("store_time_slots").insert(rows).select();
+    if (error) { toast.error(`Failed to add slots: ${error.message}`); return; }
+    setSlots((prev) => [...prev, ...(data as TimeSlot[])]);
+    setSlotDialog(false); setSlotStart(""); setSlotEnd(""); setSlotDays([]);
+    toast.success(`${slotDays.length} slot${slotDays.length > 1 ? "s" : ""} added`);
   };
 
-  const removeSlot = async (id: string) => {
-    const { error } = await supabase.from("store_time_slots").delete().eq("id", id);
-    if (error) { toast.error("Failed to remove slot."); return; }
-    setSlots((prev) => prev.filter((s) => s.id !== id));
+  const removeGroupedSlot = async (ids: string[]) => {
+    const { error } = await supabase.from("store_time_slots").delete().in("id", ids);
+    if (error) { toast.error("Failed to remove slots."); return; }
+    setSlots((prev) => prev.filter((s) => !ids.includes(s.id)));
+    toast.success("Slots removed");
   };
 
-  const toggleSlot = async (id: string, current: boolean) => {
-    const { error } = await supabase.from("store_time_slots").update({ is_available: !current }).eq("id", id);
-    if (error) { toast.error("Failed to update slot."); return; }
-    setSlots((prev) => prev.map((s) => (s.id === id ? { ...s, is_available: !current } : s)));
+  const openEditGroup = (group: GroupedSlot) => {
+    setEditGroupIds(group.ids);
+    setEditStart(group.startTime.slice(0, 5));
+    setEditEnd(group.endTime.slice(0, 5));
+    setEditDays([...group.days]);
   };
 
-  const openEditSlot = (s: TimeSlot) => {
-    setEditSlot(s);
-    setEditDay(String(s.day_of_week));
-    setEditStart(s.start_time.slice(0, 5));
-    setEditEnd(s.end_time.slice(0, 5));
-  };
-
-  const saveEditSlot = async () => {
-    if (!editSlot || !editStart || !editEnd) return;
+  const saveEditGroup = async () => {
+    if (!store || !editGroupIds || !editStart || !editEnd || editDays.length === 0) return;
     if (editStart >= editEnd) { toast.error("End time must be after start time."); return; }
-    const { error } = await supabase
-      .from("store_time_slots")
-      .update({ day_of_week: parseInt(editDay), start_time: editStart, end_time: editEnd })
-      .eq("id", editSlot.id);
-    if (error) { toast.error("Failed to update slot."); return; }
-    setSlots((prev) => prev.map((s) =>
-      s.id === editSlot.id ? { ...s, day_of_week: parseInt(editDay), start_time: editStart, end_time: editEnd } : s
-    ));
-    setEditSlot(null);
-    toast.success("Slot updated");
+    const { error: delErr } = await supabase.from("store_time_slots").delete().in("id", editGroupIds);
+    if (delErr) { toast.error("Failed to update slots."); return; }
+    const rows = editDays.map((day) => ({ store_id: store.id, day_of_week: day, start_time: editStart, end_time: editEnd }));
+    const { data, error } = await supabase.from("store_time_slots").insert(rows).select();
+    if (error) { toast.error("Failed to save updated slots."); return; }
+    setSlots((prev) => [...prev.filter((s) => !editGroupIds.includes(s.id)), ...(data as TimeSlot[])]);
+    setEditGroupIds(null); setEditDays([]);
+    toast.success("Slots updated");
   };
 
   // ── Profile save ───────────────────────────────────────────────────────
@@ -583,103 +606,180 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       )}
 
       {/* ── Slots tab ─────────────────────────────────────────────────────── */}
-      {tab === "slots" && (
-        <div className="flex-1 overflow-y-auto px-5 pt-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Time Slot Configuration</h2>
-            <Button
-              data-testid="button-add-slot"
-              size="sm"
-              className="rounded-xl gap-1 text-xs h-8"
-              onClick={() => setSlotDialog(true)}
-            >
-              <Plus size={13} /> Add
-            </Button>
-          </div>
-
-          {slots.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Clock size={32} className="mx-auto mb-2 opacity-40" />
-              <p className="text-sm">No time slots configured</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {slots.map((s) => (
-                <div
-                  key={s.id}
-                  data-testid={`card-slot-${s.id}`}
-                  className={`flex items-center gap-3 p-3 rounded-xl bg-card booka-shadow-sm ${!s.is_available ? "opacity-50" : ""}`}
+      {tab === "slots" && (() => {
+        const grouped = groupSlots(slots);
+        const DayChips = ({
+          selected, onToggle,
+        }: { selected: number[]; onToggle: (d: number) => void }) => (
+          <div className="flex flex-wrap gap-1.5">
+            {DAYS.map((label, i) => {
+              const active = selected.includes(i);
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onToggle(i)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 ${
+                    active ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                  }`}
                 >
-                  <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full shrink-0 w-10 text-center">
-                    {DAYS[s.day_of_week]}
-                  </span>
-                  <div className="flex items-center gap-1 text-sm flex-1 min-w-0">
-                    <Clock size={12} className="text-muted-foreground shrink-0" />
-                    <span className="font-medium">{s.start_time.slice(0, 5)} – {s.end_time.slice(0, 5)}</span>
-                  </div>
-                  <Switch
-                    checked={s.is_available}
-                    onCheckedChange={() => toggleSlot(s.id, s.is_available)}
-                  />
-                  <button
-                    onClick={() => openEditSlot(s)}
-                    className="p-1.5 rounded-lg hover:bg-secondary active:scale-95 transition-all"
-                  >
-                    <Pencil size={13} className="text-muted-foreground" />
-                  </button>
-                  <button
-                    data-testid={`button-remove-slot-${s.id}`}
-                    onClick={() => removeSlot(s.id)}
-                    className="p-1.5 rounded-lg hover:bg-destructive/10 active:scale-95 transition-all"
-                  >
-                    <Trash2 size={13} className="text-destructive" />
-                  </button>
-                </div>
-              ))}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        );
+        const toggleDay = (setter: (fn: (prev: number[]) => number[]) => void, d: number) => {
+          setter((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]);
+        };
+        return (
+          <div className="flex-1 overflow-y-auto px-5 pt-4 pb-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Time Slots</h2>
+              <Button
+                data-testid="button-add-slot"
+                size="sm"
+                className="rounded-xl gap-1 text-xs h-8"
+                onClick={() => { setSlotStart(""); setSlotEnd(""); setSlotDays([]); setSlotDialog(true); }}
+              >
+                <Plus size={13} /> Add
+              </Button>
             </div>
-          )}
 
-          {/* Add slot dialog */}
-          <Dialog open={slotDialog} onOpenChange={setSlotDialog}>
-            <DialogContent className="max-w-xs rounded-2xl" aria-describedby={undefined}>
-              <DialogHeader><DialogTitle>Add Time Slot</DialogTitle></DialogHeader>
-              <div className="space-y-3">
-                <Select value={slotDay} onValueChange={setSlotDay}>
-                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2">
-                  <Input data-testid="input-slot-start" type="time" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} className="rounded-xl" />
-                  <Input data-testid="input-slot-end" type="time" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} className="rounded-xl" />
-                </div>
-                <Button className="w-full rounded-xl" onClick={addSlot} disabled={!slotStart || !slotEnd}>Save Slot</Button>
+            {grouped.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Clock size={32} className="mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No time slots configured</p>
+                <p className="text-xs mt-1 opacity-70">Tap + Add to create your first time slot</p>
               </div>
-            </DialogContent>
-          </Dialog>
+            ) : (
+              <div className="space-y-2">
+                {grouped.map((g, i) => (
+                  <div
+                    key={`${g.startTime}|${g.endTime}`}
+                    data-testid={`card-slot-group-${i}`}
+                    className="flex items-center gap-3 p-3.5 rounded-xl bg-card booka-shadow-sm"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground">
+                        {fmt12(g.startTime)} – {fmt12(g.endTime)}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatDays(g.days)}</p>
+                    </div>
+                    <button
+                      onClick={() => openEditGroup(g)}
+                      className="p-1.5 rounded-lg hover:bg-secondary active:scale-95 transition-all"
+                    >
+                      <Pencil size={13} className="text-muted-foreground" />
+                    </button>
+                    <button
+                      data-testid={`button-remove-slot-group-${i}`}
+                      onClick={() => removeGroupedSlot(g.ids)}
+                      className="p-1.5 rounded-lg hover:bg-destructive/10 active:scale-95 transition-all"
+                    >
+                      <Trash2 size={13} className="text-destructive" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
-          {/* Edit slot dialog */}
-          <Dialog open={!!editSlot} onOpenChange={(o) => { if (!o) setEditSlot(null); }}>
-            <DialogContent className="max-w-xs rounded-2xl" aria-describedby={undefined}>
-              <DialogHeader><DialogTitle>Edit Time Slot</DialogTitle></DialogHeader>
-              <div className="space-y-3">
-                <Select value={editDay} onValueChange={setEditDay}>
-                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {DAYS.map((d, i) => <SelectItem key={i} value={String(i)}>{d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2">
-                  <Input type="time" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="rounded-xl" />
-                  <Input type="time" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="rounded-xl" />
+            {/* ── Add slot dialog ── */}
+            <Dialog open={slotDialog} onOpenChange={(o) => { if (!o) { setSlotDialog(false); setSlotDays([]); } }}>
+              <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+                <DialogHeader><DialogTitle>Add Time Slot</DialogTitle></DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Time Range</p>
+                    <div className="flex gap-2">
+                      <Input
+                        data-testid="input-slot-start"
+                        type="time"
+                        value={slotStart}
+                        onChange={(e) => setSlotStart(e.target.value)}
+                        className="rounded-xl"
+                      />
+                      <Input
+                        data-testid="input-slot-end"
+                        type="time"
+                        value={slotEnd}
+                        onChange={(e) => setSlotEnd(e.target.value)}
+                        className="rounded-xl"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-muted-foreground">Days</p>
+                      <button
+                        type="button"
+                        onClick={() => setSlotDays(slotDays.length === 7 ? [] : [0, 1, 2, 3, 4, 5, 6])}
+                        className="text-xs font-semibold text-primary"
+                      >
+                        {slotDays.length === 7 ? "Clear All" : "Every Day"}
+                      </button>
+                    </div>
+                    <DayChips selected={slotDays} onToggle={(d) => toggleDay(setSlotDays, d)} />
+                  </div>
+                  <Button
+                    className="w-full rounded-xl"
+                    onClick={addSlot}
+                    disabled={!slotStart || !slotEnd || slotDays.length === 0}
+                  >
+                    Save {slotDays.length > 0 ? `(${slotDays.length} day${slotDays.length > 1 ? "s" : ""})` : ""}
+                  </Button>
                 </div>
-                <Button className="w-full rounded-xl" onClick={saveEditSlot} disabled={!editStart || !editEnd}>Update Slot</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      )}
+              </DialogContent>
+            </Dialog>
+
+            {/* ── Edit slot dialog ── */}
+            <Dialog open={editGroupIds !== null} onOpenChange={(o) => { if (!o) { setEditGroupIds(null); setEditDays([]); } }}>
+              <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+                <DialogHeader><DialogTitle>Edit Time Slot</DialogTitle></DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Time Range</p>
+                    <div className="flex gap-2">
+                      <Input
+                        type="time"
+                        value={editStart}
+                        onChange={(e) => setEditStart(e.target.value)}
+                        className="rounded-xl"
+                      />
+                      <Input
+                        type="time"
+                        value={editEnd}
+                        onChange={(e) => setEditEnd(e.target.value)}
+                        className="rounded-xl"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-muted-foreground">Days</p>
+                      <button
+                        type="button"
+                        onClick={() => setEditDays(editDays.length === 7 ? [] : [0, 1, 2, 3, 4, 5, 6])}
+                        className="text-xs font-semibold text-primary"
+                      >
+                        {editDays.length === 7 ? "Clear All" : "Every Day"}
+                      </button>
+                    </div>
+                    <DayChips selected={editDays} onToggle={(d) => toggleDay(setEditDays, d)} />
+                  </div>
+                  <Button
+                    className="w-full rounded-xl"
+                    onClick={saveEditGroup}
+                    disabled={!editStart || !editEnd || editDays.length === 0}
+                  >
+                    Update {editDays.length > 0 ? `(${editDays.length} day${editDays.length > 1 ? "s" : ""})` : ""}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        );
+      })()}
 
       {/* ── Profile tab ───────────────────────────────────────────────────── */}
       {tab === "profile" && (
