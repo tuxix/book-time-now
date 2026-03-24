@@ -1,0 +1,101 @@
+
+
+*"Please read all existing code carefully before making any changes. Do not overwrite anything already working. Give me any SQL as a code block and wait for my confirmation before continuing. Here is everything that needs to be added:*
+
+***OPEN/CLOSED AND ACCEPTING BOOKINGS — TWO SEPARATE TOGGLES***
+*1. The Open/Closed toggle is display only — it shows whether the store is physically open today like a sign on the door. It does NOT block bookings*
+
+*2. Add a second separate toggle called Accepting Bookings:*
+- *Green — Accepting Bookings: customers can book as normal*
+- *Red — Not Accepting Bookings: the Book Now button is replaced with a greyed out Not Taking Bookings button*
+
+*3. Give me this as a SQL code block to run first:*
+- *ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS accepting_bookings boolean NOT NULL DEFAULT true;*
+
+*4. On the customer side:*
+- *CLOSED badge on store card and map pin when is_open is false — but Book Now still works*
+- *Not Taking Bookings badge when accepting_bookings is false — Book Now is replaced with a greyed out button*
+- *Both badges can show at the same time if both are off*
+- *Closed stores still appear in results but sorted below open stores*
+
+***FULL CALENDAR VIEW — CUSTOMER SIDE***
+*5. On the customer booking screen add a More Dates button below the 7 day date picker that opens a full monthly calendar view*
+
+*6. In the monthly calendar view:*
+- *Colour code every date in the month:*
+  - *Green — available slots exist and store is open*
+  - *Grey — fully booked, no slots left*
+  - *Red — store marked as closed for this day*
+  - *Dark grey — public holiday, store closed by default*
+- *Tapping any available date opens the time slot picker for that date*
+- *Customers can book any available day within the current month and the next month*
+- *Show a legend at the bottom explaining the colour codes*
+
+***STORE CALENDAR — STORE DASHBOARD***
+*7. Add a Calendar tab to the store dashboard navigation alongside Bookings, Slots and Profile*
+
+*8. The calendar tab shows a full monthly calendar where:*
+- *Each date shows a small indicator if there are bookings that day*
+- *Store owners can tap any date to mark it as closed with a reason — Day Off, Holiday, Vacation or Custom reason*
+- *Marked dates show CLOSED in red on that date*
+- *Tapping a date that is already marked closed gives the option to unmark it*
+
+*9. Public holidays in Jamaica are marked as closed by default on the calendar. Here are the Jamaican public holidays to mark by default every year:*
+- *January 1 — New Year's Day*
+- *Ash Wednesday — 46 days before Easter*
+- *Good Friday*
+- *Easter Monday*
+- *May 23 — Labour Day*
+- *August 1 — Emancipation Day*
+- *August 6 — Independence Day*
+- *October 16 — National Heroes Day third Monday of October*
+- *December 25 — Christmas Day*
+- *December 26 — Boxing Day*
+
+*10. Store owners can override any public holiday and mark it as open if they choose to work that day*
+
+*11. Give me this as a SQL code block to run:*
+```sql
+CREATE TABLE IF NOT EXISTS public.store_closed_dates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+  closed_date date NOT NULL,
+  reason text NOT NULL DEFAULT 'Day Off',
+  is_holiday boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(store_id, closed_date)
+);
+
+ALTER TABLE public.store_closed_dates ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can read closed dates"
+  ON public.store_closed_dates FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Store owner can manage closed dates"
+  ON public.store_closed_dates FOR ALL TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM public.stores WHERE id = store_closed_dates.store_id AND user_id = auth.uid())
+  )
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM public.stores WHERE id = store_closed_dates.store_id AND user_id = auth.uid())
+  );
+```
+
+*12. On the customer booking calendar, dates that are in the store_closed_dates table for that store must show as red and be untappable*
+
+***DATE RANGE BLOCKING — STORE DASHBOARD***
+*13. On the store calendar give store owners the option to block a date range instead of one day at a time — useful for vacations or holiday weeks. Show a Block Date Range option that lets them pick a start date and end date and a reason, then marks all dates in that range as closed*
+
+***NOTIFICATIONS FOR EXISTING BOOKINGS***
+*14. When a store owner marks a date as closed that already has confirmed bookings on it, show a warning telling them how many bookings exist on that date and ask them to confirm before closing the date*
+*15. After confirming, automatically update the status of all reservations on that date to cancelled and show a visible notice to affected customers in their Bookings tab saying their appointment on that date was cancelled by the store*
+
+***GENERAL***
+*16. Do not change anything on the customer booking screen time slot logic — only add the More Dates button and the monthly calendar view on top of what already works*
+*17. Make sure the calendar works correctly on mobile screen sizes*
+*18. Show a loading skeleton while the calendar data is fetching*
+
+
+
+*Start with the two SQL code blocks first and wait for my confirmation that both ran successfully before writing any code."*
+
