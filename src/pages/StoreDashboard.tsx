@@ -82,11 +82,11 @@ const DEFAULT_TIMES: [string, string][] = [
   ["15:00", "16:00"],
 ];
 
-const statusConfig: Record<string, { bg: string; label: string; next: string | null }> = {
-  scheduled:   { bg: "bg-blue-500 text-white",   label: "Scheduled",   next: "in_progress" },
-  in_progress: { bg: "bg-orange-500 text-white", label: "In Progress", next: "completed" },
-  completed:   { bg: "bg-green-500 text-white",  label: "Completed",   next: null },
-  cancelled:   { bg: "bg-red-400 text-white",    label: "Cancelled",   next: null },
+const statusConfig: Record<string, { bg: string; label: string; next: string | null; prev: string | null }> = {
+  scheduled:   { bg: "bg-blue-500 text-white",   label: "Scheduled",   next: "in_progress", prev: null },
+  in_progress: { bg: "bg-orange-500 text-white", label: "In Progress", next: "completed",   prev: "scheduled" },
+  completed:   { bg: "bg-green-500 text-white",  label: "Completed",   next: null,          prev: "in_progress" },
+  cancelled:   { bg: "bg-red-400 text-white",    label: "Cancelled",   next: null,          prev: "scheduled" },
 };
 
 async function geocodeAddress(addr: string): Promise<{ lat: number; lng: number } | null> {
@@ -471,6 +471,15 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     toast.success(`Marked as ${next.replace("_", " ")}`);
   };
 
+  const revertStatus = async (id: string, current: string) => {
+    const prev = statusConfig[current]?.prev;
+    if (!prev) return;
+    const { error } = await supabase.from("reservations").update({ status: prev }).eq("id", id);
+    if (error) { toast.error("Failed to revert status."); return; }
+    setReservations((rs) => rs.map((r) => (r.id === id ? { ...r, status: prev } : r)));
+    toast.success(`Reverted to ${prev.replace("_", " ")}`);
+  };
+
   // ── Review reply ──────────────────────────────────────────────────────────
   const saveReply = async () => {
     if (!replyTarget || !replyText.trim()) return;
@@ -617,6 +626,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const ReservationCard = ({ r, i }: { r: Reservation; i: number }) => {
     const cfg = statusConfig[r.status] || statusConfig.scheduled;
     const canAdvance = cfg.next !== null;
+    const canRevert = cfg.prev !== null;
     return (
       <div
         data-testid={`card-reservation-${r.id}`}
@@ -629,7 +639,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             data-testid={`button-status-${r.id}`}
             onClick={() => cycleStatus(r.id, r.status)}
             disabled={!canAdvance}
-            className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all active:scale-95 ${cfg.bg} ${canAdvance ? "cursor-pointer" : "cursor-default opacity-80"}`}
+            className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all active:scale-95 ${cfg.bg} ${canAdvance ? "cursor-pointer hover:opacity-90" : "cursor-default opacity-80"}`}
           >
             {cfg.label}
           </button>
@@ -638,9 +648,22 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
           {r.reservation_date !== TODAY && ` · ${r.reservation_date}`}
         </p>
-        {canAdvance && (
-          <p className="text-[10px] text-muted-foreground mt-1">Tap status to advance →</p>
-        )}
+        <div className="flex items-center justify-between mt-2">
+          {canAdvance ? (
+            <p className="text-[10px] text-muted-foreground">Tap status badge to advance →</p>
+          ) : (
+            <span />
+          )}
+          {canRevert && (
+            <button
+              data-testid={`button-revert-${r.id}`}
+              onClick={() => revertStatus(r.id, r.status)}
+              className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors active:scale-95"
+            >
+              ↩ Undo to {(statusConfig[r.status]?.prev ?? "").replace("_", " ")}
+            </button>
+          )}
+        </div>
       </div>
     );
   };
