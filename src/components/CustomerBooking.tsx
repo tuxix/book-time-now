@@ -502,13 +502,14 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                       );
                     });
                   })}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Commitment Fee</span>
+                    <span className="text-muted-foreground">+{fmt(commitmentFee)}</span>
+                  </div>
                   <div className="flex items-center justify-between pt-2 border-t border-border">
                     <span className="text-sm font-bold text-foreground">Total</span>
-                    <span className="text-2xl font-extrabold text-primary">{fmt(serviceTotal)}</span>
+                    <span className="text-2xl font-extrabold text-primary">{fmt(serviceTotal + commitmentFee)}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    A commitment fee of {fmt(commitmentFee)} is due now to secure your spot. The remaining balance is paid at the store.
-                  </p>
                 </div>
               ) : (
                 <div className="pt-2 border-t border-border">
