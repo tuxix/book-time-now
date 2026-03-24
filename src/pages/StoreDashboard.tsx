@@ -681,7 +681,6 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     }
     const storedCode = (fresh.checkin_code ?? "").trim();
     const enteredCode = codeInput.trim();
-    console.log("[CodeVerify] stored:", storedCode, "entered:", enteredCode);
     if (storedCode !== enteredCode) {
       setCodeError("Incorrect code — please try again.");
       setCodeSubmitting(false);

@@ -136,14 +136,10 @@ const CustomerReservations = () => {
   const handleCheckIn = async (r: Reservation) => {
     setCheckingIn(r.id);
     const code = String(Math.floor(1000 + Math.random() * 9000));
-    console.log("[CheckIn] Attempting check-in for reservation:", r.id, "with code:", code);
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("reservations")
       .update({ status: "arrived", checkin_code: code })
-      .eq("id", r.id)
-      .select("id, status, checkin_code")
-      .single();
-    console.log("[CheckIn] Supabase response — data:", data, "error:", error);
+      .eq("id", r.id);
     setCheckingIn(null);
     if (error) {
       toast.error("Check-in failed. Please try again.");
