@@ -32,6 +32,8 @@ interface Reservation {
   customer_label: string;
   customer_name?: string;
   customer_phone?: string;
+  checkin_code?: string;
+  cancelled_by?: string;
 }
 
 interface TimeSlot {
@@ -114,10 +116,11 @@ const DEFAULT_TIMES: [string, string][] = [
 ];
 
 const statusConfig: Record<string, { bg: string; label: string; next: string | null; prev: string | null }> = {
-  scheduled:   { bg: "bg-blue-500 text-white",   label: "Scheduled",   next: "in_progress", prev: null },
-  in_progress: { bg: "bg-orange-500 text-white", label: "In Progress", next: "completed",   prev: "scheduled" },
-  completed:   { bg: "bg-green-500 text-white",  label: "Completed",   next: null,          prev: "in_progress" },
-  cancelled:   { bg: "bg-red-400 text-white",    label: "Cancelled",   next: null,          prev: null },
+  scheduled:   { bg: "bg-blue-500 text-white",    label: "Scheduled",   next: "arrived",     prev: null },
+  arrived:     { bg: "bg-purple-500 text-white",  label: "Arrived",     next: "in_progress", prev: "scheduled" },
+  in_progress: { bg: "bg-orange-500 text-white",  label: "In Progress", next: "completed",   prev: "arrived" },
+  completed:   { bg: "bg-green-500 text-white",   label: "Completed",   next: null,          prev: "in_progress" },
+  cancelled:   { bg: "bg-red-400 text-white",     label: "Cancelled",   next: null,          prev: null },
 };
 
 async function geocodeAddress(addr: string): Promise<{ lat: number; lng: number } | null> {
@@ -345,6 +348,16 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [editPhone, setEditPhone] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Code entry dialog (arrived → in_progress)
+  const [codeDialog, setCodeDialog] = useState<string | null>(null);
+  const [codeInput, setCodeInput] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [codeSubmitting, setCodeSubmitting] = useState(false);
+
+  // Cancel for customer
+  const [cancelForCustomerDialog, setCancelForCustomerDialog] = useState<string | null>(null);
+  const [cancellingForCustomer, setCancellingForCustomer] = useState(false);
 
   // Services (Menu) tab
   const [storeServices, setStoreServices] = useState<StoreService[]>([]);
@@ -638,6 +651,40 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     toast.success(`Reverted to ${prev.replace("_", " ")}`);
   };
 
+  const handleCodeSubmit = async () => {
+    if (!codeDialog || codeInput.length !== 4) return;
+    setCodeSubmitting(true);
+    setCodeError("");
+    const reservation = reservations.find((r) => r.id === codeDialog);
+    if (!reservation) { setCodeSubmitting(false); return; }
+    if (reservation.checkin_code !== codeInput) {
+      setCodeError("Incorrect code — please try again.");
+      setCodeSubmitting(false);
+      return;
+    }
+    const { error } = await supabase.from("reservations").update({ status: "in_progress" }).eq("id", codeDialog);
+    setCodeSubmitting(false);
+    if (error) { toast.error("Failed to update status."); return; }
+    setReservations((prev) => prev.map((r) => r.id === codeDialog ? { ...r, status: "in_progress" } : r));
+    setCodeDialog(null);
+    setCodeInput("");
+    toast.success("Code verified — marked as In Progress!");
+  };
+
+  const handleCancelForCustomer = async () => {
+    if (!cancelForCustomerDialog) return;
+    setCancellingForCustomer(true);
+    const { error } = await supabase
+      .from("reservations")
+      .update({ status: "cancelled", cancelled_by: "store" })
+      .eq("id", cancelForCustomerDialog);
+    setCancellingForCustomer(false);
+    if (error) { toast.error("Failed to cancel."); return; }
+    setReservations((prev) => prev.map((r) => r.id === cancelForCustomerDialog ? { ...r, status: "cancelled", cancelled_by: "store" } : r));
+    setCancelForCustomerDialog(null);
+    toast.success("Appointment cancelled on behalf of customer.");
+  };
+
   // ── Review reply ──────────────────────────────────────────────────────────
   const saveReply = async () => {
     if (!replyTarget || !replyText.trim()) return;
@@ -783,12 +830,27 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const ReservationCard = ({ r, i }: { r: Reservation; i: number }) => {
     const cfg = statusConfig[r.status] || statusConfig.scheduled;
-    const canAdvance = cfg.next !== null;
+    const isArrived = r.status === "arrived";
+    const canAdvanceDirect = cfg.next !== null && !isArrived;
     const canRevert = cfg.prev !== null;
+    const isCancelled = r.status === "cancelled";
+    const isCancelledByStore = isCancelled && r.cancelled_by === "store";
+    const isCancelledByCustomer = isCancelled && r.cancelled_by !== "store";
+
+    const badgeLabel = isCancelledByStore
+      ? "Cancelled by Store"
+      : isCancelledByCustomer
+      ? "Cancelled by Customer"
+      : cfg.label;
+
+    const isToday = r.reservation_date === TODAY;
+    const canCancelForCustomer =
+      isToday && (r.status === "scheduled" || r.status === "arrived");
+
     return (
       <div
         data-testid={`card-reservation-${r.id}`}
-        className="p-4 rounded-2xl bg-card booka-shadow-sm slide-up"
+        className={`p-4 rounded-2xl bg-card booka-shadow-sm slide-up ${isCancelled ? "opacity-70" : ""}`}
         style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
       >
         <div className="flex items-center justify-between mb-1">
@@ -803,26 +865,31 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               </a>
             )}
           </div>
+          {/* Status badge — tappable to advance (except arrived which needs code) */}
           <button
             data-testid={`button-status-${r.id}`}
-            onClick={() => cycleStatus(r.id, r.status)}
-            disabled={!canAdvance}
-            className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all active:scale-95 shrink-0 ${cfg.bg} ${canAdvance ? "cursor-pointer hover:opacity-90" : "cursor-default opacity-80"}`}
+            onClick={() => { if (canAdvanceDirect) cycleStatus(r.id, r.status); }}
+            disabled={!canAdvanceDirect}
+            className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all active:scale-95 shrink-0 ${cfg.bg} ${canAdvanceDirect ? "cursor-pointer hover:opacity-90" : "cursor-default opacity-80"}`}
           >
-            {cfg.label}
+            {badgeLabel}
           </button>
         </div>
+
         <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1.5">
           <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
           {r.reservation_date !== TODAY && ` · ${r.reservation_date}`}
         </p>
+
         <div className="flex items-center justify-between mt-2">
-          {canAdvance ? (
+          {canAdvanceDirect ? (
             <p className="text-[10px] text-muted-foreground">Tap status badge to advance →</p>
+          ) : isArrived ? (
+            <p className="text-[10px] text-muted-foreground">Enter code to advance →</p>
           ) : (
             <span />
           )}
-          {canRevert && (
+          {canRevert && !isCancelled && (
             <button
               data-testid={`button-revert-${r.id}`}
               onClick={() => revertStatus(r.id, r.status)}
@@ -832,6 +899,28 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             </button>
           )}
         </div>
+
+        {/* Arrived: Enter Code button */}
+        {isArrived && (
+          <button
+            data-testid={`button-enter-code-${r.id}`}
+            onClick={() => { setCodeDialog(r.id); setCodeInput(""); setCodeError(""); }}
+            className="mt-3 w-full py-2 rounded-xl bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-purple-600 active:scale-[0.97]"
+          >
+            🔑 Enter Customer Code
+          </button>
+        )}
+
+        {/* Cancel for Customer button (same-day, scheduled or arrived) */}
+        {canCancelForCustomer && (
+          <button
+            data-testid={`button-cancel-for-customer-${r.id}`}
+            onClick={() => setCancelForCustomerDialog(r.id)}
+            className="mt-2 w-full py-2 rounded-xl border border-red-200 text-red-500 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-red-50 active:scale-[0.97]"
+          >
+            ✕ Cancel for Customer
+          </button>
+        )}
       </div>
     );
   };
@@ -1485,6 +1574,78 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             <Button className="w-full rounded-xl" onClick={saveReply} disabled={savingReply || !replyText.trim()}>
               {savingReply ? "Saving…" : "Save Reply"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Code entry dialog (arrived → in_progress) ─────────────────────── */}
+      <Dialog open={!!codeDialog} onOpenChange={(o) => { if (!o) { setCodeDialog(null); setCodeInput(""); setCodeError(""); } }}>
+        <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Enter Customer Check-In Code</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Ask the customer for their 4-digit check-in code to mark this appointment as In Progress.
+            </p>
+            <input
+              data-testid="input-checkin-code"
+              type="number"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="_ _ _ _"
+              value={codeInput}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                setCodeInput(val);
+                setCodeError("");
+              }}
+              className="w-full text-center text-3xl font-extrabold tracking-[0.5em] font-mono border-2 border-border rounded-2xl py-4 bg-background outline-none focus:border-purple-400 transition-colors"
+              autoFocus
+            />
+            {codeError && (
+              <p className="text-xs text-red-500 text-center font-medium">{codeError}</p>
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { setCodeDialog(null); setCodeInput(""); setCodeError(""); }}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl bg-purple-500 hover:bg-purple-600 text-white"
+                onClick={handleCodeSubmit}
+                disabled={codeInput.length !== 4 || codeSubmitting}
+              >
+                {codeSubmitting ? "Verifying…" : "Confirm Code"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Cancel for Customer dialog ─────────────────────────────────────── */}
+      <Dialog open={!!cancelForCustomerDialog} onOpenChange={(o) => { if (!o) setCancelForCustomerDialog(null); }}>
+        <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Cancel on Behalf of Customer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200">
+              <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed">
+                Are you sure you want to cancel this appointment on behalf of the customer? The customer will be notified that the store cancelled.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setCancelForCustomerDialog(null)}>
+                Go Back
+              </Button>
+              <Button
+                className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+                onClick={handleCancelForCustomer}
+                disabled={cancellingForCustomer}
+              >
+                {cancellingForCustomer ? "Cancelling…" : "Yes, Cancel"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Calendar, Clock, MapPin, Star, RefreshCw, XCircle } from "lucide-react";
+import { Calendar, Clock, MapPin, Star, RefreshCw, XCircle, LogIn } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import ReviewDialog from "@/components/ReviewDialog";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ interface Reservation {
   end_time: string;
   status: string;
   fee: number;
+  checkin_code?: string;
+  cancelled_by?: string;
   stores: {
     name: string;
     address: string;
@@ -26,11 +28,22 @@ interface Reservation {
   } | null;
 }
 
+const TODAY = format(new Date(), "yyyy-MM-dd");
+
 const statusColors: Record<string, string> = {
   scheduled:   "bg-blue-500 text-white",
+  arrived:     "bg-purple-500 text-white",
   in_progress: "bg-orange-500 text-white",
   completed:   "bg-green-500 text-white",
   cancelled:   "bg-red-400 text-white",
+};
+
+const statusLabels: Record<string, string> = {
+  scheduled:   "Scheduled",
+  arrived:     "Arrived",
+  in_progress: "In Progress",
+  completed:   "Completed",
+  cancelled:   "Cancelled",
 };
 
 function checkCancellation(r: Reservation): {
@@ -75,6 +88,7 @@ const CustomerReservations = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [checkingIn, setCheckingIn] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
 
@@ -119,18 +133,36 @@ const CustomerReservations = () => {
     if (diff > 70 && el.scrollTop === 0 && !refreshing) { setRefreshing(true); fetchData(); }
   };
 
+  const handleCheckIn = async (r: Reservation) => {
+    setCheckingIn(r.id);
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    const { error } = await supabase
+      .from("reservations")
+      .update({ status: "arrived", checkin_code: code })
+      .eq("id", r.id);
+    setCheckingIn(null);
+    if (error) {
+      toast.error("Check-in failed. Please try again.");
+      return;
+    }
+    setReservations((prev) =>
+      prev.map((res) => res.id === r.id ? { ...res, status: "arrived", checkin_code: code } : res)
+    );
+    toast.success("Checked in! Show your code to the store.");
+  };
+
   const handleCancelConfirm = async () => {
     if (!cancelTarget) return;
     setCancelling(true);
     const { error } = await supabase
       .from("reservations")
-      .update({ status: "cancelled" })
+      .update({ status: "cancelled", cancelled_by: "customer" })
       .eq("id", cancelTarget.id);
     if (error) {
       toast.error("Could not cancel. Please try again.");
     } else {
       setReservations((prev) =>
-        prev.map((r) => r.id === cancelTarget.id ? { ...r, status: "cancelled" } : r)
+        prev.map((r) => r.id === cancelTarget.id ? { ...r, status: "cancelled", cancelled_by: "customer" } : r)
       );
       toast.success("Appointment cancelled.");
     }
@@ -192,7 +224,11 @@ const CustomerReservations = () => {
         ) : (
           <div className="space-y-3">
             {sorted.map((r, i) => {
-              const canCancel = r.status === "scheduled" || r.status === "in_progress";
+              const isToday = r.reservation_date === TODAY;
+              const canCheckIn = r.status === "scheduled" && isToday;
+              const canCancel = r.status === "scheduled";
+              const isCancelledByStore = r.status === "cancelled" && r.cancelled_by === "store";
+
               return (
                 <div
                   key={r.id}
@@ -203,7 +239,7 @@ const CustomerReservations = () => {
                   <div className="flex items-center justify-between mb-2">
                     <p className="font-semibold text-foreground text-sm">{r.stores?.name || "Store"}</p>
                     <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${statusColors[r.status] || "bg-muted text-muted-foreground"}`}>
-                      {r.status.replace("_", " ")}
+                      {statusLabels[r.status] || r.status.replace("_", " ")}
                     </span>
                   </div>
                   <div className="space-y-1 text-xs text-muted-foreground">
@@ -220,10 +256,22 @@ const CustomerReservations = () => {
                     )}
                   </div>
 
+                  {/* Arrived: show check-in code */}
+                  {r.status === "arrived" && r.checkin_code && (
+                    <div className="mt-3 px-4 py-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 text-center">
+                      <p className="text-xs font-semibold text-purple-600 dark:text-purple-300 mb-1">Your Check-In Code</p>
+                      <p className="text-3xl font-extrabold text-purple-700 dark:text-purple-200 tracking-[0.3em] font-mono">{r.checkin_code}</p>
+                      <p className="text-[10px] text-purple-500 dark:text-purple-400 mt-1">Show this code to your service provider</p>
+                    </div>
+                  )}
+
+                  {/* Cancelled by store notice */}
                   {r.status === "cancelled" && (
-                    <div className="mt-3 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800">
-                      <p className="text-xs text-red-600 dark:text-red-400 font-medium text-center">
-                        This appointment was cancelled. Please rebook at your convenience.
+                    <div className={`mt-3 px-3 py-2 rounded-xl border ${isCancelledByStore ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700" : "bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800"}`}>
+                      <p className={`text-xs font-medium text-center ${isCancelledByStore ? "text-orange-700 dark:text-orange-300" : "text-red-600 dark:text-red-400"}`}>
+                        {isCancelledByStore
+                          ? `Your appointment at ${r.stores?.name || "the store"} was cancelled by the store. Please rebook at your convenience.`
+                          : "This appointment was cancelled. Please rebook at your convenience."}
                       </p>
                     </div>
                   )}
@@ -240,11 +288,23 @@ const CustomerReservations = () => {
                     <p className="mt-2 text-xs text-green-600 text-center font-medium">✓ Review submitted</p>
                   )}
 
+                  {/* Check In button */}
+                  {canCheckIn && (
+                    <button
+                      data-testid={`button-checkin-${r.id}`}
+                      onClick={() => handleCheckIn(r)}
+                      disabled={checkingIn === r.id}
+                      className="mt-3 w-full py-2 rounded-xl bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-purple-600 active:scale-[0.97] disabled:opacity-60"
+                    >
+                      <LogIn size={13} /> {checkingIn === r.id ? "Checking in…" : "Check In — I'm here!"}
+                    </button>
+                  )}
+
                   {canCancel && (
                     <button
                       data-testid={`button-cancel-reservation-${r.id}`}
                       onClick={() => setCancelTarget(r)}
-                      className="mt-3 w-full py-2 rounded-xl border border-red-200 text-red-500 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-red-50 active:scale-[0.97]"
+                      className="mt-2 w-full py-2 rounded-xl border border-red-200 text-red-500 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-red-50 active:scale-[0.97]"
                     >
                       <XCircle size={13} /> Cancel Appointment
                     </button>
@@ -288,11 +348,7 @@ const CustomerReservations = () => {
                     <p className="text-sm text-muted-foreground leading-relaxed">{cancelInfo.message}</p>
                   )}
                   <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      className="flex-1 rounded-xl"
-                      onClick={() => setCancelTarget(null)}
-                    >
+                    <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setCancelTarget(null)}>
                       Keep Appointment
                     </Button>
                     <Button
@@ -306,9 +362,7 @@ const CustomerReservations = () => {
                 </>
               )}
               {cancelInfo.tooLate && (
-                <Button className="w-full rounded-xl" onClick={() => setCancelTarget(null)}>
-                  OK
-                </Button>
+                <Button className="w-full rounded-xl" onClick={() => setCancelTarget(null)}>OK</Button>
               )}
             </div>
           )}
