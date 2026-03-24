@@ -331,15 +331,7 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
       {/* Fixed Book Now */}
       <div className="fixed inset-x-0 p-4 bg-card/95 backdrop-blur-md border-t border-border" style={{ bottom: 56, zIndex: 310 }}>
         <div className="max-w-lg mx-auto">
-          {!store.is_open ? (
-            <Button
-              data-testid="button-store-closed"
-              className="w-full h-12 rounded-xl font-semibold text-base bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted"
-              disabled
-            >
-              Store Currently Closed
-            </Button>
-          ) : store.accepting_bookings === false ? (
+          {store.accepting_bookings === false ? (
             <Button
               data-testid="button-not-accepting"
               className="w-full h-12 rounded-xl font-semibold text-base bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted"
@@ -353,10 +345,10 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
               className="w-full h-12 rounded-xl font-semibold text-base booka-gradient booka-shadow-blue text-white border-0"
               onClick={onBook}
             >
-              Book Now
+              {!store.is_open ? "Book in Advance" : "Book Now"}
             </Button>
           )}
-          {(store.commitment_fee ?? 0) > 0 && store.is_open && store.accepting_bookings !== false && (
+          {(store.commitment_fee ?? 0) > 0 && store.accepting_bookings !== false && (
             <p className="text-xs text-muted-foreground text-center mt-2">
               J${(store.commitment_fee!).toFixed(0)} commitment fee · applied to your final service price
             </p>
