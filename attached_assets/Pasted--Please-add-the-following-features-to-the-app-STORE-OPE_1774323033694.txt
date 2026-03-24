@@ -1,0 +1,33 @@
+
+*"Please add the following features to the app:*
+
+***STORE OPEN/CLOSED TOGGLE***
+*1. Add an is_open boolean column to the stores table — run this SQL and give it to me as a code block to run in Supabase:*
+- *ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS is_open boolean NOT NULL DEFAULT true;*
+
+*2. On the Store Dashboard add a prominent Open/Closed toggle at the top of the screen, right below the dark blue header. When toggled:*
+- *Green with OPEN label when the store is accepting bookings*
+- *Red with CLOSED label when the store is not accepting bookings*
+- *This setting saves immediately to the is_open column in the stores table*
+
+*3. On the customer side:*
+- *Stores that are closed should show a red CLOSED badge on their map pin and store card*
+- *When a customer opens a closed store profile the Book Now button should be replaced with a grey Store Currently Closed button that cannot be tapped*
+- *Closed stores should appear at the bottom of category results lists, below all open stores*
+
+***BUFFER TIME BETWEEN BOOKINGS***
+*4. Add a buffer_minutes integer column to the stores table — include this in the same SQL block:*
+- *ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS buffer_minutes integer NOT NULL DEFAULT 15;*
+
+*5. On the Store Dashboard Profile tab add a Buffer Time setting with a dropdown or stepper that lets the store owner choose their buffer time between appointments:*
+- *0 minutes — no buffer*
+- *15 minutes — default*
+- *30 minutes*
+- *45 minutes*
+- *60 minutes*
+
+*6. When checking slot availability on the customer booking screen, factor in the buffer time. For example if a store has a 30 minute buffer and a booking exists from 8:00 AM to 9:00 AM, the next available slot should not start until 9:30 AM. Any slot that overlaps with an existing booking plus its buffer time should be greyed out and unselectable*
+
+*7. On the store dashboard show a small note under the buffer time setting explaining what it does, for example: Buffer time gives you breathing room between appointments so a running-over session does not affect the next client*
+
+*Check all existing code before making changes. Give me any SQL as a code block and wait for my confirmation before continuing.
