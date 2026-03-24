@@ -11,7 +11,11 @@ interface Props {
 }
 
 const CategoryResults = ({ category, stores, userLocation, onBack, onSelect }: Props) => {
-  const filtered = stores.filter((s) => s.category === category.label);
+  const raw = stores.filter((s) => s.category === category.label);
+  const filtered = [
+    ...raw.filter((s) => s.is_open !== false),
+    ...raw.filter((s) => s.is_open === false),
+  ];
 
   return (
     <div className="absolute inset-x-0 top-0 overflow-y-auto bg-background fade-in" style={{ bottom: 56, zIndex: 300 }}>
@@ -47,11 +51,16 @@ const CategoryResults = ({ category, stores, userLocation, onBack, onSelect }: P
                 onClick={() => onSelect(store)}
                 className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98]"
               >
-                <div className="w-12 h-12 rounded-xl booka-gradient flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
                   {store.name.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground text-sm">{store.name}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-foreground text-sm">{store.name}</p>
+                    {store.is_open === false && (
+                      <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full">CLOSED</span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <div className="flex items-center gap-0.5">
                       <Star size={11} className="text-amber-400 fill-amber-400" />

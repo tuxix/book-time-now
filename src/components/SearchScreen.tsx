@@ -27,7 +27,7 @@ const SearchScreen = ({ userLocation, onSelectStore }: Props) => {
   useEffect(() => {
     supabase
       .from("stores")
-      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude")
+      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes")
       .then(({ data }) => { if (data) setAllStores(data as Store[]); });
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
@@ -53,11 +53,16 @@ const SearchScreen = ({ userLocation, onSelectStore }: Props) => {
         onClick={() => handleSelect(store)}
         className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98]"
       >
-        <div className="w-11 h-11 rounded-xl booka-gradient flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
           {store.name.slice(0, 2).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-foreground text-sm truncate">{store.name}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold text-foreground text-sm truncate">{store.name}</p>
+            {store.is_open === false && (
+              <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
+            )}
+          </div>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className="text-xs text-muted-foreground">{getCategoryEmoji(store.category)} {store.category}</span>
             <div className="flex items-center gap-0.5">

@@ -150,7 +150,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   useEffect(() => {
     supabase
       .from("stores")
-      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude")
+      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes")
       .then(({ data, error }) => {
         console.log("[Booka] stores response:", { data, error });
         if (data) setStores(data as Store[]);
@@ -173,7 +173,8 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
       const lng = store.longitude ?? DEFAULT_CENTER[1] + stableOffset(store.id, 1);
       const initials = store.name.slice(0, 2).toUpperCase();
       const active = store.id === mapPinStore?.id;
-      const html = `<div class="booka-pin${active ? " booka-pin--active" : ""}"><span>${initials}</span></div>`;
+      const closed = store.is_open === false;
+      const html = `<div class="booka-pin${active ? " booka-pin--active" : ""}${closed ? " booka-pin--closed" : ""}"><span>${initials}</span></div>`;
       const icon = L.divIcon({ className: "", html, iconSize: [36, 36], iconAnchor: [18, 18] });
       const marker = L.marker([lat, lng], { icon }).addTo(map);
       marker.on("click", () => setMapPinStore(store));
@@ -382,11 +383,16 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
                     onClick={() => setSelectedStore(store)}
                     className="w-full flex items-center gap-3 p-3 rounded-xl bg-secondary text-left transition-all active:scale-[0.98]"
                   >
-                    <div className="w-9 h-9 rounded-lg booka-gradient flex items-center justify-center text-primary-foreground font-bold text-xs shrink-0">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
                       {store.name.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{store.name}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-sm font-semibold text-foreground truncate">{store.name}</p>
+                        {store.is_open === false && (
+                          <span className="text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Star size={10} className="text-amber-400 fill-amber-400" />
                         {store.review_count > 0 ? store.rating : "New"}

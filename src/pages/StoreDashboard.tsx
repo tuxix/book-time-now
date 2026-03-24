@@ -48,6 +48,8 @@ interface StoreData {
   review_count: number;
   latitude: number | null;
   longitude: number | null;
+  is_open: boolean;
+  buffer_minutes: number;
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -232,6 +234,9 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [loadingStore, setLoadingStore] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
+  const [bufferMinutes, setBufferMinutes] = useState(15);
+  const [togglingOpen, setTogglingOpen] = useState(false);
 
   // Slot add dialog
   const [slotDialog, setSlotDialog] = useState(false);
@@ -287,6 +292,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         setEditAddr(s.address || "");
         setEditPhone(s.phone || "");
         setEditCategory(s.category || "");
+        setIsOpen(s.is_open !== false);
+        setBufferMinutes(s.buffer_minutes ?? 15);
       }
       setLoadingStore(false);
     })();
@@ -326,6 +333,26 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     if (!el) return;
     const diff = e.changedTouches[0].clientY - touchStartY.current;
     if (diff > 70 && el.scrollTop === 0 && !refreshing) { setRefreshing(true); fetchData(); }
+  };
+
+  // ── Open / Closed toggle ──────────────────────────────────────────────
+  const toggleOpen = async () => {
+    if (!store || togglingOpen) return;
+    setTogglingOpen(true);
+    const next = !isOpen;
+    const { error } = await supabase.from("stores").update({ is_open: next }).eq("id", store.id);
+    if (error) { toast.error("Failed to update status."); setTogglingOpen(false); return; }
+    setIsOpen(next);
+    setTogglingOpen(false);
+    toast.success(next ? "Store is now OPEN" : "Store is now CLOSED");
+  };
+
+  // ── Buffer minutes save ────────────────────────────────────────────────
+  const saveBufferMinutes = async (val: number) => {
+    if (!store) return;
+    setBufferMinutes(val);
+    await supabase.from("stores").update({ buffer_minutes: val }).eq("id", store.id);
+    toast.success("Buffer time saved");
   };
 
   // ── Status cycling ─────────────────────────────────────────────────────
@@ -499,6 +526,21 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             <ArrowLeft size={14} /> Back to App
           </button>
         </div>
+      </div>
+
+      {/* ── Open / Closed toggle ─────────────────────────────────────────── */}
+      <div className="px-5 py-3 border-b border-border bg-card">
+        <button
+          data-testid="button-toggle-open"
+          onClick={toggleOpen}
+          disabled={togglingOpen}
+          className={`w-full py-3 rounded-2xl font-bold text-white flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-[0.98] ${
+            isOpen ? "bg-green-500" : "bg-red-500"
+          } ${togglingOpen ? "opacity-70" : ""}`}
+        >
+          <div className="w-2.5 h-2.5 rounded-full bg-white" />
+          {isOpen ? "OPEN — Accepting Bookings" : "CLOSED — Not Accepting Bookings"}
+        </button>
       </div>
 
       {/* ── Reservations tab ─────────────────────────────────────────────── */}
@@ -695,6 +737,29 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             onChange={(e) => setEditPhone(e.target.value)}
             className="rounded-xl"
           />
+
+          {/* Buffer time */}
+          <div className="pt-2">
+            <p className="text-xs font-semibold text-muted-foreground mb-1.5">Buffer Time Between Bookings</p>
+            <Select
+              value={String(bufferMinutes)}
+              onValueChange={(v) => saveBufferMinutes(Number(v))}
+            >
+              <SelectTrigger data-testid="select-buffer-minutes" className="rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">0 minutes — no buffer</SelectItem>
+                <SelectItem value="15">15 minutes — default</SelectItem>
+                <SelectItem value="30">30 minutes</SelectItem>
+                <SelectItem value="45">45 minutes</SelectItem>
+                <SelectItem value="60">60 minutes</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              Buffer time gives you breathing room between appointments so a running-over session does not affect the next client.
+            </p>
+          </div>
 
           <Button
             data-testid="button-save-profile"

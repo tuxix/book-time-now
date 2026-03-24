@@ -41,6 +41,11 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const dayOfWeek = dates[selectedDate].getDay();
   const selectedDateStr = format(dates[selectedDate], "yyyy-MM-dd");
 
+  const timeToMins = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+
   useEffect(() => {
     setLoadingSlots(true);
     setSelectedSlot(null);
@@ -61,15 +66,28 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     ]).then(([slotsRes, reservationsRes]) => {
       const availableSlots = (slotsRes.data ?? []) as TimeSlot[];
       setSlots(availableSlots);
-      const takenTimes = (reservationsRes.data ?? []).map((r) => `${r.start_time}-${r.end_time}`);
+
+      const buffer = store.buffer_minutes ?? 0;
+      const existingBookings = reservationsRes.data ?? [];
       const taken = new Set<string>();
-      availableSlots.forEach((s) => {
-        if (takenTimes.includes(`${s.start_time}-${s.end_time}`)) taken.add(s.id);
+
+      availableSlots.forEach((slot) => {
+        const slotStart = timeToMins(slot.start_time);
+        const slotEnd = timeToMins(slot.end_time);
+        for (const booking of existingBookings) {
+          const bookingStart = timeToMins(booking.start_time);
+          const bookingEnd = timeToMins(booking.end_time) + buffer;
+          if (slotStart < bookingEnd && slotEnd > bookingStart) {
+            taken.add(slot.id);
+            break;
+          }
+        }
       });
+
       setTakenSlotIds(taken);
       setLoadingSlots(false);
     });
-  }, [store.id, dayOfWeek, selectedDateStr]);
+  }, [store.id, store.buffer_minutes, dayOfWeek, selectedDateStr]);
 
   const handleBook = async () => {
     const slot = slots.find((s) => s.id === selectedSlot);

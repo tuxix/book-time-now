@@ -188,6 +188,11 @@
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
+.booka-pin--closed {
+  background: #ef4444 !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35) !important;
+}
+
 .booka-pin span {
   color: #fff;
   font-size: 11px;

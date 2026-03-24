@@ -15,6 +15,8 @@ export interface Store {
   review_count: number;
   latitude: number | null;
   longitude: number | null;
+  is_open: boolean;
+  buffer_minutes: number;
 }
 
 interface Review {
@@ -122,6 +124,11 @@ const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
             <h2 className="text-xl font-bold text-foreground leading-tight">{store.name}</h2>
             <p className="text-sm text-muted-foreground mt-0.5">{emoji} {store.category}</p>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {!store.is_open && (
+                <span className="text-xs font-bold bg-red-500 text-white px-2 py-0.5 rounded-full">
+                  CLOSED
+                </span>
+              )}
               {liveRating.count > 0 ? (
                 <>
                   <Stars rating={liveRating.rating} />
@@ -225,9 +232,19 @@ const StoreProfile = ({ store, userLocation, onBack, onBook }: Props) => {
       {/* Fixed Book Now */}
       <div className="fixed inset-x-0 p-4 bg-card/95 backdrop-blur-md border-t border-border" style={{ bottom: 56, zIndex: 310 }}>
         <div className="max-w-lg mx-auto">
-          <Button data-testid="button-book-now" className="w-full h-12 rounded-xl font-semibold text-base" onClick={onBook}>
-            Book Now
-          </Button>
+          {store.is_open ? (
+            <Button data-testid="button-book-now" className="w-full h-12 rounded-xl font-semibold text-base" onClick={onBook}>
+              Book Now
+            </Button>
+          ) : (
+            <Button
+              data-testid="button-store-closed"
+              className="w-full h-12 rounded-xl font-semibold text-base bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted"
+              disabled
+            >
+              Store Currently Closed
+            </Button>
+          )}
         </div>
       </div>
     </div>
