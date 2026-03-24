@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, Pencil, RefreshCw, CalendarDays,
-  TrendingUp, Star, MessageSquare, Upload, Reply,
+  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight,
 } from "lucide-react";
 import StoreCalendar from "@/components/StoreCalendar";
 import { Button } from "@/components/ui/button";
@@ -68,6 +68,35 @@ interface StoreData {
   cancellation_hours?: number;
   announcement?: string;
   avatar_url?: string;
+}
+
+interface ServiceOptionItem {
+  id: string;
+  group_id: string;
+  label: string;
+  price_modifier: number;
+  sort_order: number;
+}
+
+interface ServiceOptionGroup {
+  id: string;
+  service_id: string;
+  label: string;
+  selection_type: "single" | "multi";
+  required: boolean;
+  sort_order: number;
+  service_option_items: ServiceOptionItem[];
+}
+
+interface StoreService {
+  id: string;
+  store_id: string;
+  name: string;
+  description?: string;
+  base_price: number;
+  sort_order: number;
+  is_active: boolean;
+  service_option_groups: ServiceOptionGroup[];
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -274,7 +303,7 @@ const StoreSetupScreen = ({
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const { user, signOut } = useAuth();
-  const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar">("reservations");
+  const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar" | "services">("reservations");
   const [store, setStore] = useState<StoreData | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [slots, setSlots] = useState<TimeSlot[]>([]);
@@ -314,6 +343,25 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [editPhone, setEditPhone] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Services (Menu) tab
+  const [storeServices, setStoreServices] = useState<StoreService[]>([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [expandedService, setExpandedService] = useState<string | null>(null);
+  const [serviceDialog, setServiceDialog] = useState(false);
+  const [newSvcName, setNewSvcName] = useState("");
+  const [newSvcDesc, setNewSvcDesc] = useState("");
+  const [newSvcPrice, setNewSvcPrice] = useState("0");
+  const [savingService, setSavingService] = useState(false);
+  const [groupDialog, setGroupDialog] = useState<string | null>(null);
+  const [newGrpLabel, setNewGrpLabel] = useState("");
+  const [newGrpType, setNewGrpType] = useState<"single" | "multi">("single");
+  const [newGrpRequired, setNewGrpRequired] = useState(true);
+  const [savingGroup, setSavingGroup] = useState(false);
+  const [itemDialog, setItemDialog] = useState<string | null>(null);
+  const [newItemLabel, setNewItemLabel] = useState("");
+  const [newItemPrice, setNewItemPrice] = useState("0");
+  const [savingItem, setSavingItem] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
@@ -378,6 +426,98 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   useEffect(() => { fetchData(); }, [store, needsSetup]);
+
+  // ── Fetch services ───────────────────────────────────────────────────────
+  const fetchServices = async () => {
+    if (!store) return;
+    setLoadingServices(true);
+    const { data } = await supabase
+      .from("store_services")
+      .select("*, service_option_groups(*, service_option_items(*))")
+      .eq("store_id", store.id)
+      .order("sort_order");
+    if (data) setStoreServices(data as StoreService[]);
+    setLoadingServices(false);
+  };
+
+  useEffect(() => { if (tab === "services" && store) fetchServices(); }, [tab, store]);
+
+  // ── Service CRUD ─────────────────────────────────────────────────────────
+  const addService = async () => {
+    if (!store || !newSvcName.trim()) return;
+    setSavingService(true);
+    const { data, error } = await supabase
+      .from("store_services")
+      .insert({ store_id: store.id, name: newSvcName.trim(), description: newSvcDesc.trim() || null, base_price: parseFloat(newSvcPrice) || 0, sort_order: storeServices.length })
+      .select("*, service_option_groups(*, service_option_items(*))")
+      .single();
+    setSavingService(false);
+    if (error) { toast.error("Could not add service."); return; }
+    setStoreServices((prev) => [...prev, data as StoreService]);
+    setServiceDialog(false);
+    setNewSvcName(""); setNewSvcDesc(""); setNewSvcPrice("0");
+    toast.success("Service added!");
+  };
+
+  const deleteService = async (id: string) => {
+    await supabase.from("store_services").delete().eq("id", id);
+    setStoreServices((prev) => prev.filter((s) => s.id !== id));
+    toast.success("Service removed.");
+  };
+
+  const toggleServiceActive = async (svc: StoreService) => {
+    await supabase.from("store_services").update({ is_active: !svc.is_active }).eq("id", svc.id);
+    setStoreServices((prev) => prev.map((s) => s.id === svc.id ? { ...s, is_active: !s.is_active } : s));
+  };
+
+  const addGroup = async (serviceId: string) => {
+    if (!newGrpLabel.trim()) return;
+    setSavingGroup(true);
+    const svc = storeServices.find((s) => s.id === serviceId);
+    const { data, error } = await supabase
+      .from("service_option_groups")
+      .insert({ service_id: serviceId, label: newGrpLabel.trim(), selection_type: newGrpType, required: newGrpRequired, sort_order: svc?.service_option_groups.length ?? 0 })
+      .select("*, service_option_items(*)")
+      .single();
+    setSavingGroup(false);
+    if (error) { toast.error("Could not add group."); return; }
+    setStoreServices((prev) => prev.map((s) => s.id === serviceId ? { ...s, service_option_groups: [...s.service_option_groups, data as ServiceOptionGroup] } : s));
+    setGroupDialog(null);
+    setNewGrpLabel(""); setNewGrpType("single"); setNewGrpRequired(true);
+  };
+
+  const deleteGroup = async (serviceId: string, groupId: string) => {
+    await supabase.from("service_option_groups").delete().eq("id", groupId);
+    setStoreServices((prev) => prev.map((s) => s.id === serviceId ? { ...s, service_option_groups: s.service_option_groups.filter((g) => g.id !== groupId) } : s));
+  };
+
+  const addItem = async (groupId: string, serviceId: string) => {
+    if (!newItemLabel.trim()) return;
+    setSavingItem(true);
+    const svc = storeServices.find((s) => s.id === serviceId);
+    const grp = svc?.service_option_groups.find((g) => g.id === groupId);
+    const { data, error } = await supabase
+      .from("service_option_items")
+      .insert({ group_id: groupId, label: newItemLabel.trim(), price_modifier: parseFloat(newItemPrice) || 0, sort_order: grp?.service_option_items.length ?? 0 })
+      .select()
+      .single();
+    setSavingItem(false);
+    if (error) { toast.error("Could not add option."); return; }
+    setStoreServices((prev) => prev.map((s) => s.id === serviceId ? {
+      ...s,
+      service_option_groups: s.service_option_groups.map((g) => g.id === groupId ? { ...g, service_option_items: [...g.service_option_items, data as ServiceOptionItem] } : g),
+    } : s));
+    setItemDialog(null);
+    setNewItemLabel(""); setNewItemPrice("0");
+  };
+
+  const deleteItem = async (serviceId: string, groupId: string, itemId: string) => {
+    await supabase.from("service_option_items").delete().eq("id", itemId);
+    setStoreServices((prev) => prev.map((s) => s.id === serviceId ? {
+      ...s,
+      service_option_groups: s.service_option_groups.map((g) => g.id === groupId ? { ...g, service_option_items: g.service_option_items.filter((i) => i.id !== itemId) } : g),
+    } : s));
+  };
 
   // Pull-to-refresh
   const handleTouchStart = (e: React.TouchEvent) => { touchStartY.current = e.touches[0].clientY; };
@@ -679,6 +819,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const navTabs = [
     { id: "reservations" as const, label: "Bookings", icon: Calendar },
     { id: "slots" as const, label: "Slots", icon: Clock },
+    { id: "services" as const, label: "Menu", icon: Package },
     { id: "calendar" as const, label: "Calendar", icon: CalendarDays },
     { id: "profile" as const, label: "Profile", icon: Settings },
   ];
@@ -888,6 +1029,128 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         <StoreCalendar storeId={store.id} />
       )}
 
+      {/* ── Services (Menu) tab ───────────────────────────────────────────── */}
+      {tab === "services" && (
+        <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Service Menu</h2>
+            <Button data-testid="button-add-service" size="sm" className="rounded-xl gap-1 text-xs h-8"
+              onClick={() => { setNewSvcName(""); setNewSvcDesc(""); setNewSvcPrice("0"); setServiceDialog(true); }}>
+              <Plus size={13} /> Add Service
+            </Button>
+          </div>
+
+          {loadingServices ? (
+            <div className="space-y-3">
+              {[1,2].map((i) => <div key={i} className="h-20 rounded-2xl booka-shimmer" />)}
+            </div>
+          ) : storeServices.length === 0 ? (
+            <div className="py-12 text-center rounded-2xl bg-secondary">
+              <Package size={32} className="mx-auto mb-3 text-muted-foreground opacity-40" />
+              <p className="text-sm font-semibold text-foreground">No services yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Add your first service to let customers customise their booking.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {storeServices.map((svc) => {
+                const isExpanded = expandedService === svc.id;
+                return (
+                  <div key={svc.id} className="rounded-2xl bg-card booka-shadow overflow-hidden">
+                    {/* Service header */}
+                    <div className="p-4 flex items-center gap-3">
+                      <button
+                        onClick={() => setExpandedService(isExpanded ? null : svc.id)}
+                        className="flex-1 text-left"
+                      >
+                        <div className="flex items-center gap-2">
+                          {isExpanded ? <ChevronDown size={16} className="text-primary shrink-0" /> : <ChevronRight size={16} className="text-muted-foreground shrink-0" />}
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">{svc.name}</p>
+                            {svc.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{svc.description}</p>}
+                            <p className="text-xs text-primary font-semibold mt-0.5">
+                              Base: J${svc.base_price.toFixed(0)} · {svc.service_option_groups.length} option group{svc.service_option_groups.length !== 1 ? "s" : ""}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                      {/* Active toggle */}
+                      <button
+                        onClick={() => toggleServiceActive(svc)}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${svc.is_active ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}
+                      >
+                        {svc.is_active ? "Active" : "Off"}
+                      </button>
+                      <button onClick={() => deleteService(svc.id)} className="p-1.5 rounded-xl hover:bg-red-50 text-red-400 transition-all">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+
+                    {/* Expanded: option groups */}
+                    {isExpanded && (
+                      <div className="border-t border-border px-4 pb-4 pt-3 space-y-4">
+                        {svc.service_option_groups.length === 0 && (
+                          <p className="text-xs text-muted-foreground">No option groups yet. Add one below.</p>
+                        )}
+                        {[...svc.service_option_groups].sort((a, b) => a.sort_order - b.sort_order).map((grp) => (
+                          <div key={grp.id} className="rounded-xl bg-secondary/60 p-3 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-foreground">{grp.label}</p>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                                    {grp.selection_type === "single" ? "Pick one" : "Pick many"}
+                                  </span>
+                                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${grp.required ? "bg-orange-100 text-orange-600" : "bg-secondary text-muted-foreground"}`}>
+                                    {grp.required ? "Required" : "Optional"}
+                                  </span>
+                                </div>
+                              </div>
+                              <button onClick={() => deleteGroup(svc.id, grp.id)} className="p-1 rounded-lg hover:bg-red-50 text-red-400 transition-all">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                            {/* Items */}
+                            <div className="flex flex-wrap gap-1.5">
+                              {[...grp.service_option_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => (
+                                <div key={item.id} className="flex items-center gap-1 bg-card rounded-lg px-2 py-1 border border-border">
+                                  <span className="text-xs text-foreground">{item.label}</span>
+                                  {item.price_modifier !== 0 && (
+                                    <span className="text-[10px] font-bold text-primary">
+                                      {item.price_modifier > 0 ? `+J$${item.price_modifier.toFixed(0)}` : `J$${item.price_modifier.toFixed(0)}`}
+                                    </span>
+                                  )}
+                                  <button onClick={() => deleteItem(svc.id, grp.id, item.id)} className="text-red-400 hover:text-red-600 ml-0.5">
+                                    <Trash2 size={10} />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                onClick={() => { setNewItemLabel(""); setNewItemPrice("0"); setItemDialog(grp.id + "|" + svc.id); }}
+                                className="flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-primary/40 text-primary text-xs font-medium hover:bg-primary/5 transition-all"
+                              >
+                                <Plus size={11} /> Add option
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full rounded-xl gap-1 text-xs h-8"
+                          onClick={() => { setNewGrpLabel(""); setNewGrpType("single"); setNewGrpRequired(true); setGroupDialog(svc.id); }}
+                        >
+                          <Plus size={13} /> Add Option Group
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Profile tab ───────────────────────────────────────────────────── */}
       {tab === "profile" && (
         <div className="flex-1 overflow-y-auto px-5 pt-4 space-y-4 pb-6">
@@ -1087,7 +1350,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         <div className="max-w-lg mx-auto flex items-center justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           {navTabs.map((t) => (
             <button key={t.id} data-testid={`tab-${t.id}`} onClick={() => setTab(t.id)}
-              className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all duration-200 active:scale-95">
+              className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 active:scale-95">
               <t.icon
                 size={22}
                 strokeWidth={tab === t.id ? 2.5 : 1.8}
@@ -1101,6 +1364,82 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           ))}
         </div>
       </nav>
+
+      {/* ── Add Service dialog ────────────────────────────────────────────── */}
+      <Dialog open={serviceDialog} onOpenChange={(o) => { if (!o) setServiceDialog(false); }}>
+        <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>New Service</DialogTitle></DialogHeader>
+          <div className="space-y-3 pt-1">
+            <Input placeholder="Service name (e.g. Full Groom, Braids)" value={newSvcName} onChange={(e) => setNewSvcName(e.target.value)} className="rounded-xl" autoFocus />
+            <Textarea placeholder="Description (optional)" value={newSvcDesc} onChange={(e) => setNewSvcDesc(e.target.value)} className="rounded-xl resize-none" rows={2} />
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Base Price (J$)</label>
+              <Input type="number" min="0" placeholder="0" value={newSvcPrice} onChange={(e) => setNewSvcPrice(e.target.value)} className="rounded-xl mt-1" />
+              <p className="text-[10px] text-muted-foreground mt-1">Set to 0 if the price is fully determined by option selections.</p>
+            </div>
+            <Button className="w-full rounded-xl" onClick={addService} disabled={savingService || !newSvcName.trim()}>
+              {savingService ? "Adding…" : "Add Service"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Option Group dialog ───────────────────────────────────────── */}
+      <Dialog open={!!groupDialog} onOpenChange={(o) => { if (!o) setGroupDialog(null); }}>
+        <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>New Option Group</DialogTitle></DialogHeader>
+          <div className="space-y-3 pt-1">
+            <Input placeholder="Group label (e.g. Dog Size, Cut Style)" value={newGrpLabel} onChange={(e) => setNewGrpLabel(e.target.value)} className="rounded-xl" autoFocus />
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Selection Type</label>
+              <div className="flex gap-2">
+                {(["single", "multi"] as const).map((t) => (
+                  <button key={t} onClick={() => setNewGrpType(t)}
+                    className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-all ${newGrpType === t ? "bg-primary text-white border-primary" : "bg-secondary border-border text-foreground"}`}>
+                    {t === "single" ? "Pick one" : "Pick many"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Required?</label>
+              <div className="flex gap-2">
+                {([true, false] as const).map((v) => (
+                  <button key={String(v)} onClick={() => setNewGrpRequired(v)}
+                    className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-all ${newGrpRequired === v ? "bg-primary text-white border-primary" : "bg-secondary border-border text-foreground"}`}>
+                    {v ? "Required" : "Optional"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Button className="w-full rounded-xl" onClick={() => groupDialog && addGroup(groupDialog)} disabled={savingGroup || !newGrpLabel.trim()}>
+              {savingGroup ? "Adding…" : "Add Group"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Option Item dialog ────────────────────────────────────────── */}
+      <Dialog open={!!itemDialog} onOpenChange={(o) => { if (!o) setItemDialog(null); }}>
+        <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>New Option</DialogTitle></DialogHeader>
+          <div className="space-y-3 pt-1">
+            <Input placeholder="Option label (e.g. Small · 0–10 lbs, Teddy Bear Cut)" value={newItemLabel} onChange={(e) => setNewItemLabel(e.target.value)} className="rounded-xl" autoFocus />
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Price Modifier (J$)</label>
+              <Input type="number" placeholder="0" value={newItemPrice} onChange={(e) => setNewItemPrice(e.target.value)} className="rounded-xl mt-1" />
+              <p className="text-[10px] text-muted-foreground mt-1">Use a positive number to add cost, 0 if included in the base price.</p>
+            </div>
+            <Button className="w-full rounded-xl" onClick={() => {
+              if (!itemDialog) return;
+              const [groupId, serviceId] = itemDialog.split("|");
+              addItem(groupId, serviceId);
+            }} disabled={savingItem || !newItemLabel.trim()}>
+              {savingItem ? "Adding…" : "Add Option"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Reply dialog ──────────────────────────────────────────────────── */}
       <Dialog open={!!replyTarget} onOpenChange={(o) => { if (!o) { setReplyTarget(null); setReplyText(""); } }}>

@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   ArrowLeft, Star, MapPin, Clock, CheckCircle2, AlertCircle,
-  Calendar, ChevronDown, CreditCard, Users,
+  Calendar, ChevronDown, CreditCard, Users, Check, ShoppingBag, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, addDays } from "date-fns";
@@ -19,17 +19,49 @@ interface TimeSlot {
   is_available: boolean;
 }
 
+interface ServiceOptionItem {
+  id: string;
+  group_id: string;
+  label: string;
+  price_modifier: number;
+  sort_order: number;
+}
+
+interface ServiceOptionGroup {
+  id: string;
+  service_id: string;
+  label: string;
+  selection_type: "single" | "multi";
+  required: boolean;
+  sort_order: number;
+  service_option_items: ServiceOptionItem[];
+}
+
+interface StoreService {
+  id: string;
+  name: string;
+  description?: string;
+  base_price: number;
+  sort_order: number;
+  is_active: boolean;
+  service_option_groups: ServiceOptionGroup[];
+}
+
 interface ConfirmedDetails {
   date: string;
   startTime: string;
   endTime: string;
   ref: string;
+  serviceName?: string;
+  serviceTotal?: number;
 }
 
 interface Props {
   store: Store;
   onBack: () => void;
 }
+
+const fmt = (p: number) => `J$${p.toFixed(0)}`;
 
 const CustomerBooking = ({ store, onBack }: Props) => {
   const { user } = useAuth();
@@ -44,6 +76,12 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarDate, setCalendarDate] = useState<string | null>(null);
   const [paymentStep, setPaymentStep] = useState(false);
+
+  // Service customizer state
+  const [services, setServices] = useState<StoreService[]>([]);
+  const [serviceStep, setServiceStep] = useState(false);
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [selectedItems, setSelectedItems] = useState<Record<string, string[]>>({});
 
   const dates = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i));
   const activeDateObj = calendarDate ? new Date(calendarDate + "T00:00:00") : dates[selectedDate];
@@ -60,10 +98,22 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     return existingBookings.filter((b) => timeToMins(b.start_time) < slotStart).length;
   };
 
+  // Fetch services on mount
+  useEffect(() => {
+    supabase
+      .from("store_services")
+      .select("*, service_option_groups(*, service_option_items(*))")
+      .eq("store_id", store.id)
+      .eq("is_active", true)
+      .order("sort_order")
+      .then(({ data }) => { if (data) setServices(data as StoreService[]); });
+  }, [store.id]);
+
   useEffect(() => {
     setLoadingSlots(true);
     setSelectedSlot(null);
     setPaymentStep(false);
+    setServiceStep(false);
 
     Promise.all([
       supabase
@@ -103,6 +153,40 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     });
   }, [store.id, store.buffer_minutes, dayOfWeek, selectedDateStr, calendarDate]);
 
+  // ── Service computed values ──────────────────────────────────────────────
+  const selectedService = services.find((s) => s.id === selectedServiceId) ?? null;
+
+  const serviceTotal = selectedService
+    ? selectedService.base_price +
+      selectedService.service_option_groups.flatMap((g) =>
+        (selectedItems[g.id] ?? []).map((itemId) => {
+          const item = g.service_option_items.find((i) => i.id === itemId);
+          return item?.price_modifier ?? 0;
+        })
+      ).reduce((a, b) => a + b, 0)
+    : 0;
+
+  const requiredGroupsFilled = selectedService
+    ? selectedService.service_option_groups
+        .filter((g) => g.required)
+        .every((g) => (selectedItems[g.id] ?? []).length > 0)
+    : true;
+
+  const hasServices = services.length > 0;
+
+  const toggleItem = (group: ServiceOptionGroup, itemId: string) => {
+    setSelectedItems((prev) => {
+      const current = prev[group.id] ?? [];
+      if (group.selection_type === "single") {
+        return { ...prev, [group.id]: [itemId] };
+      }
+      const already = current.includes(itemId);
+      return { ...prev, [group.id]: already ? current.filter((i) => i !== itemId) : [...current, itemId] };
+    });
+  };
+
+  const commitmentFee = store.commitment_fee ?? 750;
+
   const handleBook = async () => {
     const slot = slots.find((s) => s.id === selectedSlot);
     if (!slot || !user) return;
@@ -123,6 +207,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         setTakenSlotIds((prev) => new Set([...prev, slot.id]));
         setSelectedSlot(null);
         setPaymentStep(false);
+        setServiceStep(false);
         return;
       }
 
@@ -140,12 +225,25 @@ const CustomerBooking = ({ store, onBack }: Props) => {
 
       if (error) throw error;
 
+      if (selectedService && inserted?.id) {
+        const allSelectedIds = Object.values(selectedItems).flat();
+        await supabase.from("reservation_service_selections").insert({
+          reservation_id: inserted.id,
+          service_id: selectedService.id,
+          selected_item_ids: allSelectedIds,
+          total_price: serviceTotal,
+        });
+      }
+
       setPaymentStep(false);
+      setServiceStep(false);
       setConfirmed({
         date: format(activeDateObj, "MMMM d, yyyy"),
         startTime: slot.start_time.slice(0, 5),
         endTime: slot.end_time.slice(0, 5),
         ref: (inserted?.id as string)?.split("-")[0]?.toUpperCase() ?? "—",
+        serviceName: selectedService?.name,
+        serviceTotal: selectedService ? serviceTotal : undefined,
       });
     } catch (err: any) {
       toast.error(err.message || "Booking failed. Please try again.");
@@ -156,14 +254,13 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   };
 
   const selectedSlotObj = slots.find((s) => s.id === selectedSlot);
-  const commitmentFee = store.commitment_fee ?? 750;
 
-  // ── Confirmed screen ──────────────────────────────────────────────────────
+  // ── Confirmed screen ─────────────────────────────────────────────────────
   if (confirmed) {
     return (
       <div className="absolute inset-x-0 top-0 bg-background flex flex-col items-center justify-center px-6 fade-in" style={{ bottom: 56, zIndex: 400 }}>
         <div className="w-full max-w-xs text-center space-y-5">
-          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto bounce-in">
             <CheckCircle2 size={42} className="text-green-500" />
           </div>
           <div>
@@ -175,6 +272,15 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Store</p>
               <p className="text-sm font-semibold text-foreground mt-0.5">{store.name}</p>
             </div>
+            {confirmed.serviceName && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Service</p>
+                <p className="text-sm font-semibold text-foreground mt-0.5">{confirmed.serviceName}</p>
+                {confirmed.serviceTotal !== undefined && (
+                  <p className="text-xs text-primary font-bold mt-0.5">{fmt(confirmed.serviceTotal)}</p>
+                )}
+              </div>
+            )}
             <div>
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Date</p>
               <p className="text-sm font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
@@ -192,63 +298,250 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               <p className="text-xl font-bold text-primary font-mono tracking-widest mt-0.5">#{confirmed.ref}</p>
             </div>
           </div>
-          <Button className="w-full rounded-xl h-12 font-semibold" onClick={onBack}>Done</Button>
+          <Button className="w-full rounded-xl h-12 font-semibold booka-gradient booka-shadow-blue text-white border-0" onClick={onBack}>Done</Button>
         </div>
       </div>
     );
   }
 
-  // ── Payment confirmation step ──────────────────────────────────────────────
-  if (paymentStep && selectedSlotObj) {
+  // ── Service customizer step ──────────────────────────────────────────────
+  if (serviceStep && !paymentStep) {
     return (
-      <div className="absolute inset-x-0 top-0 bg-background flex flex-col items-center justify-center px-6 fade-in" style={{ bottom: 56, zIndex: 410 }}>
-        <div className="w-full max-w-xs text-center space-y-5">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-            <CreditCard size={30} className="text-primary" />
+      <div className="absolute inset-x-0 top-0 bg-background overflow-y-auto" style={{ bottom: 56, zIndex: 410, paddingBottom: 96 }}>
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
+          <button onClick={() => setServiceStep(false)} className="p-2 -ml-2 rounded-xl hover:bg-secondary active:scale-95 transition-all">
+            <ArrowLeft size={20} />
+          </button>
+          <div className="flex-1">
+            <h1 className="font-bold text-foreground text-sm">Choose Your Service</h1>
+            <p className="text-xs text-muted-foreground">{store.name}</p>
           </div>
+        </div>
+
+        <div className="px-5 pt-4 space-y-5">
+          {/* Service picker */}
           <div>
-            <h1 className="text-xl font-bold text-foreground">Confirm Your Booking</h1>
-            <p className="text-sm text-muted-foreground mt-1">Review the details below</p>
+            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">Select a Service</h2>
+            <div className="space-y-2">
+              {services.map((svc) => {
+                const isSelected = selectedServiceId === svc.id;
+                return (
+                  <button
+                    key={svc.id}
+                    onClick={() => {
+                      setSelectedServiceId(svc.id);
+                      setSelectedItems({});
+                    }}
+                    className={`w-full text-left p-4 rounded-2xl border transition-all active:scale-[0.98] ${
+                      isSelected
+                        ? "border-primary bg-primary/5 booka-shadow-blue"
+                        : "border-border bg-card hover:border-primary/30"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-foreground text-sm">{svc.name}</p>
+                        {svc.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{svc.description}</p>
+                        )}
+                        <p className="text-xs text-primary font-semibold mt-1">
+                          {svc.base_price > 0 ? `From ${fmt(svc.base_price)}` : "Price by selection"}
+                        </p>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ml-3 transition-all ${
+                        isSelected ? "bg-primary border-primary" : "border-border"
+                      }`}>
+                        {isSelected && <Check size={11} className="text-white" strokeWidth={3} />}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="p-5 rounded-2xl bg-card booka-shadow text-left space-y-3 w-full">
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Store</p>
-              <p className="text-sm font-semibold text-foreground mt-0.5">{store.name}</p>
+
+          {/* Option groups for selected service */}
+          {selectedService && selectedService.service_option_groups.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Customize Your {selectedService.name}</h2>
+              {[...selectedService.service_option_groups]
+                .sort((a, b) => a.sort_order - b.sort_order)
+                .map((group) => {
+                  const pickedIds = selectedItems[group.id] ?? [];
+                  const isFilled = pickedIds.length > 0;
+                  return (
+                    <div key={group.id} className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground flex-1">{group.label}</p>
+                        {group.required ? (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isFilled ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
+                            {isFilled ? "✓ Done" : "Required"}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">Optional</span>
+                        )}
+                        {group.selection_type === "multi" && (
+                          <span className="text-[9px] text-muted-foreground">pick any</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {[...group.service_option_items]
+                          .sort((a, b) => a.sort_order - b.sort_order)
+                          .map((item) => {
+                            const isChosen = pickedIds.includes(item.id);
+                            return (
+                              <button
+                                key={item.id}
+                                onClick={() => toggleItem(group, item.id)}
+                                className={`px-3 py-2 rounded-xl text-sm font-medium border transition-all active:scale-95 ${
+                                  isChosen
+                                    ? "booka-gradient text-white border-transparent booka-shadow-blue"
+                                    : "bg-card border-border hover:border-primary/40 hover:bg-primary/5 text-foreground"
+                                }`}
+                              >
+                                <span>{item.label}</span>
+                                {item.price_modifier !== 0 && (
+                                  <span className={`ml-1.5 text-xs font-bold ${isChosen ? "text-white/80" : "text-primary"}`}>
+                                    {item.price_modifier > 0 ? `+${fmt(item.price_modifier)}` : fmt(item.price_modifier)}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Date & Time</p>
-              <p className="text-sm font-semibold text-foreground mt-0.5">
-                {format(activeDateObj, "MMMM d, yyyy")} · {selectedSlotObj.start_time.slice(0, 5)} – {selectedSlotObj.end_time.slice(0, 5)}
-              </p>
-            </div>
-            <div className="pt-2 border-t border-border">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Commitment Fee</p>
-              <p className="text-2xl font-bold text-primary mt-0.5">J${commitmentFee.toFixed(0)}</p>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                This deposit will be deducted from your final service price at the store.
-              </p>
-            </div>
-          </div>
-          <Button
-            data-testid="button-confirm-pay"
-            className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
-            onClick={handleBook}
-            disabled={booking}
-          >
-            {booking ? "Processing…" : "Confirm & Pay  →"}
-          </Button>
+          )}
+
+          {/* Skip option */}
           <button
-            onClick={() => setPaymentStep(false)}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => { setSelectedServiceId(null); setSelectedItems({}); setServiceStep(false); setPaymentStep(true); }}
+            className="w-full py-3 text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
           >
-            Go Back
+            Skip service selection → proceed with commitment fee only
           </button>
         </div>
+
+        {/* Sticky bottom: price + CTA */}
+        <div className="fixed inset-x-0 bg-card/95 backdrop-blur-md border-t border-border p-4" style={{ bottom: 56, zIndex: 420 }}>
+          <div className="max-w-lg mx-auto">
+            {selectedService && (
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-xs text-muted-foreground">{selectedService.name}</span>
+                <span className="text-lg font-extrabold text-primary">{fmt(serviceTotal)}</span>
+              </div>
+            )}
+            <Button
+              className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
+              onClick={() => { if (selectedService) setPaymentStep(true); }}
+              disabled={!selectedServiceId || !requiredGroupsFilled}
+            >
+              {!selectedServiceId
+                ? "Select a service above"
+                : !requiredGroupsFilled
+                ? "Complete required selections"
+                : `Review & Pay — ${fmt(serviceTotal)}`}
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
 
-  // ── Main booking screen ────────────────────────────────────────────────────
+  // ── Payment confirmation step ────────────────────────────────────────────
+  if (paymentStep && selectedSlotObj) {
+    const showService = !!selectedService;
+    return (
+      <div className="absolute inset-x-0 top-0 bg-background overflow-y-auto" style={{ bottom: 56, zIndex: 410 }}>
+        <div className="flex flex-col items-center justify-start px-6 pt-8 pb-32">
+          <div className="w-full max-w-xs space-y-5">
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+              <CreditCard size={30} className="text-primary" />
+            </div>
+            <div className="text-center">
+              <h1 className="text-xl font-bold text-foreground">Confirm Your Booking</h1>
+              <p className="text-sm text-muted-foreground mt-1">Review everything below</p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-card booka-shadow text-left space-y-3 w-full">
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Store</p>
+                <p className="text-sm font-semibold text-foreground mt-0.5">{store.name}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Date & Time</p>
+                <p className="text-sm font-semibold text-foreground mt-0.5">
+                  {format(activeDateObj, "MMMM d, yyyy")} · {selectedSlotObj.start_time.slice(0, 5)} – {selectedSlotObj.end_time.slice(0, 5)}
+                </p>
+              </div>
+
+              {showService ? (
+                <div className="pt-2 border-t border-border space-y-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Service Summary</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-foreground">{selectedService!.name}</span>
+                    <span className="text-sm font-semibold text-foreground">{fmt(selectedService!.base_price)}</span>
+                  </div>
+                  {selectedService!.service_option_groups.map((g) => {
+                    const pickedIds = selectedItems[g.id] ?? [];
+                    return pickedIds.map((itemId) => {
+                      const item = g.service_option_items.find((i) => i.id === itemId);
+                      if (!item) return null;
+                      return (
+                        <div key={itemId} className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Check size={10} className="text-primary" /> {item.label}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {item.price_modifier > 0 ? `+${fmt(item.price_modifier)}` : item.price_modifier === 0 ? "—" : fmt(item.price_modifier)}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })}
+                  <div className="flex items-center justify-between pt-2 border-t border-border">
+                    <span className="text-sm font-bold text-foreground">Total</span>
+                    <span className="text-2xl font-extrabold text-primary">{fmt(serviceTotal)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    A commitment fee of {fmt(commitmentFee)} is due now to secure your spot. The remaining balance is paid at the store.
+                  </p>
+                </div>
+              ) : (
+                <div className="pt-2 border-t border-border">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Commitment Fee</p>
+                  <p className="text-2xl font-extrabold text-primary mt-0.5">{fmt(commitmentFee)}</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    This deposit will be deducted from your final service price at the store.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <Button
+              data-testid="button-confirm-pay"
+              className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
+              onClick={handleBook}
+              disabled={booking}
+            >
+              {booking ? "Processing…" : `Confirm & Pay ${fmt(commitmentFee)}  →`}
+            </Button>
+            <button
+              onClick={() => { setPaymentStep(false); if (hasServices && selectedServiceId) setServiceStep(true); }}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-center"
+            >
+              ← Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main booking screen ──────────────────────────────────────────────────
   return (
     <div className="absolute inset-x-0 top-0 bg-background overflow-y-auto" style={{ bottom: 56, zIndex: 400, paddingBottom: 96 }}>
       {/* Header */}
@@ -298,10 +591,10 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             {dates.map((d, i) => (
               <button
                 key={i}
-                onClick={() => { setSelectedDate(i); setSelectedSlot(null); setCalendarDate(null); setPaymentStep(false); }}
+                onClick={() => { setSelectedDate(i); setSelectedSlot(null); setCalendarDate(null); setPaymentStep(false); setServiceStep(false); }}
                 className={`flex flex-col items-center px-3 py-2 rounded-xl min-w-[52px] shrink-0 transition-all duration-200 active:scale-95 ${
                   !calendarDate && selectedDate === i
-                    ? "bg-primary text-primary-foreground booka-shadow"
+                    ? "booka-gradient text-white booka-shadow-blue"
                     : "bg-secondary text-secondary-foreground"
                 }`}
               >
@@ -317,7 +610,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                 {format(new Date(calendarDate + "T00:00:00"), "EEEE, MMMM d, yyyy")}
               </span>
               <button
-                onClick={() => { setCalendarDate(null); setSelectedSlot(null); setPaymentStep(false); }}
+                onClick={() => { setCalendarDate(null); setSelectedSlot(null); setPaymentStep(false); setServiceStep(false); }}
                 className="text-xs text-muted-foreground hover:text-foreground"
               >
                 ✕
@@ -377,16 +670,27 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         </div>
       </div>
 
+      {/* Fixed CTA */}
       {selectedSlot && (
         <div className="fixed inset-x-0 p-4 bg-card/95 backdrop-blur-md border-t border-border" style={{ bottom: 56, zIndex: 410 }}>
           <div className="max-w-lg mx-auto">
-            <Button
-              data-testid="button-confirm-booking"
-              className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
-              onClick={() => setPaymentStep(true)}
-            >
-              Confirm Reservation — J${commitmentFee.toFixed(0)}
-            </Button>
+            {hasServices ? (
+              <Button
+                data-testid="button-choose-services"
+                className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0 flex items-center justify-center gap-2"
+                onClick={() => setServiceStep(true)}
+              >
+                <ShoppingBag size={16} /> Choose Services <ChevronRight size={16} />
+              </Button>
+            ) : (
+              <Button
+                data-testid="button-confirm-booking"
+                className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
+                onClick={() => setPaymentStep(true)}
+              >
+                Confirm Reservation — {fmt(commitmentFee)}
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -398,6 +702,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             setCalendarDate(dateStr);
             setSelectedSlot(null);
             setPaymentStep(false);
+            setServiceStep(false);
             setCalendarOpen(false);
           }}
           onClose={() => setCalendarOpen(false)}
