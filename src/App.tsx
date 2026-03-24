@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -13,6 +14,7 @@ const queryClient = new QueryClient();
 
 const AppRoutes = () => {
   const { user, profile, loading } = useAuth();
+  const [showDashboard, setShowDashboard] = useState(false);
 
   if (loading) {
     return (
@@ -25,11 +27,23 @@ const AppRoutes = () => {
   if (!user) return <AuthPage />;
   if (!profile) return <RoleSelectPage />;
 
+  if (showDashboard) {
+    return (
+      <StoreDashboard onBack={() => setShowDashboard(false)} />
+    );
+  }
+
   return (
     <Routes>
       <Route
         path="/"
-        element={profile.role === "store" ? <StoreDashboard /> : <CustomerHome />}
+        element={
+          <CustomerHome
+            onSwitchToDashboard={
+              profile.role === "store" ? () => setShowDashboard(true) : undefined
+            }
+          />
+        }
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

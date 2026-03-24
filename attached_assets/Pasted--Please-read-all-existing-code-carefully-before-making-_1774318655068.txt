@@ -1,0 +1,44 @@
+"Please read all existing code carefully before making any changes. Do not overwrite anything already working. Here is everything that needs to be done:
+CUSTOMER EXPLORE SCREEN
+1. Map fills the top half of the screen with blue store pins showing store initials like CG, KK, FF. Tapping a pin shows a popup with store name, star rating, distance and a View profile link
+2. White bottom sheet slides up over the map with a grey drag handle at the top
+3. Where to? search bar with a location pin icon on the left and arrow on the right
+4. BROWSE SERVICES label in small grey caps
+5. 2x2 grid of category cards with large emoji and bold label: ✂️ Barber, 💇 Hair Salon, 🐕 Dog Grooming, 💅 Nail Tech, 👁️ Lash Tech, 🧖 Spa & Wellness, 🧔 Beard Grooming, 💆 Massage
+6. Bottom nav: Explore (blue/active), Search, Bookings, Profile
+CATEGORY RESULTS SCREEN
+7. When a customer taps a category show a new screen with a back arrow, the category name as title and X nearby as subtitle
+8. Each store shows as a white card with a blue rounded square avatar with store initials, store name in bold, gold star with rating, and distance in km with a location pin icon
+MAP PIN POPUP
+9. When a pin is tapped on the map show a white popup card with store name, star rating, distance and a blue View profile link
+CUSTOMER PROFILE SCREEN
+10. Large blue circle avatar with user initials at the top
+11. Full name in bold, phone number below
+12. Switch to Business Dashboard button in a light blue rounded card with a briefcase icon — only show this if the user has a store account
+13. Menu items with icons and right arrows: Edit Profile, Settings, Help & Support
+14. Red Log Out option at the bottom
+STORE DASHBOARD
+15. Dark blue header with Business Dashboard title and today's date
+16. TODAY'S BOOKINGS section showing customer name, time range and colored status badge — green for Completed, orange for In Progress, blue for Scheduled
+17. TIME SLOT CONFIGURATION section with a blue + Add button
+18. Each time slot shows the time range with a clock icon, edit pencil icon, red delete icon and a blue toggle switch
+DEFAULT TIME SLOTS
+19. When a new store is created automatically add these default time slots for every day of the week Monday to Sunday:
+
+9:00 AM – 10:00 AM
+10:00 AM – 11:00 AM
+11:00 AM – 12:00 PM
+1:00 PM – 2:00 PM
+2:00 PM – 3:00 PM
+3:00 PM – 4:00 PM
+Store owners can edit or delete these and add their own.
+
+STORE SETUP FORM
+20. Remove the latitude and longitude fields from the store setup form completely. Instead automatically convert the address the store owner types into coordinates using OpenStreetMap Nominatim (https://nominatim.openstreetmap.org/search?format=json&q=ADDRESS) and save them silently to the latitude and longitude columns in the background when the form is saved
+21. Replace the free text category field with a grid selector showing these fixed categories with emoji icons: ✂️ Barber, 💇 Hair Salon, 🐕 Dog Grooming, 💅 Nail Tech, 👁️ Lash Tech, 🧖 Spa & Wellness, 🧔 Beard Grooming, 💆 Massage. Store owners pick one category from this list
+STORES CAN USE THE APP AS A CUSTOMER
+22. Store owners see the full customer experience by default when they log in — map, browse services, search, bookings, profile — exactly like a regular customer. The only difference is their Profile screen shows a Switch to Business Dashboard button at the top. Tapping it takes them to their store dashboard. On the dashboard add a Back to App button in the header so they can return to the customer view. No separate login needed — everything works under the same account seamlessly
+OVERALL DESIGN
+23. Primary color is dark blue. White cards with subtle shadows. Clean minimal font. Mobile first layout. Match the design of the screenshots as closely as possible
+24. Category filter on the customer map — tapping a category filters the map pins to show only stores in that category
+25. Store pins on the map must use the store's actual coordinates from the latitude and longitude columns in the stores table
