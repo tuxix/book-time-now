@@ -1,0 +1,63 @@
+Paste this into Replit:
+
+---
+
+*"The check-in system is completely broken. The customer gets a 'Check-in failed. Please try again' error when tapping Check In. Please do a full investigation and fix everything:*
+
+***STEP 1 — DIAGNOSE THE PROBLEM***
+*1. Find the exact function that runs when the customer taps Check In and add a detailed console log at every step:*
+- *Log the reservation ID being updated*
+- *Log the generated check-in code*
+- *Log the full Supabase response including any error message and error code*
+- *Log whether the update succeeded or failed*
+
+*2. Check the RLS policies on the reservations table right now. The customer needs permission to update ONLY these columns on their own reservation:*
+- *status — to change from scheduled to arrived*
+- *checkin_code — to save the generated code*
+
+*3. Run this SQL and give it to me as a code block to fix the RLS policy:*
+```sql
+DROP POLICY IF EXISTS "Customers can update own reservation status" ON public.reservations;
+
+CREATE POLICY "Customers can update own reservation status"
+ON public.reservations FOR UPDATE TO authenticated
+USING (auth.uid() = customer_id)
+WITH CHECK (auth.uid() = customer_id);
+```
+
+*4. Check that the checkin_code column actually exists in the reservations table. Give me this as a SQL code block:*
+```sql
+ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS checkin_code text;
+```
+
+*5. Check that the arrived status is accepted by the database constraint. Give me this as a SQL code block:*
+```sql
+ALTER TABLE public.reservations DROP CONSTRAINT IF EXISTS reservations_status_check;
+ALTER TABLE public.reservations ADD CONSTRAINT reservations_status_check
+CHECK (status IN ('scheduled', 'arrived', 'in_progress', 'completed', 'cancelled'));
+```
+
+***STEP 2 — FIX THE CHECK IN FLOW***
+*6. Rewrite the check in function so it works in this exact order:*
+- *Generate a random 4 digit code*
+- *Run a Supabase update on the reservations table setting status to arrived and checkin_code to the generated code where id matches the reservation and customer_id matches the logged in user*
+- *If the update returns an error log the full error and show the user a specific error message not a generic one*
+- *If the update succeeds show the customer their 4 digit code clearly on screen*
+
+***STEP 3 — FIX THE CODE VERIFICATION***
+*7. Rewrite the code verification on the store dashboard so it works in this exact order:*
+- *When the store owner opens the Enter Code dialog fetch the latest reservation data fresh from Supabase to get the current checkin_code — do not rely on cached or local state*
+- *When the store owner submits the code trim any whitespace from both the entered code and the stored code before comparing*
+- *If the codes match update the status to in_progress*
+- *If the codes do not match show Incorrect code — please try again*
+- *Log both the entered code and the stored code to the console so we can see exactly what is being compared*
+
+***STEP 4 — REALTIME***
+*8. Make sure the store dashboard has a realtime subscription on the reservations table so when a customer checks in the store sees the arrived status immediately without refreshing*
+*9. Make sure the customer Bookings tab has a realtime subscription so when the store updates the status the customer sees it immediately*
+
+*Give me all SQL code blocks first and wait for my confirmation before writing any code. Do not change anything else in the app."*
+
+---
+
+This forces Replit to investigate every possible cause rather than just guessing. Let me know what it comes back with!
