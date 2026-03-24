@@ -1,0 +1,30 @@
+Paste this into Replit:
+
+---
+
+*"There are two bugs with the arrived status and check-in code system that need to be fixed:*
+
+***BUG 1: ARRIVED STATUS NOT UPDATING FOR STORE***
+*1. When a customer taps Check In and their status changes to Arrived on their side, the store dashboard is not reflecting this change. Please fix this by:*
+- *Checking that the Supabase update query for the arrived status is correctly writing to the reservations table and not just updating local state*
+- *Making sure the store dashboard has a realtime subscription on the reservations table so it receives live status updates without needing a manual refresh*
+- *Check the RLS policy on the reservations table — make sure customers have permission to update the status column on their own reservations so the arrived update is not being silently blocked*
+- *Add a console log of the Supabase response when the customer taps Check In so we can see if the update is succeeding or failing*
+
+***BUG 2: INCORRECT CODE ERROR***
+*2. The store is getting an incorrect code error even when entering the right code. Please fix this by:*
+- *Checking that the checkin_code is being saved to the reservations table correctly when the customer checks in — log the Supabase response to confirm the code was written*
+- *Checking that the store dashboard is reading the checkin_code from the database and not from local state which may be stale*
+- *Make sure there are no whitespace or formatting issues when comparing the entered code to the stored code — trim both values before comparing*
+- *Make sure the store dashboard refetches the latest reservation data including the checkin_code after the customer checks in so it has the correct code to compare against*
+- *Check the RLS policy allows store owners to read the checkin_code column on reservations that belong to their store*
+
+***GENERAL***
+*3. Add a realtime subscription on the store dashboard for the reservations table so any status change made by a customer instantly reflects on the store side without needing a refresh*
+*4. Add a realtime subscription on the customer Bookings tab so any status change made by the store instantly reflects on the customer side without needing a refresh*
+
+*Check all existing code before making changes. Do not break anything already working."*
+
+---
+
+Let me know what Replit says!

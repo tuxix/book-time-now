@@ -422,7 +422,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     const [resRes, slotsRes, reviewsRes] = await Promise.all([
       supabase
         .from("reservations")
-        .select("id, reservation_date, start_time, end_time, status, fee, customer_id")
+        .select("id, reservation_date, start_time, end_time, status, fee, customer_id, checkin_code, cancelled_by")
         .eq("store_id", store.id)
         .order("reservation_date", { ascending: false }),
       supabase
@@ -457,6 +457,19 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   useEffect(() => { fetchData(); }, [store, needsSetup]);
+
+  // ── Realtime subscription: pick up customer check-ins and status changes ─
+  useEffect(() => {
+    if (!store) return;
+    const channel = supabase
+      .channel(`store-reservations-${store.id}`)
+      .on("postgres_changes" as any, {
+        event: "UPDATE", schema: "public", table: "reservations",
+        filter: `store_id=eq.${store.id}`,
+      }, () => fetchData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [store]);
 
   // ── Fetch services ───────────────────────────────────────────────────────
   const fetchServices = async () => {
@@ -655,9 +668,21 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     if (!codeDialog || codeInput.length !== 4) return;
     setCodeSubmitting(true);
     setCodeError("");
-    const reservation = reservations.find((r) => r.id === codeDialog);
-    if (!reservation) { setCodeSubmitting(false); return; }
-    if (reservation.checkin_code !== codeInput) {
+    // Always fetch the latest checkin_code from DB to avoid stale local state
+    const { data: fresh, error: fetchErr } = await supabase
+      .from("reservations")
+      .select("checkin_code")
+      .eq("id", codeDialog)
+      .single();
+    if (fetchErr || !fresh) {
+      setCodeError("Could not verify code. Please try again.");
+      setCodeSubmitting(false);
+      return;
+    }
+    const storedCode = (fresh.checkin_code ?? "").trim();
+    const enteredCode = codeInput.trim();
+    console.log("[CodeVerify] stored:", storedCode, "entered:", enteredCode);
+    if (storedCode !== enteredCode) {
       setCodeError("Incorrect code — please try again.");
       setCodeSubmitting(false);
       return;
