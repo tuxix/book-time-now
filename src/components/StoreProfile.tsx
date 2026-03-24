@@ -275,7 +275,7 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
         </h3>
         {loadingReviews ? (
           <div className="space-y-3">
-            {[1, 2].map((i) => <div key={i} className="h-24 rounded-xl bg-secondary animate-pulse" />)}
+            {[1, 2].map((i) => <div key={i} className="h-24 rounded-xl booka-shimmer" />)}
           </div>
         ) : reviews.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
@@ -284,26 +284,35 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
           </div>
         ) : (
           <div className="space-y-3">
-            {reviews.map((review) => (
-              <div key={review.id} className="p-4 rounded-xl bg-card booka-shadow-sm">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-sm font-semibold text-foreground">
-                    {review.reviewer_name || "Customer"}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{timeAgo(review.created_at)}</span>
-                </div>
-                <Stars rating={review.rating} />
-                {review.comment && (
-                  <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{review.comment}</p>
-                )}
-                {review.store_reply && (
-                  <div className="mt-3 ml-2 pl-3 border-l-2 border-primary/30">
-                    <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1">Owner Reply</p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{review.store_reply}</p>
+            {reviews.map((review) => {
+              const name = review.reviewer_name || "Customer";
+              const initials = name.slice(0, 2).toUpperCase();
+              return (
+                <div key={review.id} className="p-4 rounded-2xl bg-card booka-shadow-sm border border-border/50">
+                  <div className="flex items-start gap-3 mb-2">
+                    <div className="w-8 h-8 rounded-full booka-gradient flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-foreground truncate">{name}</span>
+                        <span className="text-xs text-muted-foreground ml-2 shrink-0">{timeAgo(review.created_at)}</span>
+                      </div>
+                      <Stars rating={review.rating} />
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                  {review.comment && (
+                    <p className="text-sm text-muted-foreground leading-relaxed pl-11">{review.comment}</p>
+                  )}
+                  {review.store_reply && (
+                    <div className="mt-3 ml-11 pl-3 border-l-2 border-primary/25 bg-primary/[0.03] rounded-r-lg py-2 pr-2">
+                      <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1">Owner Reply</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{review.store_reply}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -339,7 +348,11 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
               Not Taking Bookings Right Now
             </Button>
           ) : (
-            <Button data-testid="button-book-now" className="w-full h-12 rounded-xl font-semibold text-base" onClick={onBook}>
+            <Button
+              data-testid="button-book-now"
+              className="w-full h-12 rounded-xl font-semibold text-base booka-gradient booka-shadow-blue text-white border-0"
+              onClick={onBook}
+            >
               Book Now
             </Button>
           )}

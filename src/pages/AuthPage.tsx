@@ -148,7 +148,7 @@ const AuthPage = () => {
           />
           <Button
             type="submit"
-            className="w-full h-12 rounded-xl font-semibold"
+            className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
             disabled={loading}
           >
             {loading

@@ -141,10 +141,10 @@ const AnalyticsSection = ({
   const StatCard = ({
     label, value, sub,
   }: { label: string; value: string | number; sub?: string }) => (
-    <div className="p-3 rounded-2xl bg-card booka-shadow-sm">
-      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
-      <p className="text-xl font-bold text-foreground mt-0.5">{value}</p>
-      {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+    <div className="p-3.5 rounded-2xl bg-card booka-shadow-sm border border-border/50 flex flex-col gap-1">
+      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{label}</p>
+      <p className="text-2xl font-extrabold text-foreground leading-none">{value}</p>
+      {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
     </div>
   );
 
@@ -165,18 +165,21 @@ const AnalyticsSection = ({
       {/* Bookings by day of week bar chart */}
       <div className="p-4 rounded-2xl bg-card booka-shadow-sm">
         <p className="text-xs font-semibold text-muted-foreground mb-3">Bookings by Day</p>
-        <div className="flex items-end gap-1 h-14">
+        <div className="flex items-end gap-1.5 h-14">
           {dayCounts.map(({ day, count }) => {
-            const h = Math.max(3, Math.round((count / maxDayCount) * 48));
+            const h = Math.max(4, Math.round((count / maxDayCount) * 48));
             return (
               <div key={day} className="flex-1 flex flex-col items-center gap-1">
                 <div className="w-full flex flex-col justify-end" style={{ height: 48 }}>
                   <div
-                    className="w-full rounded-t-sm bg-primary transition-all"
-                    style={{ height: h }}
+                    className="w-full rounded-t-md transition-all"
+                    style={{
+                      height: h,
+                      background: `linear-gradient(to top, hsl(var(--booka-blue)), hsl(var(--booka-blue-glow)))`,
+                    }}
                   />
                 </div>
-                <span className="text-[8px] text-muted-foreground font-medium">{day.slice(0, 1)}</span>
+                <span className="text-[8px] text-muted-foreground font-semibold">{day.slice(0, 1)}</span>
               </div>
             );
           })}

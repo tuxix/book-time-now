@@ -231,11 +231,11 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           </div>
           <Button
             data-testid="button-confirm-pay"
-            className="w-full h-12 rounded-xl font-semibold"
+            className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
             onClick={handleBook}
             disabled={booking}
           >
-            {booking ? "Processing…" : "Confirm & Pay"}
+            {booking ? "Processing…" : "Confirm & Pay  →"}
           </Button>
           <button
             onClick={() => setPaymentStep(false)}
@@ -337,7 +337,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           <h2 className="text-sm font-semibold mb-3">Available Slots</h2>
           {loadingSlots ? (
             <div className="grid grid-cols-2 gap-2">
-              {[1, 2, 3, 4].map((i) => <div key={i} className="h-16 rounded-xl bg-secondary animate-pulse" />)}
+              {[1, 2, 3, 4].map((i) => <div key={i} className="h-16 rounded-xl booka-shimmer" />)}
             </div>
           ) : slots.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">No available slots for this day</p>
@@ -354,10 +354,10 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                     disabled={isTaken}
                     className={`py-3 px-4 rounded-xl text-sm font-medium flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-[0.97] ${
                       isTaken
-                        ? "bg-muted text-muted-foreground cursor-not-allowed line-through opacity-50"
+                        ? "bg-muted text-muted-foreground cursor-not-allowed line-through opacity-40"
                         : isSelected
-                        ? "bg-primary text-primary-foreground booka-shadow"
-                        : "bg-secondary text-secondary-foreground"
+                        ? "booka-gradient text-white booka-shadow-blue"
+                        : "bg-card border border-border hover:border-primary/30 hover:bg-primary/5"
                     }`}
                   >
                     <span className="flex items-center gap-1.5">
@@ -382,7 +382,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           <div className="max-w-lg mx-auto">
             <Button
               data-testid="button-confirm-booking"
-              className="w-full h-12 rounded-xl font-semibold"
+              className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
               onClick={() => setPaymentStep(true)}
             >
               Confirm Reservation — J${commitmentFee.toFixed(0)}

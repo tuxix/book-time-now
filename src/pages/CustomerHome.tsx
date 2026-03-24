@@ -432,7 +432,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
         >
           {/* Drag handle */}
           <div className="flex justify-center pt-3 pb-1">
-            <div className="w-10 h-1 rounded-full bg-muted" />
+            <div className="w-12 h-[3px] rounded-full bg-muted-foreground/20" />
           </div>
 
           {/* Search bar / filter indicator */}
@@ -449,11 +449,13 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
             ) : (
               <button
                 onClick={() => switchTab("search")}
-                className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-secondary transition-all active:scale-[0.98]"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-secondary border border-border/60 transition-all active:scale-[0.98] hover:border-primary/30 hover:bg-primary/5"
               >
-                <MapPin size={17} className="text-primary shrink-0" />
-                <span className="flex-1 text-left text-muted-foreground text-sm">Where to?</span>
-                <ChevronRight size={16} className="text-muted-foreground" />
+                <Search size={16} className="text-muted-foreground shrink-0" />
+                <span className="flex-1 text-left text-muted-foreground text-sm">Search for a service…</span>
+                <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <ChevronRight size={13} className="text-primary" />
+                </div>
               </button>
             )}
           </div>
@@ -464,18 +466,35 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
               <div className="px-4 mb-2.5">
                 <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Browse Services</p>
               </div>
-              <div className="px-4 grid grid-cols-4 gap-2 pb-4">
-                {CATEGORIES.map((cat) => (
-                  <button
-                    key={cat.label}
-                    data-testid={`button-category-${cat.label}`}
-                    onClick={() => handleCategoryTap(cat)}
-                    className="flex flex-col items-center gap-1 p-2.5 rounded-2xl bg-secondary transition-all active:scale-95 hover:bg-primary/10"
-                  >
-                    <span className="text-2xl">{cat.emoji}</span>
-                    <span className="text-[9px] font-bold text-foreground text-center leading-tight">{cat.label}</span>
-                  </button>
-                ))}
+              <div className="px-4 grid grid-cols-4 gap-2.5 pb-4">
+                {CATEGORIES.map((cat, idx) => {
+                  const palettes = [
+                    "bg-violet-50 border-violet-100",
+                    "bg-sky-50 border-sky-100",
+                    "bg-rose-50 border-rose-100",
+                    "bg-amber-50 border-amber-100",
+                    "bg-emerald-50 border-emerald-100",
+                    "bg-indigo-50 border-indigo-100",
+                    "bg-pink-50 border-pink-100",
+                    "bg-orange-50 border-orange-100",
+                    "bg-teal-50 border-teal-100",
+                    "bg-fuchsia-50 border-fuchsia-100",
+                    "bg-lime-50 border-lime-100",
+                    "bg-cyan-50 border-cyan-100",
+                  ];
+                  const palette = palettes[idx % palettes.length];
+                  return (
+                    <button
+                      key={cat.label}
+                      data-testid={`button-category-${cat.label}`}
+                      onClick={() => handleCategoryTap(cat)}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border transition-all active:scale-95 hover:shadow-sm ${palette}`}
+                    >
+                      <span className="text-2xl leading-none">{cat.emoji}</span>
+                      <span className="text-[9px] font-bold text-foreground/80 text-center leading-tight">{cat.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}
@@ -602,15 +621,17 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
                 key={t.id}
                 data-testid={`tab-${t.id}`}
                 onClick={() => switchTab(t.id)}
-                className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all duration-200 active:scale-95"
+                className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all duration-200 active:scale-95 ${
+                  active ? "bg-primary/[0.08]" : "hover:bg-secondary"
+                }`}
               >
                 <t.icon
-                  size={22}
-                  strokeWidth={active ? 2.5 : 1.8}
+                  size={21}
+                  strokeWidth={active ? 2.5 : 1.7}
                   color={active ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))"}
                 />
                 <span
-                  className="text-[10px] font-medium"
+                  className={`text-[10px] ${active ? "font-semibold" : "font-medium"}`}
                   style={{ color: active ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))" }}
                 >
                   {t.label}

@@ -151,7 +151,7 @@ const CustomerReservations = () => {
       <div className="absolute inset-x-0 top-0 bg-background px-5 pt-6" style={{ bottom: 56 }}>
         <h1 className="text-xl font-bold mb-4">My Bookings</h1>
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-2xl bg-secondary animate-pulse" />)}
+          {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-2xl booka-shimmer" />)}
         </div>
       </div>
     );
