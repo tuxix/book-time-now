@@ -1,0 +1,55 @@
+Paste this into Replit:
+
+---
+
+*"The store profile photo upload is failing with 'Upload failed: new row violates row-level security policy'. Please fix this by giving me the following SQL as a code block to run in Supabase:*
+
+```sql
+-- Allow store owners to upload to the store-avatars bucket
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('store-avatars', 'store-avatars', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- Drop existing storage policies if any
+DROP POLICY IF EXISTS "Store owners can upload avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Store owners can update avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Store owners can delete avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Anyone can view avatars" ON storage.objects;
+
+-- Allow anyone to view store avatars
+CREATE POLICY "Anyone can view avatars"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'store-avatars');
+
+-- Allow authenticated store owners to upload
+CREATE POLICY "Store owners can upload avatars"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'store-avatars'
+  AND auth.uid()::text = (storage.foldername(name))[1]
+);
+
+-- Allow store owners to update their own avatar
+CREATE POLICY "Store owners can update avatars"
+ON storage.objects FOR UPDATE TO authenticated
+USING (
+  bucket_id = 'store-avatars'
+  AND auth.uid()::text = (storage.foldername(name))[1]
+);
+
+-- Allow store owners to delete their own avatar
+CREATE POLICY "Store owners can delete avatars"
+ON storage.objects FOR DELETE TO authenticated
+USING (
+  bucket_id = 'store-avatars'
+  AND auth.uid()::text = (storage.foldername(name))[1]
+);
+```
+
+*Also check the upload code and make sure the file is being saved to a path that starts with the user's ID for example: [user-id]/avatar.png — this is required for the RLS policy to work correctly.*
+
+*Wait for my confirmation that the SQL ran before making any code changes."*
+
+---
+
+Run that SQL in Supabase and then tell Replit it ran successfully. Let me know what happens!
