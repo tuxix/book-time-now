@@ -42,3 +42,8 @@ externalPort = 80
 [[ports]]
 localPort = 5001
 externalPort = 3001
+
+[userenv]
+
+[userenv.shared]
+VITE_FYGARO_BUTTON_ID = "0399d8f2-9adc-4784-8bdc-1f5fff415dae"

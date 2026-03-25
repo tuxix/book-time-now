@@ -260,6 +260,35 @@ const CustomerBooking = ({ store, onBack }: Props) => {
 
       setPaymentStep(false);
       setServiceStep(false);
+
+      // ── Fygaro payment redirect ──────────────────────────────────────────
+      if (commitmentFee > 0 && inserted?.id) {
+        const reservationId = inserted.id as string;
+        const confirmedDetails = {
+          reservationId,
+          date: format(activeDateObj, "MMMM d, yyyy"),
+          startTime: slot.start_time.slice(0, 5),
+          endTime: slot.end_time.slice(0, 5),
+          ref: reservationId.split("-")[0].toUpperCase(),
+          storeName: store.name,
+          serviceName: selectedService?.name,
+          serviceTotal: selectedService ? serviceTotal : undefined,
+        };
+        try {
+          localStorage.setItem("booka_pending_payment", JSON.stringify(confirmedDetails));
+        } catch {}
+
+        const buttonId = import.meta.env.VITE_FYGARO_BUTTON_ID ?? "";
+        const note = encodeURIComponent(`Booking at ${store.name}`);
+        const amount = commitmentFee.toFixed(2);
+        const fygaroUrl =
+          `https://www.fygaro.com/en/pb/${buttonId}` +
+          `?amount=${amount}&client_note=${note}&client_reference=${reservationId}`;
+        window.location.href = fygaroUrl;
+        return;
+      }
+
+      // No commitment fee — show confirmation immediately
       setConfirmed({
         date: format(activeDateObj, "MMMM d, yyyy"),
         startTime: slot.start_time.slice(0, 5),
@@ -547,12 +576,26 @@ const CustomerBooking = ({ store, onBack }: Props) => {
 
             <Button
               data-testid="button-confirm-pay"
-              className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
+              className="w-full h-12 rounded-xl font-semibold text-white border-0"
+              style={{ background: "linear-gradient(135deg, #1a56db 0%, #1e3a8a 100%)" }}
               onClick={handleBook}
               disabled={booking}
             >
-              {booking ? "Processing…" : `Confirm & Pay ${fmt(commitmentFee)}  →`}
+              {booking ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Redirecting to Fygaro…
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  <CreditCard size={16} />
+                  Pay {fmt(commitmentFee)} via Fygaro
+                </span>
+              )}
             </Button>
+            <p className="text-[11px] text-muted-foreground text-center">
+              You'll be taken to Fygaro's secure payment page
+            </p>
             <button
               onClick={() => { setPaymentStep(false); if (hasServices && selectedServiceId) setServiceStep(true); }}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors w-full text-center"

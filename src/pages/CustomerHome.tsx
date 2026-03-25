@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Search, Calendar, User, MapPin, ChevronRight, Star,
-  X, Briefcase, Settings, HelpCircle, LogOut, Heart, Mic, Sun, Moon,
+  X, Briefcase, Settings, HelpCircle, LogOut, Heart, Mic, Sun, Moon, CheckCircle2, CreditCard, Clock,
 } from "lucide-react";
 import { CATEGORIES, distanceKm, getCategoryEmoji } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
@@ -211,6 +211,10 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   const [mapDark, setMapDark] = useState<boolean>(() => {
     try { return localStorage.getItem("booka-map-dark") !== "false"; } catch { return true; }
   });
+  const [fygaroConfirmed, setFygaroConfirmed] = useState<{
+    ref: string; storeName: string; date: string; startTime: string; endTime: string;
+    serviceName?: string; serviceTotal?: number;
+  } | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Record<string, any>>({});
@@ -227,6 +231,47 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+
+  // ── Fygaro payment return handler ─────────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const customRef = params.get("customReference");
+    const fygaroRef = params.get("reference");
+    if (!customRef || !fygaroRef) return;
+
+    // Clear the URL params without reload
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, "", cleanUrl);
+
+    // Read pending booking from localStorage
+    let pending: any = null;
+    try { pending = JSON.parse(localStorage.getItem("booka_pending_payment") ?? "null"); } catch {}
+
+    const reservationId = customRef;
+
+    // Mark payment as paid in DB
+    supabase
+      .from("reservations")
+      .update({ payment_status: "paid" })
+      .eq("id", reservationId)
+      .then(({ error }) => {
+        if (error) { toast.error("Payment recorded but couldn't update status. Contact support."); return; }
+        try { localStorage.removeItem("booka_pending_payment"); } catch {}
+        if (pending && pending.reservationId === reservationId) {
+          setFygaroConfirmed({
+            ref: pending.ref,
+            storeName: pending.storeName,
+            date: pending.date,
+            startTime: pending.startTime,
+            endTime: pending.endTime,
+            serviceName: pending.serviceName,
+            serviceTotal: pending.serviceTotal,
+          });
+        } else {
+          toast.success("Payment confirmed! Your booking is secured.");
+        }
+      });
   }, []);
 
   // ── Fetch stores ──────────────────────────────────────────────────────────
@@ -671,6 +716,70 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
 
       {bookingStore && (
         <CustomerBooking store={bookingStore} onBack={() => setBookingStore(null)} />
+      )}
+
+      {/* ── Fygaro payment confirmed overlay ────────────────────────────────── */}
+      {fygaroConfirmed && (
+        <div className="fixed inset-0 z-[500] bg-background flex flex-col items-center justify-center px-6">
+          <div className="w-full max-w-xs text-center space-y-5">
+            <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto bounce-in">
+              <CheckCircle2 size={42} className="text-green-500" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Payment Confirmed!</h1>
+              <p className="text-sm text-muted-foreground mt-1">Your booking is secured.</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-card booka-shadow text-left space-y-3">
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Store</p>
+                <p className="text-sm font-semibold text-foreground mt-0.5">{fygaroConfirmed.storeName}</p>
+              </div>
+              {fygaroConfirmed.serviceName && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Service</p>
+                  <p className="text-sm font-semibold text-foreground mt-0.5">{fygaroConfirmed.serviceName}</p>
+                  {fygaroConfirmed.serviceTotal !== undefined && (
+                    <p className="text-xs font-bold mt-0.5" style={{ color: "hsl(var(--booka-blue))" }}>
+                      J${fygaroConfirmed.serviceTotal.toFixed(0)}
+                    </p>
+                  )}
+                </div>
+              )}
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Date</p>
+                <p className="text-sm font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
+                  <Calendar size={13} style={{ color: "hsl(var(--booka-blue))" }} /> {fygaroConfirmed.date}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Time</p>
+                <p className="text-sm font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
+                  <Clock size={13} style={{ color: "hsl(var(--booka-blue))" }} /> {fygaroConfirmed.startTime} – {fygaroConfirmed.endTime}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Paid via</p>
+                <p className="text-sm font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
+                  <CreditCard size={13} style={{ color: "hsl(var(--booka-blue))" }} /> Fygaro
+                </p>
+              </div>
+              <div className="pt-2 border-t border-border">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Booking Reference</p>
+                <p className="text-xl font-bold font-mono tracking-widest mt-0.5" style={{ color: "hsl(var(--booka-blue))" }}>
+                  #{fygaroConfirmed.ref}
+                </p>
+              </div>
+            </div>
+            <button
+              data-testid="button-fygaro-confirmed-done"
+              className="w-full h-12 rounded-xl font-semibold text-white"
+              style={{ background: "linear-gradient(135deg, hsl(var(--booka-blue)) 0%, hsl(220 85% 16%) 100%)" }}
+              onClick={() => { setFygaroConfirmed(null); setActiveTab("bookings"); }}
+            >
+              View My Bookings
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── Other tabs ──────────────────────────────────────────────────────── */}
