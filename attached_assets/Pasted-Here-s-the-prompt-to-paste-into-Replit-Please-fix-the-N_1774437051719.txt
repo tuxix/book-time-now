@@ -1,0 +1,46 @@
+Here's the prompt to paste into Replit:
+
+---
+
+*"Please fix the No Show button on the store dashboard. Here is exactly how it should work:*
+
+***NO SHOW LOGIC***
+*1. The No Show button should only appear on a booking card when ALL of these conditions are true:*
+- *The appointment is today*
+- *The current time is at least 30 minutes past the booking start time*
+- *The customer has NOT tapped Check In — meaning the status is still Scheduled and not Arrived, In Progress or Completed*
+
+*2. If the current time is less than 30 minutes past the start time the No Show button should not appear yet. Instead show a small grey countdown label on the booking card that says something like No Show available in X mins where X is the number of minutes remaining until the 30 minute mark*
+
+*3. Once the 30 minute mark passes the countdown label should automatically disappear and the No Show button should appear without needing a manual refresh — use a timer or interval that checks every minute and updates the UI automatically*
+
+***NO SHOW ACTION***
+*4. When the store owner taps No Show:*
+- *Show a confirmation dialog saying This customer has not checked in 30 minutes after their appointment time. Mark as No Show?*
+- *After confirming update the reservation status to no_show*
+- *Update payment_status to forfeited — the customer keeps everything except the commitment fee*
+- *Show a NO SHOW badge in red on the booking card*
+- *Show a notice on the customer Bookings tab saying Your appointment at [store name] on [date] at [time] was marked as a No Show. Your commitment fee was retained by the store*
+
+***FIX THE CURRENT ERROR***
+*5. Find and fix whatever error is currently being thrown when the No Show button is tapped — check the Supabase update query, make sure the no_show status is accepted by the database constraint, and make sure the RLS policy allows store owners to update the status on reservations that belong to their store*
+
+*6. Give me this as a SQL code block to make sure the constraint and RLS are correct:*
+```sql
+ALTER TABLE public.reservations DROP CONSTRAINT IF EXISTS reservations_status_check;
+ALTER TABLE public.reservations ADD CONSTRAINT reservations_status_check
+CHECK (status IN ('scheduled', 'arrived', 'in_progress', 'completed', 'cancelled', 'no_show'));
+
+DROP POLICY IF EXISTS "Store owners update status" ON public.reservations;
+CREATE POLICY "Store owners update status"
+ON public.reservations FOR UPDATE TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = reservations.store_id AND user_id = auth.uid())
+);
+```
+
+*Give me the SQL code block first and wait for my confirmation before writing any code. Do not change anything else in the app."*
+
+---
+
+Let me know what Replit says!
