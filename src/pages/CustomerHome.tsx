@@ -302,8 +302,8 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     if (!L) { console.error("[Booka] Leaflet not on window.L"); return; }
 
     const map = L.map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 13, zoomControl: false });
-    L.tileLayer("https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png", {
-      attribution: "© Stadia Maps © OpenMapTiles © OpenStreetMap contributors", maxZoom: 20,
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: "© OpenStreetMap contributors © CARTO", maxZoom: 20,
     }).addTo(map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
     mapRef.current = map;
@@ -384,59 +384,59 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
         <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
       </div>
 
-      {/* ── Map pin popup card ─────────────────────────────────────────────── */}
+      {/* ── Map pin popup card (compact) ───────────────────────────────────── */}
       {showMap && mapPinStore && (
         <div
-          className="absolute inset-x-4 slide-up"
-          style={{ bottom: `calc(${sheetExpanded ? "57%" : "90px"} + 16px)`, zIndex: 450 }}
+          className="absolute left-1/2 booka-pin-popup"
+          style={{
+            bottom: `calc(${sheetExpanded ? "57%" : "90px"} + 80px)`,
+            transform: "translateX(-50%)",
+            zIndex: 450,
+            maxWidth: 260,
+            width: "calc(100% - 32px)",
+          }}
         >
-          <div className="bg-white rounded-2xl booka-shadow-lg p-4">
-            {/* Close button */}
-            <button
-              onClick={() => setMapPinStore(null)}
-              className="absolute top-3 right-3 w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 active:scale-90 transition-all"
-            >
-              <X size={12} className="text-slate-500" />
-            </button>
+          <div className="bg-white rounded-2xl flex items-center gap-2.5 px-3 py-2.5 relative"
+            style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.15)" }}
+          >
+            {/* Avatar */}
+            {mapPinStore.avatar_url ? (
+              <img src={mapPinStore.avatar_url} alt={mapPinStore.name}
+                className="w-8 h-8 rounded-lg object-cover shrink-0" />
+            ) : (
+              <div className="w-8 h-8 rounded-lg booka-gradient flex items-center justify-center text-white font-bold text-[11px] shrink-0">
+                {mapPinStore.name.slice(0, 2).toUpperCase()}
+              </div>
+            )}
 
-            <div className="flex items-center gap-3 pr-6">
-              {mapPinStore.avatar_url ? (
-                <img src={mapPinStore.avatar_url} alt={mapPinStore.name}
-                  className="w-12 h-12 rounded-xl object-cover shrink-0" />
-              ) : (
-                <div className="w-12 h-12 rounded-xl booka-gradient flex items-center justify-center text-white font-bold text-sm shrink-0">
-                  {getCategoryEmoji(mapPinStore.category)}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-slate-900 text-sm truncate leading-tight">{mapPinStore.name}</p>
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-slate-900 text-[13px] truncate leading-tight">{mapPinStore.name}</p>
+              <div className="flex items-center gap-1 mt-0.5">
+                <Star size={10} className="text-amber-400 fill-amber-400" />
+                <span className="text-[11px] text-slate-500">
+                  {mapPinStore.review_count > 0 ? mapPinStore.rating : "New"}
+                </span>
                 {mapPinStore.is_open === false && (
-                  <span className="text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full">CLOSED</span>
+                  <span className="text-[9px] font-bold bg-red-500 text-white px-1 py-0.5 rounded-full ml-1">CLOSED</span>
                 )}
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="flex items-center gap-0.5">
-                    <Star size={11} className="text-amber-400 fill-amber-400" />
-                    <span className="text-xs text-slate-500">
-                      {mapPinStore.review_count > 0 ? mapPinStore.rating : "New"}
-                    </span>
-                  </div>
-                  {(() => {
-                    const d = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, mapPinStore.latitude, mapPinStore.longitude);
-                    return d ? (
-                      <span className="text-xs text-slate-500 flex items-center gap-0.5">
-                        <MapPin size={9} />{d}
-                      </span>
-                    ) : null;
-                  })()}
-                </div>
               </div>
             </div>
 
+            {/* View Profile button */}
             <button
               onClick={() => { setSelectedStore(mapPinStore); setMapPinStore(null); }}
-              className="w-full mt-3 py-2.5 rounded-xl booka-gradient text-white text-sm font-semibold transition-all active:scale-[0.97]"
+              className="shrink-0 px-2.5 py-1.5 rounded-lg bg-[#1d4ed8] text-white text-[11px] font-bold transition-all active:scale-95"
             >
-              View Profile
+              View
+            </button>
+
+            {/* Close */}
+            <button
+              onClick={() => setMapPinStore(null)}
+              className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center active:scale-90 transition-all"
+            >
+              <X size={10} className="text-white" />
             </button>
           </div>
         </div>
