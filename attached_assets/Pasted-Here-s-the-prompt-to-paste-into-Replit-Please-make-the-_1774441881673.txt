@@ -1,0 +1,42 @@
+Here's the prompt to paste into Replit:
+
+---
+
+*"Please make the following changes to the reviews system. Do not change anything else:*
+
+***STORE DASHBOARD — REVIEWS TAB***
+*1. Remove the Customer Reviews section from the Profile tab on the store dashboard completely*
+*2. Add a new Reviews tab to the store dashboard navigation bar alongside Bookings, Slots, Menu, Calendar and Profile*
+*3. The Reviews tab should show:*
+- *A summary card at the top showing the store's average star rating, total review count and a visual star display*
+- *Each review in a clean card below showing:*
+  - *Customer name and avatar initials*
+  - *Star rating*
+  - *Review comment in full*
+  - *How long ago it was posted*
+  - *A Reply button if no reply exists yet*
+  - *If a reply exists show it indented below the review with a store owner label and the reply text*
+  - *An Edit Reply button if a reply already exists*
+
+***CUSTOMER SIDE — STORE PROFILE REVIEWS***
+*4. On the store profile page replace the static reviews list with a small compact review carousel that cycles through reviews one at a time:*
+- *Show one review card at a time in a compact window*
+- *Left and right arrow buttons to manually cycle through reviews*
+- *Auto advances to the next review every 5 seconds with a smooth slide animation*
+- *Each review card shows customer name, star rating, comment and how long ago*
+- *If the store has replied show the reply below the review comment indented with a small store icon and Owner Response label in dark blue*
+- *Show a dots indicator at the bottom showing which review is currently displayed for example ● ○ ○ ○*
+- *Show the total review count and average rating above the carousel for example 4.8 ★ · 12 reviews*
+
+***FIX STORE REPLIES NOT SHOWING***
+*5. Store replies are currently not visible on the customer side at all. Fix this by:*
+- *Checking the query that fetches reviews on the store profile page and making sure it includes the store_reply and store_reply_at columns*
+- *Making sure the RLS policy allows customers to read the store_reply column*
+- *After a store owner submits a reply from the dashboard make sure it saves to the store_reply column in the reviews table and updates immediately without a page refresh*
+- *On the customer carousel if store_reply is not null and not empty show it below the review comment*
+
+*Give me any SQL needed as a code block and wait for my confirmation before writing any code. Do not change anything else in the app."*
+
+---
+
+Let me know what Replit says!
