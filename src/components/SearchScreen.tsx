@@ -19,6 +19,10 @@ const addRecent = (q: string) => {
   const items = getRecent().filter((s) => s !== q);
   localStorage.setItem(RECENT_KEY, JSON.stringify([q, ...items].slice(0, 6)));
 };
+const removeRecent = (q: string) => {
+  const items = getRecent().filter((s) => s !== q);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(items));
+};
 
 const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }: Props) => {
   const [query, setQuery] = useState("");
@@ -47,11 +51,20 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
     onSelectStore(store);
   };
 
-  const StoreCard = ({ store }: { store: Store }) => {
+  const handleRemoveRecent = (item: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    removeRecent(item);
+    setRecentSearches(getRecent());
+  };
+
+  const StoreCard = ({ store, index }: { store: Store; index: number }) => {
     const dist = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, store.latitude, store.longitude);
     const isFav = favStoreIds?.has(store.id) ?? false;
     return (
-      <div className="flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm">
+      <div
+        className="flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm card-stagger"
+        style={{ animationDelay: `${index * 45}ms` }}
+      >
         <button
           data-testid={`card-search-store-${store.id}`}
           onClick={() => handleSelect(store)}
@@ -59,15 +72,15 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
         >
           {store.avatar_url ? (
             <img src={store.avatar_url} alt={store.name}
-              className="w-11 h-11 rounded-xl object-cover shrink-0" />
+              className="w-12 h-12 rounded-xl object-cover shrink-0" />
           ) : (
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
               {store.name.slice(0, 2).toUpperCase()}
             </div>
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-semibold text-foreground text-sm truncate">{store.name}</p>
+              <p className="font-bold text-foreground text-sm truncate">{store.name}</p>
               {store.is_open === false && (
                 <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
               )}
@@ -109,8 +122,8 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
   return (
     <div className="absolute inset-x-0 top-0 bg-background" style={{ bottom: 56, zIndex: 200, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       {/* Search bar */}
-      <div className="shrink-0 px-4 py-3 border-b border-border bg-background">
-        <div className="flex items-center gap-2 bg-secondary rounded-2xl px-3">
+      <div className="shrink-0 px-4 py-3 border-b border-border bg-card/95 backdrop-blur-md">
+        <div className="flex items-center gap-2 bg-secondary rounded-2xl px-3 booka-shadow-sm transition-shadow focus-within:booka-shadow-blue">
           <Search size={16} className="text-muted-foreground shrink-0" />
           <input
             ref={inputRef}
@@ -129,33 +142,50 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6 space-y-2.5">
         {/* Recent searches */}
         {!query && recentSearches.length > 0 && (
-          <div className="mb-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Recent</p>
-            {recentSearches.map((s) => (
-              <button key={s} onClick={() => setQuery(s)}
-                className="flex items-center gap-3 w-full py-2.5 text-sm text-foreground transition-all hover:text-primary">
-                <Clock size={14} className="text-muted-foreground shrink-0" />
-                {s}
-              </button>
-            ))}
+          <div className="mb-1">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Recent Searches</p>
+            <div className="space-y-0.5">
+              {recentSearches.map((s) => (
+                <div key={s} className="flex items-center gap-2 group">
+                  <button
+                    onClick={() => setQuery(s)}
+                    className="flex items-center gap-3 flex-1 py-2.5 text-sm text-foreground transition-all hover:text-primary active:scale-[0.98] text-left"
+                  >
+                    <Clock size={14} className="text-muted-foreground shrink-0" />
+                    {s}
+                  </button>
+                  <button
+                    data-testid={`button-remove-recent-${s}`}
+                    onClick={(e) => handleRemoveRecent(s, e)}
+                    className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-secondary active:scale-95 transition-all"
+                  >
+                    <X size={12} className="text-muted-foreground" />
+                  </button>
+                </div>
+              ))}
+            </div>
             <div className="h-px bg-border my-3" />
           </div>
         )}
 
         {!query && (
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">All Stores</p>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">All Stores</p>
         )}
 
         {query && results.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <Search size={28} className="mx-auto mb-2 opacity-30" />
-            <p className="text-sm">No results for "{query}"</p>
+          <div className="text-center py-14 text-muted-foreground fade-in">
+            <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mx-auto mb-4">
+              <Search size={26} className="opacity-30" />
+            </div>
+            <p className="text-sm font-semibold text-foreground">No results found</p>
+            <p className="text-xs mt-1 opacity-70">for "{query}"</p>
+            <p className="text-xs mt-3 opacity-50">Try a different store name or category</p>
           </div>
         ) : (
-          results.map((store) => <StoreCard key={store.id} store={store} />)
+          results.map((store, i) => <StoreCard key={store.id} store={store} index={i} />)
         )}
       </div>
     </div>

@@ -1,0 +1,101 @@
+Here's the prompt to paste into Replit:
+
+---
+
+*"Please do a full UI polish and reorganization pass on the following screens. Do not change any functionality or database queries. Read all existing code carefully before making changes. Here is everything that needs to be done:*
+
+***EXPLORE PAGE***
+*1. Match the same premium standard as the landing page:*
+- *Full screen map taking up at least 60% of the screen with smooth pin drop animations on load*
+- *Bottom sheet with a polished white card design, rounded top corners and a subtle shadow*
+- *Drag handle at the top of the bottom sheet styled as a small rounded grey pill*
+- *Where to search bar with a clean shadow and a smooth lift animation when tapped*
+- *BROWSE SERVICES label in small grey caps with generous spacing*
+- *Category cards redesigned to be taller with the emoji large and centered at the top, category name bold below it, subtle shadow and rounded corners, smooth scale animation on tap*
+- *Overall spacing should feel generous and breathable — nothing cramped*
+- *Bottom navigation bar should be clean white with subtle top border shadow, icons and labels consistent size, smooth color transition on tab switch*
+
+***SEARCH PAGE***
+*2. Redesign the search page to feel premium:*
+- *Clean white background with a prominent search bar at the top with a search icon and a clear button*
+- *Recent searches section below the search bar with a clock icon next to each item and a remove button*
+- *Recent searches label in small grey caps*
+- *When the user types, results animate in as cards sliding up from the bottom staggered*
+- *Each result card shows store avatar, name in bold, category emoji and label, star rating, distance, and a heart icon to favourite*
+- *If no results found show a friendly illustration or icon with a No results found for X message*
+- *The keyboard should open automatically when the search page opens*
+
+***BOOKING PAGE***
+*3. Reorganize the booking page cleanly from top to bottom:*
+- *Store header at the top — avatar or photo, store name in bold, category emoji and label, star rating and review count, address with location pin icon*
+- *If the store has an announcement show it as a highlighted banner below the store header*
+- *SELECT A DATE section label in small grey caps*
+- *Horizontal scrollable date picker with smooth slide animation when scrolling, selected date highlighted in dark blue with white text*
+- *More Dates button at the end of the date row opening the full calendar*
+- *CHOOSE A TIME section label in small grey caps*
+- *Time slot grid with smooth color fill animation on selection, greyed out slots clearly distinguished*
+- *YOUR SERVICE section label — only appears after a time slot is selected*
+- *Service selector and options with live price updating smoothly*
+- *PRICE SUMMARY section at the bottom showing itemised breakdown*
+- *Large Confirm Booking button fixed at the very bottom with enough padding so it never covers content*
+- *Smooth scroll to the next section automatically after each selection*
+
+***BOOKINGS TAB — FULL REORGANIZATION***
+*4. Remove the booking history section from the customer Profile page entirely — it is not needed there*
+
+*5. Reorganize the Bookings tab into three clearly separated tabs at the top:*
+- *Upcoming — all scheduled and arrived bookings sorted by date*
+- *History — all completed and no show bookings*
+- *Cancelled — all cancelled bookings*
+
+*6. Each tab should animate in with a smooth fade when selected*
+
+*7. The History tab must have:*
+- *A date search bar at the top so customers can search for a specific date*
+- *When a date is entered filter the list to show only bookings on that date*
+- *If no bookings exist for that date show a friendly No bookings found for this date message*
+- *Each history card shows store name, category, date and time, service and options chosen, total paid, final status badge and a View Receipt button*
+- *Cards animate in staggered when the tab loads*
+
+*8. The Cancelled tab must have:*
+- *All cancelled bookings sorted newest first*
+- *Each card shows store name, date and time, reason for cancellation if available — Cancelled by Store or Cancelled by Customer, whether the commitment fee was retained or refunded*
+- *A View Receipt button on each card*
+
+*9. The Upcoming tab cards must show:*
+- *Store name, category emoji, date and time*
+- *Service name and options*
+- *Price breakdown*
+- *Status badge with pulse animation on Scheduled and Arrived*
+- *Check In button if today and status is Scheduled*
+- *The 4 digit code displayed clearly if status is Arrived*
+- *Cancel button if cancellation is still allowed*
+
+***PROFILE PAGE — CLEANUP***
+*10. Remove the booking history section from the profile page completely*
+*11. Reorganize the profile page cleanly from top to bottom:*
+- *Large avatar circle at the top with a soft shadow and an edit photo button overlaid at the bottom right of the avatar*
+- *Full name in bold below the avatar*
+- *Phone number in grey below the name*
+- *Switch to Business Dashboard button in a premium dark blue card with a briefcase icon and a subtle shimmer animation — only show if the user has a store account*
+- *ACCOUNT section label in small grey caps*
+- *Menu items with icons, labels and right arrows: Edit Profile, Favourites, Settings, Help and Support*
+- *Each menu item should have a subtle highlight on tap*
+- *Red Log Out option at the very bottom with a logout icon*
+- *Generous padding and spacing throughout*
+
+***GENERAL POLISH***
+*12. Make sure all four pages match the same design standard as the landing page — premium, bold, modern and smooth*
+*13. Consistent use of dark blue as the primary color for buttons, active states, highlights and key UI elements*
+*14. All buttons minimum 48px height for easy tapping*
+*15. All text minimum 14px for readability on mobile*
+*16. Smooth staggered card animations on every list load*
+*17. Every tap and interaction should have immediate visual feedback*
+*18. All animations must respect prefers-reduced-motion*
+*19. Everything must look correct on mobile screen sizes*
+
+*Do not change any functionality, database queries, or business logic. Only improve the visual layout and design. Check all existing code before making changes."*
+
+---
+
+This should bring everything up to the same standard as the landing page. Let me know what it looks like after!

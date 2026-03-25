@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  Calendar, Clock, MapPin, Star, RefreshCw, XCircle, LogIn, Receipt,
+  Calendar, Clock, MapPin, Star, RefreshCw, XCircle, LogIn, Receipt, Search,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import ReviewDialog from "@/components/ReviewDialog";
@@ -32,6 +32,8 @@ interface Reservation {
   reservation_services?: ReservationServiceData[];
 }
 
+type BookingsTab = "upcoming" | "history" | "cancelled";
+
 const TODAY = format(new Date(), "yyyy-MM-dd");
 
 const statusColors: Record<string, string> = {
@@ -40,6 +42,7 @@ const statusColors: Record<string, string> = {
   in_progress: "bg-orange-500 text-white",
   completed:   "bg-green-500 text-white",
   cancelled:   "bg-red-400 text-white",
+  no_show:     "bg-slate-500 text-white",
 };
 
 const statusLabels: Record<string, string> = {
@@ -48,6 +51,7 @@ const statusLabels: Record<string, string> = {
   in_progress: "In Progress",
   completed:   "Completed",
   cancelled:   "Cancelled",
+  no_show:     "No Show",
 };
 
 const fmt = (p: number) => `J$${Number(p).toFixed(0)}`;
@@ -76,6 +80,8 @@ function checkCancellation(r: Reservation): {
 const CustomerReservations = () => {
   const { user } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [activeTab, setActiveTab] = useState<BookingsTab>("upcoming");
+  const [historyDateFilter, setHistoryDateFilter] = useState("");
   const [reviewTarget, setReviewTarget] = useState<Reservation | null>(null);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -163,15 +169,30 @@ const CustomerReservations = () => {
     setCancelTarget(null);
   };
 
-  const sorted = [...reservations].sort((a, b) => {
-    const aActive = a.status !== "cancelled" && a.status !== "completed";
-    const bActive = b.status !== "cancelled" && b.status !== "completed";
-    if (aActive && !bActive) return -1;
-    if (!aActive && bActive) return 1;
-    return b.reservation_date.localeCompare(a.reservation_date);
-  });
+  // Partition reservations into the 3 tab buckets
+  const upcomingReservations = reservations
+    .filter((r) => r.status === "scheduled" || r.status === "arrived" || r.status === "in_progress")
+    .sort((a, b) => a.reservation_date.localeCompare(b.reservation_date)); // soonest first
+
+  const historyReservations = reservations
+    .filter((r) => r.status === "completed" || r.status === "no_show")
+    .sort((a, b) => b.reservation_date.localeCompare(a.reservation_date));
+
+  const cancelledReservations = reservations
+    .filter((r) => r.status === "cancelled")
+    .sort((a, b) => b.reservation_date.localeCompare(a.reservation_date));
+
+  const filteredHistory = historyDateFilter
+    ? historyReservations.filter((r) => r.reservation_date === historyDateFilter)
+    : historyReservations;
 
   const cancelInfo = cancelTarget ? checkCancellation(cancelTarget) : null;
+
+  const tabCounts = {
+    upcoming: upcomingReservations.length,
+    history: historyReservations.length,
+    cancelled: cancelledReservations.length,
+  };
 
   if (loading) {
     return (
@@ -184,6 +205,273 @@ const CustomerReservations = () => {
     );
   }
 
+  // ── Card rendering helpers ───────────────────────────────────────────────
+
+  const renderUpcomingCard = (r: Reservation, i: number) => {
+    const isToday = r.reservation_date === TODAY;
+    const canCheckIn = r.status === "scheduled" && isToday;
+    const canCancel = r.status === "scheduled";
+    const svc = r.reservation_services?.[0] ?? null;
+    const commitmentFee = r.stores?.commitment_fee ?? 750;
+    const total = svc ? svc.subtotal + commitmentFee : commitmentFee;
+    const emoji = getCategoryEmoji(r.stores?.category ?? "");
+    const isActive = r.status === "scheduled" || r.status === "arrived";
+
+    return (
+      <div
+        key={r.id}
+        data-testid={`card-reservation-${r.id}`}
+        className="rounded-2xl bg-card booka-shadow-sm card-stagger overflow-hidden"
+        style={{ animationDelay: `${i * 55}ms` }}
+      >
+        {/* Card header */}
+        <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xl shrink-0">{emoji}</span>
+            <div className="min-w-0">
+              <p className="font-bold text-foreground text-sm leading-tight truncate">{r.stores?.name || "Store"}</p>
+              {r.stores?.category && <p className="text-[10px] text-muted-foreground">{r.stores.category}</p>}
+            </div>
+          </div>
+          <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full shrink-0 ${statusColors[r.status] || "bg-muted text-muted-foreground"} ${isActive ? "pulse-badge" : ""}`}>
+            {statusLabels[r.status] || r.status.replace("_", " ")}
+          </span>
+        </div>
+
+        <div className="px-4 pb-4 space-y-3">
+          {/* Date / time / address */}
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p className="flex items-center gap-1.5">
+              <Calendar size={11} /> {format(parseISO(r.reservation_date), "EEEE, MMM d, yyyy")}
+            </p>
+            <p className="flex items-center gap-1.5">
+              <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
+            </p>
+            {r.stores?.address && (
+              <p className="flex items-center gap-1.5">
+                <MapPin size={11} /> {r.stores.address}
+              </p>
+            )}
+          </div>
+
+          {/* Service + price */}
+          {svc ? (
+            <div className="p-3 rounded-xl bg-secondary/50 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-foreground">{svc.service_name}</p>
+                <p className="text-xs font-bold text-foreground">{fmt(svc.base_price)}</p>
+              </div>
+              {(svc.selected_options as any[]).map((opt, idx) => (
+                <div key={idx} className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1 h-1 rounded-full bg-primary/40 shrink-0" />
+                    {opt.group_label}: {opt.item_label}
+                  </span>
+                  <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : opt.price_modifier === 0 ? "Incl." : fmt(opt.price_modifier)}</span>
+                </div>
+              ))}
+              <div className="border-t border-border/50 pt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>Commitment fee</span>
+                <span>+{fmt(commitmentFee)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">Total paid</span>
+                <span className="text-sm font-extrabold text-primary">{fmt(total)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-secondary/50 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Commitment fee</span>
+              <span className="text-sm font-extrabold text-primary">{fmt(commitmentFee)}</span>
+            </div>
+          )}
+
+          {/* Arrived: show check-in code */}
+          {r.status === "arrived" && r.checkin_code && (
+            <div className="px-4 py-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 text-center pop-in">
+              <p className="text-xs font-semibold text-purple-600 dark:text-purple-300 mb-1">Your Check-In Code</p>
+              <p className="text-3xl font-extrabold text-purple-700 dark:text-purple-200 tracking-[0.3em] font-mono">{r.checkin_code}</p>
+              <p className="text-[10px] text-purple-500 dark:text-purple-400 mt-1">Show this to your service provider</p>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="space-y-2">
+            {canCheckIn && (
+              <button
+                data-testid={`button-checkin-${r.id}`}
+                onClick={() => handleCheckIn(r)}
+                disabled={checkingIn === r.id}
+                className="w-full py-2.5 rounded-xl bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-purple-600 active:scale-[0.97] disabled:opacity-60"
+              >
+                <LogIn size={13} /> {checkingIn === r.id ? "Checking in…" : "Check In — I'm here!"}
+              </button>
+            )}
+            {canCancel && (
+              <button
+                data-testid={`button-cancel-reservation-${r.id}`}
+                onClick={() => setCancelTarget(r)}
+                className="w-full py-2.5 rounded-xl border border-red-200 text-red-500 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-red-50 active:scale-[0.97]"
+              >
+                <XCircle size={13} /> Cancel Appointment
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderHistoryCard = (r: Reservation, i: number) => {
+    const svc = r.reservation_services?.[0] ?? null;
+    const commitmentFee = r.stores?.commitment_fee ?? 750;
+    const total = svc ? svc.subtotal + commitmentFee : commitmentFee;
+    const emoji = getCategoryEmoji(r.stores?.category ?? "");
+
+    return (
+      <div
+        key={r.id}
+        data-testid={`card-history-${r.id}`}
+        className="rounded-2xl bg-card booka-shadow-sm card-stagger overflow-hidden"
+        style={{ animationDelay: `${i * 55}ms` }}
+      >
+        <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xl shrink-0">{emoji}</span>
+            <div className="min-w-0">
+              <p className="font-bold text-foreground text-sm leading-tight truncate">{r.stores?.name || "Store"}</p>
+              {r.stores?.category && <p className="text-[10px] text-muted-foreground">{r.stores.category}</p>}
+            </div>
+          </div>
+          <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full shrink-0 ${statusColors[r.status] || "bg-muted text-muted-foreground"}`}>
+            {statusLabels[r.status] || r.status.replace("_", " ")}
+          </span>
+        </div>
+
+        <div className="px-4 pb-4 space-y-3">
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p className="flex items-center gap-1.5">
+              <Calendar size={11} /> {format(parseISO(r.reservation_date), "EEEE, MMM d, yyyy")}
+            </p>
+            <p className="flex items-center gap-1.5">
+              <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
+            </p>
+          </div>
+
+          {/* Service + options */}
+          {svc && (
+            <div className="p-3 rounded-xl bg-secondary/50 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-foreground">{svc.service_name}</p>
+                <p className="text-xs font-bold text-foreground">{fmt(svc.base_price)}</p>
+              </div>
+              {(svc.selected_options as any[]).map((opt, idx) => (
+                <div key={idx} className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1 h-1 rounded-full bg-primary/40 shrink-0" />
+                    {opt.item_label}
+                  </span>
+                  <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : ""}</span>
+                </div>
+              ))}
+              <div className="border-t border-border/50 pt-1.5 flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">Total paid</span>
+                <span className="text-sm font-extrabold text-primary">{fmt(total)}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {r.status === "completed" && !reviewedIds.has(r.id) && (
+              <button
+                onClick={() => setReviewTarget(r)}
+                className="w-full py-2.5 rounded-xl bg-amber-50 text-amber-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-amber-100 active:scale-[0.97]"
+              >
+                <Star size={13} /> Leave a Review
+              </button>
+            )}
+            {r.status === "completed" && reviewedIds.has(r.id) && (
+              <p className="text-xs text-green-600 text-center font-medium">✓ Review submitted</p>
+            )}
+            <button
+              data-testid={`button-receipt-${r.id}`}
+              onClick={() => setReceiptTarget(r)}
+              className="w-full py-2.5 rounded-xl border border-border text-muted-foreground text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-secondary active:scale-[0.97]"
+            >
+              <Receipt size={13} /> View Receipt
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCancelledCard = (r: Reservation, i: number) => {
+    const svc = r.reservation_services?.[0] ?? null;
+    const commitmentFee = r.stores?.commitment_fee ?? 750;
+    const emoji = getCategoryEmoji(r.stores?.category ?? "");
+    const isCancelledByStore = r.cancelled_by === "store";
+
+    return (
+      <div
+        key={r.id}
+        data-testid={`card-cancelled-${r.id}`}
+        className="rounded-2xl bg-card booka-shadow-sm card-stagger overflow-hidden opacity-90"
+        style={{ animationDelay: `${i * 55}ms` }}
+      >
+        <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xl shrink-0">{emoji}</span>
+            <div className="min-w-0">
+              <p className="font-bold text-foreground text-sm leading-tight truncate">{r.stores?.name || "Store"}</p>
+              {r.stores?.category && <p className="text-[10px] text-muted-foreground">{r.stores.category}</p>}
+            </div>
+          </div>
+          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full shrink-0 bg-red-400 text-white">
+            Cancelled
+          </span>
+        </div>
+
+        <div className="px-4 pb-4 space-y-3">
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p className="flex items-center gap-1.5">
+              <Calendar size={11} /> {format(parseISO(r.reservation_date), "EEEE, MMM d, yyyy")}
+            </p>
+            <p className="flex items-center gap-1.5">
+              <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
+            </p>
+          </div>
+
+          {/* Cancellation notice */}
+          <div className={`px-3 py-2.5 rounded-xl border ${isCancelledByStore ? "bg-orange-50 border-orange-200" : "bg-red-50 border-red-100"}`}>
+            <p className={`text-xs font-semibold ${isCancelledByStore ? "text-orange-700" : "text-red-600"}`}>
+              {isCancelledByStore ? "Cancelled by Store" : "Cancelled by You"}
+            </p>
+            {svc && (
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Commitment fee of {fmt(commitmentFee)} — {isCancelledByStore ? "refunded" : "not refunded"}
+              </p>
+            )}
+          </div>
+
+          <button
+            data-testid={`button-receipt-cancelled-${r.id}`}
+            onClick={() => setReceiptTarget(r)}
+            className="w-full py-2.5 rounded-xl border border-border text-muted-foreground text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-secondary active:scale-[0.97]"
+          >
+            <Receipt size={13} /> View Receipt
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const TABS: { id: BookingsTab; label: string }[] = [
+    { id: "upcoming", label: "Upcoming" },
+    { id: "history", label: "History" },
+    { id: "cancelled", label: "Cancelled" },
+  ];
+
   return (
     <div
       ref={scrollRef}
@@ -192,9 +480,10 @@ const CustomerReservations = () => {
       className="absolute inset-x-0 top-0 overflow-y-auto bg-background slide-in-right"
       style={{ bottom: 56 }}
     >
-      <div className="px-5 pt-6 pb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold fade-in">My Bookings</h1>
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-md border-b border-border">
+        <div className="px-5 pt-5 pb-0 flex items-center justify-between">
+          <h1 className="text-xl font-bold text-foreground">My Bookings</h1>
           <button
             onClick={() => { setRefreshing(true); fetchData(); }}
             className={`p-2 rounded-xl hover:bg-secondary active:scale-95 transition-all ${refreshing ? "animate-spin" : ""}`}
@@ -203,173 +492,106 @@ const CustomerReservations = () => {
           </button>
         </div>
 
-        {refreshing && (
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mb-3">
-            <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            Refreshing…
-          </div>
-        )}
-
-        {sorted.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <Calendar size={40} className="mx-auto mb-3 opacity-40" />
-            <p className="text-sm">No bookings yet</p>
-            <p className="text-xs mt-1 opacity-70">Your reservations will appear here</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {sorted.map((r, i) => {
-              const isToday = r.reservation_date === TODAY;
-              const canCheckIn = r.status === "scheduled" && isToday;
-              const canCancel = r.status === "scheduled";
-              const isCancelledByStore = r.status === "cancelled" && r.cancelled_by === "store";
-              const isDone = r.status === "completed" || r.status === "cancelled";
-              const svc = r.reservation_services?.[0] ?? null;
-              const commitmentFee = r.stores?.commitment_fee ?? 750;
-              const total = svc ? svc.subtotal + commitmentFee : commitmentFee;
-              const emoji = getCategoryEmoji(r.stores?.category ?? "");
-
-              return (
-                <div
-                  key={r.id}
-                  data-testid={`card-reservation-${r.id}`}
-                  className={`rounded-2xl bg-card booka-shadow-sm slide-up overflow-hidden ${r.status === "cancelled" ? "opacity-80" : ""}`}
-                  style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
-                >
-                  {/* Card header: store + status */}
-                  <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xl shrink-0">{emoji}</span>
-                      <div className="min-w-0">
-                        <p className="font-bold text-foreground text-sm leading-tight truncate">{r.stores?.name || "Store"}</p>
-                        {r.stores?.category && <p className="text-[10px] text-muted-foreground">{r.stores.category}</p>}
-                      </div>
-                    </div>
-                    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full shrink-0 ${statusColors[r.status] || "bg-muted text-muted-foreground"}`}>
-                      {statusLabels[r.status] || r.status.replace("_", " ")}
-                    </span>
-                  </div>
-
-                  <div className="px-4 pb-3 space-y-3">
-                    {/* Date / time / address */}
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      <p className="flex items-center gap-1.5">
-                        <Calendar size={11} /> {format(parseISO(r.reservation_date), "EEEE, MMM d, yyyy")}
-                      </p>
-                      <p className="flex items-center gap-1.5">
-                        <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
-                      </p>
-                      {r.stores?.address && (
-                        <p className="flex items-center gap-1.5">
-                          <MapPin size={11} /> {r.stores.address}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Service + options + price breakdown */}
-                    {svc ? (
-                      <div className="p-3 rounded-xl bg-secondary/50 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold text-foreground">{svc.service_name}</p>
-                          <p className="text-xs font-bold text-foreground">{fmt(svc.base_price)}</p>
-                        </div>
-                        {(svc.selected_options as any[]).map((opt, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <span className="w-1 h-1 rounded-full bg-primary/40 shrink-0" />
-                              {opt.group_label}: {opt.item_label}
-                            </span>
-                            <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : opt.price_modifier === 0 ? "Incl." : fmt(opt.price_modifier)}</span>
-                          </div>
-                        ))}
-                        <div className="border-t border-border/50 pt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                          <span>Commitment fee</span>
-                          <span>+{fmt(commitmentFee)}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-foreground">Total paid</span>
-                          <span className="text-sm font-extrabold text-primary">{fmt(total)}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-3 rounded-xl bg-secondary/50 flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">Commitment fee</span>
-                        <span className="text-sm font-extrabold text-primary">{fmt(commitmentFee)}</span>
-                      </div>
-                    )}
-
-                    {/* Arrived: show check-in code */}
-                    {r.status === "arrived" && r.checkin_code && (
-                      <div className="px-4 py-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 text-center">
-                        <p className="text-xs font-semibold text-purple-600 dark:text-purple-300 mb-1">Your Check-In Code</p>
-                        <p className="text-3xl font-extrabold text-purple-700 dark:text-purple-200 tracking-[0.3em] font-mono">{r.checkin_code}</p>
-                        <p className="text-[10px] text-purple-500 dark:text-purple-400 mt-1">Show this to your service provider</p>
-                      </div>
-                    )}
-
-                    {/* Cancelled notice */}
-                    {r.status === "cancelled" && (
-                      <div className={`px-3 py-2 rounded-xl border ${isCancelledByStore ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-700" : "bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800"}`}>
-                        <p className={`text-xs font-medium text-center ${isCancelledByStore ? "text-orange-700 dark:text-orange-300" : "text-red-600 dark:text-red-400"}`}>
-                          {isCancelledByStore
-                            ? `Your appointment at ${r.stores?.name || "the store"} was cancelled by the store.`
-                            : "This appointment was cancelled."}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Action buttons */}
-                    <div className="space-y-2">
-                      {r.status === "completed" && !reviewedIds.has(r.id) && (
-                        <button
-                          onClick={() => setReviewTarget(r)}
-                          className="w-full py-2 rounded-xl bg-amber-50 text-amber-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-amber-100 active:scale-[0.97]"
-                        >
-                          <Star size={13} /> Leave a Review
-                        </button>
-                      )}
-                      {r.status === "completed" && reviewedIds.has(r.id) && (
-                        <p className="text-xs text-green-600 text-center font-medium">✓ Review submitted</p>
-                      )}
-
-                      {isDone && (
-                        <button
-                          data-testid={`button-receipt-${r.id}`}
-                          onClick={() => setReceiptTarget(r)}
-                          className="w-full py-2 rounded-xl border border-border text-muted-foreground text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-secondary active:scale-[0.97]"
-                        >
-                          <Receipt size={13} /> View Receipt
-                        </button>
-                      )}
-
-                      {canCheckIn && (
-                        <button
-                          data-testid={`button-checkin-${r.id}`}
-                          onClick={() => handleCheckIn(r)}
-                          disabled={checkingIn === r.id}
-                          className="w-full py-2 rounded-xl bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-purple-600 active:scale-[0.97] disabled:opacity-60"
-                        >
-                          <LogIn size={13} /> {checkingIn === r.id ? "Checking in…" : "Check In — I'm here!"}
-                        </button>
-                      )}
-
-                      {canCancel && (
-                        <button
-                          data-testid={`button-cancel-reservation-${r.id}`}
-                          onClick={() => setCancelTarget(r)}
-                          className="w-full py-2 rounded-xl border border-red-200 text-red-500 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-red-50 active:scale-[0.97]"
-                        >
-                          <XCircle size={13} /> Cancel Appointment
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* Tabs */}
+        <div className="flex px-5 pt-3 gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              data-testid={`tab-bookings-${tab.id}`}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all duration-200 relative ${
+                activeTab === tab.id
+                  ? "bg-primary text-white booka-shadow-blue"
+                  : "bg-secondary text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+              {tabCounts[tab.id] > 0 && (
+                <span className={`ml-1 ${activeTab === tab.id ? "text-white/80" : "text-muted-foreground"}`}>
+                  ({tabCounts[tab.id]})
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="h-3" />
       </div>
+
+      {refreshing && (
+        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground py-2">
+          <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          Refreshing…
+        </div>
+      )}
+
+      {/* ── UPCOMING TAB ─────────────────────────────────────────────────────── */}
+      {activeTab === "upcoming" && (
+        <div key="upcoming" className="px-5 pt-4 pb-8 space-y-3 tab-fade">
+          {upcomingReservations.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Calendar size={40} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-semibold text-foreground">No upcoming bookings</p>
+              <p className="text-xs mt-1 opacity-70">Your scheduled appointments will appear here</p>
+            </div>
+          ) : (
+            upcomingReservations.map((r, i) => renderUpcomingCard(r, i))
+          )}
+        </div>
+      )}
+
+      {/* ── HISTORY TAB ──────────────────────────────────────────────────────── */}
+      {activeTab === "history" && (
+        <div key="history" className="px-5 pt-4 pb-8 space-y-3 tab-fade">
+          {/* Date search bar */}
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="date"
+              data-testid="input-history-date-filter"
+              value={historyDateFilter}
+              onChange={(e) => setHistoryDateFilter(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border bg-card text-sm text-foreground outline-none focus:border-primary transition-colors"
+            />
+            {historyDateFilter && (
+              <button
+                onClick={() => setHistoryDateFilter("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <XCircle size={14} />
+              </button>
+            )}
+          </div>
+
+          {filteredHistory.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Calendar size={36} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-semibold text-foreground">
+                {historyDateFilter ? "No bookings on this date" : "No completed bookings yet"}
+              </p>
+              <p className="text-xs mt-1 opacity-70">
+                {historyDateFilter ? "Try a different date" : "Completed appointments will appear here"}
+              </p>
+            </div>
+          ) : (
+            filteredHistory.map((r, i) => renderHistoryCard(r, i))
+          )}
+        </div>
+      )}
+
+      {/* ── CANCELLED TAB ────────────────────────────────────────────────────── */}
+      {activeTab === "cancelled" && (
+        <div key="cancelled" className="px-5 pt-4 pb-8 space-y-3 tab-fade">
+          {cancelledReservations.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <XCircle size={40} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-semibold text-foreground">No cancelled bookings</p>
+              <p className="text-xs mt-1 opacity-70">Cancelled appointments will appear here</p>
+            </div>
+          ) : (
+            cancelledReservations.map((r, i) => renderCancelledCard(r, i))
+          )}
+        </div>
+      )}
 
       {reviewTarget && (
         <ReviewDialog

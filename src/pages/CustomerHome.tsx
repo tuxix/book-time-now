@@ -3,17 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Search, Calendar, User, MapPin, ChevronRight, Star,
-  X, Briefcase, Settings, HelpCircle, LogOut, Heart, Receipt, Clock,
+  X, Briefcase, Settings, HelpCircle, LogOut, Heart,
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
-import { CATEGORIES, distanceKm, getCategoryEmoji } from "@/lib/categories";
+import { CATEGORIES, distanceKm } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
 import StoreProfile from "@/components/StoreProfile";
 import CategoryResults from "@/components/CategoryResults";
 import SearchScreen from "@/components/SearchScreen";
 import CustomerBooking from "@/components/CustomerBooking";
 import CustomerReservations from "@/components/CustomerReservations";
-import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import { toast } from "sonner";
 
 declare global { interface Window { L: any; } }
@@ -38,23 +36,9 @@ interface ProfileTabProps {
   onViewStore: (store: Store) => void;
 }
 
-interface HistoryItem {
-  id: string;
-  reservation_date: string;
-  start_time: string;
-  end_time: string;
-  status: string;
-  cancelled_by?: string;
-  stores: { name: string; category?: string; address?: string; commitment_fee?: number } | null;
-  reservation_services?: ReservationServiceData[];
-}
-
 const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, userLocation, onViewStore }: ProfileTabProps) => {
   const { user, profile, signOut } = useAuth();
   const [newBookingCount, setNewBookingCount] = useState(0);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(true);
-  const [receiptTarget, setReceiptTarget] = useState<HistoryItem | null>(null);
 
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) ||
@@ -76,21 +60,6 @@ const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, use
       setNewBookingCount(count ?? 0);
     })();
   }, [user, profile]);
-
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      setLoadingHistory(true);
-      const { data } = await supabase
-        .from("reservations")
-        .select("id, reservation_date, start_time, end_time, status, cancelled_by, stores(name, category, address, commitment_fee), reservation_services(*)")
-        .eq("customer_id", user.id)
-        .in("status", ["completed", "cancelled"])
-        .order("reservation_date", { ascending: false });
-      if (data) setHistory(data as unknown as HistoryItem[]);
-      setLoadingHistory(false);
-    })();
-  }, [user]);
 
   const initials = displayName.slice(0, 2).toUpperCase();
 
@@ -208,77 +177,6 @@ const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, use
           )}
         </div>
 
-        {/* Booking History section */}
-        <div className="pt-3">
-          <div className="flex items-center gap-2 mb-3">
-            <Calendar size={15} className="text-primary" />
-            <h2 className="text-sm font-bold text-foreground">Booking History</h2>
-            {history.length > 0 && <span className="text-xs text-muted-foreground">({history.length})</span>}
-          </div>
-          {loadingHistory ? (
-            <div className="space-y-2">
-              {[1, 2].map((n) => <div key={n} className="h-20 rounded-2xl booka-shimmer" />)}
-            </div>
-          ) : history.length === 0 ? (
-            <div className="p-5 rounded-2xl bg-secondary text-center">
-              <Calendar size={24} className="mx-auto mb-2 text-muted-foreground opacity-30" />
-              <p className="text-xs text-muted-foreground">Completed and cancelled bookings will appear here.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {history.map((h) => {
-                const svc = h.reservation_services?.[0] ?? null;
-                const commitmentFee = h.stores?.commitment_fee ?? 750;
-                const total = svc ? svc.subtotal + commitmentFee : commitmentFee;
-                const fmt = (p: number) => `J$${Number(p).toFixed(0)}`;
-                const emoji = getCategoryEmoji(h.stores?.category ?? "");
-                const isCancelledByStore = h.status === "cancelled" && h.cancelled_by === "store";
-                const statusLabel = h.status === "completed" ? "Completed" : isCancelledByStore ? "Cancelled by Store" : "Cancelled";
-                const statusCls = h.status === "completed" ? "bg-green-500 text-white" : "bg-red-400 text-white";
-                return (
-                  <div key={h.id} className="p-3.5 rounded-2xl bg-card booka-shadow-sm">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-lg shrink-0">{emoji}</span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground truncate">{h.stores?.name || "Store"}</p>
-                          {h.stores?.category && <p className="text-[10px] text-muted-foreground">{h.stores.category}</p>}
-                        </div>
-                      </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${statusCls}`}>{statusLabel}</span>
-                    </div>
-                    <div className="space-y-0.5 text-xs text-muted-foreground mb-2">
-                      <p className="flex items-center gap-1.5">
-                        <Calendar size={10} /> {format(parseISO(h.reservation_date), "MMM d, yyyy")}
-                      </p>
-                      <p className="flex items-center gap-1.5">
-                        <Clock size={10} /> {h.start_time.slice(0, 5)} – {h.end_time.slice(0, 5)}
-                      </p>
-                    </div>
-                    {svc && (
-                      <p className="text-xs text-muted-foreground mb-1.5">
-                        {svc.service_name}
-                        {(svc.selected_options as any[]).length > 0 && (
-                          <span> · {(svc.selected_options as any[]).map((o) => o.item_label).join(", ")}</span>
-                        )}
-                      </p>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-primary">{fmt(total)}</p>
-                      <button
-                        onClick={() => setReceiptTarget(h)}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors active:scale-95 border border-border rounded-lg px-2 py-1"
-                      >
-                        <Receipt size={11} /> Receipt
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
         <button
           data-testid="button-sign-out"
           onClick={signOut}
@@ -289,15 +187,6 @@ const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, use
         </button>
       </div>
 
-      {receiptTarget && (
-        <ReceiptDialog
-          open={!!receiptTarget}
-          reservation={receiptTarget as any}
-          customerName={displayName}
-          service={receiptTarget.reservation_services?.[0] ?? null}
-          onClose={() => setReceiptTarget(null)}
-        />
-      )}
     </div>
   );
 };
@@ -586,18 +475,18 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
               <div className="px-4 grid grid-cols-4 gap-2.5 pb-4">
                 {CATEGORIES.map((cat, idx) => {
                   const palettes = [
-                    "bg-violet-50 border-violet-100",
-                    "bg-sky-50 border-sky-100",
-                    "bg-rose-50 border-rose-100",
-                    "bg-amber-50 border-amber-100",
-                    "bg-emerald-50 border-emerald-100",
-                    "bg-indigo-50 border-indigo-100",
-                    "bg-pink-50 border-pink-100",
-                    "bg-orange-50 border-orange-100",
-                    "bg-teal-50 border-teal-100",
-                    "bg-fuchsia-50 border-fuchsia-100",
-                    "bg-lime-50 border-lime-100",
-                    "bg-cyan-50 border-cyan-100",
+                    "bg-violet-50 border-violet-100 hover:border-violet-300",
+                    "bg-sky-50 border-sky-100 hover:border-sky-300",
+                    "bg-rose-50 border-rose-100 hover:border-rose-300",
+                    "bg-amber-50 border-amber-100 hover:border-amber-300",
+                    "bg-emerald-50 border-emerald-100 hover:border-emerald-300",
+                    "bg-indigo-50 border-indigo-100 hover:border-indigo-300",
+                    "bg-pink-50 border-pink-100 hover:border-pink-300",
+                    "bg-orange-50 border-orange-100 hover:border-orange-300",
+                    "bg-teal-50 border-teal-100 hover:border-teal-300",
+                    "bg-fuchsia-50 border-fuchsia-100 hover:border-fuchsia-300",
+                    "bg-lime-50 border-lime-100 hover:border-lime-300",
+                    "bg-cyan-50 border-cyan-100 hover:border-cyan-300",
                   ];
                   const palette = palettes[idx % palettes.length];
                   return (
@@ -605,9 +494,9 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
                       key={cat.label}
                       data-testid={`button-category-${cat.label}`}
                       onClick={() => handleCategoryTap(cat)}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border transition-all active:scale-95 hover:shadow-sm ${palette}`}
+                      className={`flex flex-col items-center gap-2 py-4 px-2 rounded-2xl border transition-all duration-150 active:scale-90 booka-shadow-sm ${palette}`}
                     >
-                      <span className="text-2xl leading-none">{cat.emoji}</span>
+                      <span className="text-3xl leading-none">{cat.emoji}</span>
                       <span className="text-[9px] font-bold text-foreground/80 text-center leading-tight">{cat.label}</span>
                     </button>
                   );

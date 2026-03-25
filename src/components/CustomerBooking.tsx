@@ -608,9 +608,17 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           </div>
         </div>
 
+        {/* Announcement banner */}
+        {store.announcement && (
+          <div className="px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
+            <span className="font-bold block mb-0.5">📢 Announcement</span>
+            {store.announcement}
+          </div>
+        )}
+
         {/* Date picker */}
         <div>
-          <h2 className="text-sm font-semibold mb-3">Select Date</h2>
+          <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Select a Date</h2>
           <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
             {dates.map((d, i) => (
               <button
@@ -651,7 +659,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
 
         {/* Time slots */}
         <div>
-          <h2 className="text-sm font-semibold mb-3">Available Slots</h2>
+          <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Choose a Time</h2>
           {loadingSlots ? (
             <div className="grid grid-cols-2 gap-2">
               {[1, 2, 3, 4].map((i) => <div key={i} className="h-16 rounded-xl booka-shimmer" />)}
