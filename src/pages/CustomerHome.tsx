@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Search, Calendar, User, MapPin, ChevronRight, Star,
-  X, Briefcase, Settings, HelpCircle, LogOut, Heart, Mic,
+  X, Briefcase, Settings, HelpCircle, LogOut, Heart, Mic, Sun, Moon,
 } from "lucide-react";
 import { CATEGORIES, distanceKm, getCategoryEmoji } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
@@ -208,9 +208,13 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   const [favStoreIds, setFavStoreIds] = useState<Set<string>>(new Set());
 
   const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [mapDark, setMapDark] = useState<boolean>(() => {
+    try { return localStorage.getItem("booka-map-dark") !== "false"; } catch { return true; }
+  });
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Record<string, any>>({});
+  const tileLayerRef = useRef<any>(null);
   const sheetTouchStartY = useRef(0);
   const sheetTouchDeltaY = useRef(0);
 
@@ -301,10 +305,24 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     const L = window.L;
     if (!L) { console.error("[Booka] Leaflet not on window.L"); return; }
 
+    const initialDark = (() => { try { return localStorage.getItem("booka-map-dark") !== "false"; } catch { return true; } })();
+    const tileUrl = initialDark
+      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+      : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+
     const map = L.map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 13, zoomControl: false });
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    tileLayerRef.current = L.tileLayer(tileUrl, {
       attribution: "© OpenStreetMap contributors © CARTO", maxZoom: 20,
     }).addTo(map);
+
+    // Apply brightness filter to tile pane
+    const applyTileFilter = (dark: boolean) => {
+      const pane = map.getPane("tilePane") as HTMLElement | undefined;
+      if (pane) pane.style.filter = dark ? "brightness(1.2) contrast(0.9)" : "none";
+    };
+    applyTileFilter(initialDark);
+    (map as any)._bookaApplyTileFilter = applyTileFilter;
+
     L.control.zoom({ position: "bottomright" }).addTo(map);
     mapRef.current = map;
 
@@ -333,6 +351,24 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   }, [showMap]);
 
   useEffect(() => { refreshMarkers(); }, [refreshMarkers]);
+
+  // ── Map dark/light toggle ─────────────────────────────────────────────────
+  const toggleMapStyle = useCallback(() => {
+    const L = window.L;
+    const map = mapRef.current;
+    if (!L || !map) return;
+    const next = !mapDark;
+    const tileUrl = next
+      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+      : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+    if (tileLayerRef.current) { try { map.removeLayer(tileLayerRef.current); } catch {} }
+    tileLayerRef.current = L.tileLayer(tileUrl, {
+      attribution: "© OpenStreetMap contributors © CARTO", maxZoom: 20,
+    }).addTo(map);
+    (map as any)._bookaApplyTileFilter?.(next);
+    setMapDark(next);
+    try { localStorage.setItem("booka-map-dark", String(next)); } catch {}
+  }, [mapDark]);
 
   // ── Navigation helpers ────────────────────────────────────────────────────
   const switchTab = (tab: Tab) => {
@@ -382,6 +418,25 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
         }}
       >
         <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
+
+        {/* Dark/light map toggle button */}
+        {showMap && (
+          <button
+            data-testid="button-map-style-toggle"
+            onClick={toggleMapStyle}
+            className="absolute top-3 right-3 w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 z-[600]"
+            style={{
+              background: mapDark ? "#ffffff" : "#1e2433",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.25), 0 1px 4px rgba(0,0,0,0.15)",
+            }}
+            title={mapDark ? "Switch to light map" : "Switch to dark map"}
+          >
+            {mapDark
+              ? <Sun size={18} className="text-slate-700" />
+              : <Moon size={18} className="text-white" />
+            }
+          </button>
+        )}
       </div>
 
       {/* ── Map pin popup card (compact) ───────────────────────────────────── */}
