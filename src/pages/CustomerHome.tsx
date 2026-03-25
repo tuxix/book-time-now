@@ -3,9 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Search, Calendar, User, MapPin, ChevronRight, Star,
-  X, Briefcase, Settings, HelpCircle, LogOut, Heart,
+  X, Briefcase, Settings, HelpCircle, LogOut, Heart, Mic,
 } from "lucide-react";
-import { CATEGORIES, distanceKm } from "@/lib/categories";
+import { CATEGORIES, distanceKm, getCategoryEmoji } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
 import StoreProfile from "@/components/StoreProfile";
 import CategoryResults from "@/components/CategoryResults";
@@ -207,9 +207,12 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [favStoreIds, setFavStoreIds] = useState<Set<string>>(new Set());
 
+  const [sheetExpanded, setSheetExpanded] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Record<string, any>>({});
+  const sheetTouchStartY = useRef(0);
+  const sheetTouchDeltaY = useRef(0);
 
   const showMap = activeTab === "explore" && !selectedCategory && !selectedStore && !bookingStore;
 
@@ -275,11 +278,17 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
       const lng = store.longitude ?? DEFAULT_CENTER[1] + stableOffset(store.id, 1);
       const active = store.id === mapPinStore?.id;
       const closed = store.is_open === false;
-      const inner = store.avatar_url
-        ? `<img src="${store.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" alt="" />`
-        : `<span>${store.name.slice(0, 2).toUpperCase()}</span>`;
-      const html = `<div class="booka-pin${active ? " booka-pin--active" : ""}${closed ? " booka-pin--closed" : ""}">${inner}</div>`;
-      const icon = L.divIcon({ className: "", html, iconSize: [36, 36], iconAnchor: [18, 18] });
+      const emoji = getCategoryEmoji(store.category);
+      const initials = store.name.slice(0, 2).toUpperCase();
+      const html = `
+        <div class="bwp${active ? " bwp--active" : ""}${closed ? " bwp--closed" : ""}">
+          <div class="bwp-body">
+            <span class="bwp-emoji">${emoji}</span>
+            <span class="bwp-label">${initials}</span>
+          </div>
+          <div class="bwp-pointer"></div>
+        </div>`;
+      const icon = L.divIcon({ className: "", html, iconSize: [44, 58], iconAnchor: [22, 58] });
       const marker = L.marker([lat, lng], { icon }).addTo(map);
       marker.on("click", () => setMapPinStore(store));
       markersRef.current[store.id] = marker;
@@ -293,8 +302,8 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     if (!L) { console.error("[Booka] Leaflet not on window.L"); return; }
 
     const map = L.map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 13, zoomControl: false });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap", maxZoom: 19,
+    L.tileLayer("https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png", {
+      attribution: "© Stadia Maps © OpenMapTiles © OpenStreetMap contributors", maxZoom: 20,
     }).addTo(map);
     L.control.zoom({ position: "bottomright" }).addTo(map);
     mapRef.current = map;
@@ -338,6 +347,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     setFilterCat(cat.label);
     setSelectedCategory(cat);
     setMapPinStore(null);
+    setSheetExpanded(true);
   };
 
   const tabs: { id: Tab; label: string; icon: typeof MapPin }[] = [
@@ -374,57 +384,59 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
         <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
       </div>
 
-      {/* ── Map pin quick card ─────────────────────────────────────────────── */}
+      {/* ── Map pin popup card ─────────────────────────────────────────────── */}
       {showMap && mapPinStore && (
-        <div className="absolute inset-x-4 slide-up" style={{ bottom: "calc(57% + 64px)", zIndex: 450 }}>
-          <div className="bg-card rounded-2xl booka-shadow-lg p-3.5 flex items-center gap-3">
-            {mapPinStore.avatar_url ? (
-              <img src={mapPinStore.avatar_url} alt={mapPinStore.name}
-                className="w-10 h-10 rounded-xl object-cover shrink-0" />
-            ) : (
-              <div className="w-10 h-10 rounded-xl booka-gradient flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
-                {mapPinStore.name.slice(0, 2).toUpperCase()}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <p className="font-semibold text-foreground text-sm truncate">{mapPinStore.name}</p>
-                {mapPinStore.accepting_bookings === false && mapPinStore.is_open !== false && (
-                  <span className="text-[9px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full shrink-0">NO BOOKINGS</span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <Star size={11} className="text-amber-400 fill-amber-400" />
-                <span className="text-xs text-muted-foreground">
-                  {mapPinStore.review_count > 0 ? mapPinStore.rating : "New"}
-                </span>
-                {(() => {
-                  const d = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, mapPinStore.latitude, mapPinStore.longitude);
-                  return d ? <span className="text-xs text-muted-foreground flex items-center gap-0.5"><MapPin size={9} />{d}</span> : null;
-                })()}
-              </div>
-            </div>
-            <button
-              className="text-xs font-semibold text-primary shrink-0"
-              onClick={() => { setSelectedStore(mapPinStore); setMapPinStore(null); }}
-            >
-              View
-            </button>
-            <button
-              onClick={() => toggleFav(mapPinStore.id)}
-              className="p-1 rounded-lg hover:bg-secondary ml-0.5"
-            >
-              <Heart
-                size={15}
-                className={favStoreIds.has(mapPinStore.id) ? "text-red-500" : "text-muted-foreground"}
-                fill={favStoreIds.has(mapPinStore.id) ? "currentColor" : "none"}
-              />
-            </button>
+        <div
+          className="absolute inset-x-4 slide-up"
+          style={{ bottom: `calc(${sheetExpanded ? "57%" : "90px"} + 16px)`, zIndex: 450 }}
+        >
+          <div className="bg-white rounded-2xl booka-shadow-lg p-4">
+            {/* Close button */}
             <button
               onClick={() => setMapPinStore(null)}
-              className="p-1 rounded-lg hover:bg-secondary ml-0.5"
+              className="absolute top-3 right-3 w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 active:scale-90 transition-all"
             >
-              <X size={13} className="text-muted-foreground" />
+              <X size={12} className="text-slate-500" />
+            </button>
+
+            <div className="flex items-center gap-3 pr-6">
+              {mapPinStore.avatar_url ? (
+                <img src={mapPinStore.avatar_url} alt={mapPinStore.name}
+                  className="w-12 h-12 rounded-xl object-cover shrink-0" />
+              ) : (
+                <div className="w-12 h-12 rounded-xl booka-gradient flex items-center justify-center text-white font-bold text-sm shrink-0">
+                  {getCategoryEmoji(mapPinStore.category)}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-slate-900 text-sm truncate leading-tight">{mapPinStore.name}</p>
+                {mapPinStore.is_open === false && (
+                  <span className="text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full">CLOSED</span>
+                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-0.5">
+                    <Star size={11} className="text-amber-400 fill-amber-400" />
+                    <span className="text-xs text-slate-500">
+                      {mapPinStore.review_count > 0 ? mapPinStore.rating : "New"}
+                    </span>
+                  </div>
+                  {(() => {
+                    const d = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, mapPinStore.latitude, mapPinStore.longitude);
+                    return d ? (
+                      <span className="text-xs text-slate-500 flex items-center gap-0.5">
+                        <MapPin size={9} />{d}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => { setSelectedStore(mapPinStore); setMapPinStore(null); }}
+              className="w-full mt-3 py-2.5 rounded-xl booka-gradient text-white text-sm font-semibold transition-all active:scale-[0.97]"
+            >
+              View Profile
             </button>
           </div>
         </div>
@@ -433,46 +445,63 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
       {/* ── Bottom sheet (explore only) ────────────────────────────────────── */}
       {showMap && (
         <div
-          className="absolute inset-x-0 bg-card rounded-t-3xl shadow-2xl overflow-y-auto"
-          style={{ bottom: 56, height: "57%", zIndex: 500 }}
+          className="absolute inset-x-0 bg-white rounded-t-3xl overflow-hidden"
+          style={{
+            bottom: 56,
+            height: sheetExpanded ? "57%" : "90px",
+            zIndex: 500,
+            boxShadow: "0 -8px 40px rgba(0,0,0,0.25)",
+            transition: "height 0.38s cubic-bezier(0.34, 1.56, 0.64, 1)",
+          }}
+          onTouchStart={(e) => { sheetTouchStartY.current = e.touches[0].clientY; sheetTouchDeltaY.current = 0; }}
+          onTouchMove={(e) => { sheetTouchDeltaY.current = e.touches[0].clientY - sheetTouchStartY.current; }}
+          onTouchEnd={() => {
+            if (sheetTouchDeltaY.current < -40) setSheetExpanded(true);
+            if (sheetTouchDeltaY.current > 40) setSheetExpanded(false);
+          }}
         >
           {/* Drag handle */}
-          <div className="flex justify-center pt-3 pb-1">
-            <div className="w-12 h-[3px] rounded-full bg-muted-foreground/20" />
+          <div
+            className="flex justify-center pt-3 pb-2 cursor-pointer"
+            onClick={() => setSheetExpanded((v) => !v)}
+          >
+            <div className="w-10 h-1 rounded-full bg-slate-300" />
           </div>
 
-          {/* Search bar / filter indicator */}
-          <div className="px-4 mt-2 mb-3">
+          {/* Where to? search bar */}
+          <div className="px-4 mb-3">
             {filterCat ? (
-              <div className="flex items-center gap-2 p-3.5 rounded-2xl bg-secondary">
-                <span className="text-sm font-medium text-foreground flex-1">
+              <div className="flex items-center gap-2 px-4 py-3 rounded-full bg-[#1e2433] text-left">
+                <Search size={15} className="text-slate-400 shrink-0" />
+                <span className="flex-1 text-slate-200 text-sm font-medium">
                   {CATEGORIES.find((c) => c.label === filterCat)?.emoji} {filterCat}
                 </span>
-                <button onClick={() => setFilterCat(null)} className="text-xs text-primary font-semibold">
-                  Clear ×
+                <button
+                  onClick={() => { setFilterCat(null); setSheetExpanded(false); }}
+                  className="text-xs text-slate-400 font-semibold hover:text-white transition-colors"
+                >
+                  ✕
                 </button>
               </div>
             ) : (
               <button
                 onClick={() => switchTab("search")}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-secondary border border-border/60 transition-all active:scale-[0.98] hover:border-primary/30 hover:bg-primary/5"
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-full bg-[#1e2433] text-left transition-all active:scale-[0.97]"
               >
-                <Search size={16} className="text-muted-foreground shrink-0" />
-                <span className="flex-1 text-left text-muted-foreground text-sm">Search for a service…</span>
-                <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <ChevronRight size={13} className="text-primary" />
-                </div>
+                <Search size={15} className="text-slate-400 shrink-0" />
+                <span className="flex-1 text-slate-400 text-sm">Where to?</span>
+                <Mic size={15} className="text-slate-400 shrink-0" />
               </button>
             )}
           </div>
 
-          {/* Category grid */}
-          {!filterCat && (
-            <>
+          {/* ── Expanded content ────────────────────────────────────────────── */}
+          {sheetExpanded && !filterCat && (
+            <div className="fade-in">
               <div className="px-4 mb-2.5">
-                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Browse Services</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Browse Services</p>
               </div>
-              <div className="px-4 grid grid-cols-4 gap-2.5 pb-4">
+              <div className="px-4 grid grid-cols-4 gap-2.5 pb-4 overflow-y-auto">
                 {CATEGORIES.map((cat, idx) => {
                   const palettes = [
                     "bg-violet-50 border-violet-100 hover:border-violet-300",
@@ -502,12 +531,12 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
                   );
                 })}
               </div>
-            </>
+            </div>
           )}
 
           {/* Filtered store list when category filter active */}
-          {filterCat && (
-            <div className="px-4 pb-4 space-y-2">
+          {sheetExpanded && filterCat && (
+            <div className="px-4 pb-4 space-y-2 overflow-y-auto fade-in" style={{ maxHeight: "calc(57vh - 130px)" }}>
               <p className="text-xs text-muted-foreground mb-1">{filteredForSheet.length} nearby</p>
               {filteredForSheet.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No {filterCat} stores yet</p>

@@ -1,0 +1,64 @@
+Great reference images! Here's the prompt to paste into Replit:
+
+---
+
+*"Please redesign the explore page to match the reference screenshots exactly. Do not change any functionality. Here is everything that needs to be updated:*
+
+***MAP STYLE — DARK MODE LIKE WAZE***
+*1. Change the Leaflet map tiles to a dark style map that looks like the Waze night mode in image 3. Use this dark tile URL instead of the current one:*
+- *https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png*
+- *Attribution: © Stadia Maps © OpenMapTiles © OpenStreetMap contributors*
+*2. The map should have a dark navy blue appearance with lighter road lines and labels — exactly like the Waze dark map in image 3*
+*3. The user location dot should be a bright blue glowing dot that stands out clearly against the dark map*
+*4. Store pins should be bright white with dark text initials so they are visible against the dark map background*
+
+***EXPLORE PAGE LAYOUT — COLLAPSED STATE***
+*5. When the explore page first loads the bottom sheet should be in a minimal collapsed state showing only:*
+- *A small grey drag handle pill at the top*
+- *The Where to? search bar as a dark rounded pill matching the Waze style — dark background, grey text, search icon on the left and a microphone icon on the right*
+- *Nothing else visible until the sheet is pulled up*
+*6. The map should take up the full screen height in this collapsed state with the bottom sheet floating over the bottom portion*
+
+***EXPLORE PAGE LAYOUT — EXPANDED STATE***
+*7. When the user pulls the bottom sheet up it expands to show:*
+- *The Where to? search bar at the top*
+- *BROWSE SERVICES label in small grey caps*
+- *The full category grid below*
+*8. The expansion should be a smooth spring animation*
+
+***WHERE TO BUTTON BEHAVIOUR***
+*9. When the user taps the Where to? search bar it should navigate to the Search page which should look like this:*
+- *Dark or white background — match whichever fits the overall design better*
+- *A back arrow on the top left*
+- *A prominent search input that is automatically focused and opens the keyboard*
+- *RECENT SEARCHES label in small grey caps*
+- *Each recent search shows a clock icon on the left, the search term in bold, the subtitle or location in grey below it, and a remove X button on the right*
+- *Results animate in as the user types*
+
+***STORE PINS ON DARK MAP***
+*10. Redesign store pins to stand out on the dark map:*
+- *White circular pins with a subtle drop shadow*
+- *Category emoji at the top inside the pin*
+- *Store initials in dark bold text below the emoji*
+- *A small white pointer at the bottom of the pin*
+- *When tapped the pin enlarges slightly with a smooth scale animation and shows the popup card*
+
+***POPUP CARD***
+*11. When a store pin is tapped show a clean popup card above the pin:*
+- *White card with rounded corners and a shadow*
+- *Store name in bold*
+- *Star rating and distance on the same line*
+- *A dark blue View Profile button*
+- *A small close X button in the top right corner*
+
+***OVERALL FEEL***
+*12. The explore page should feel exactly like Waze — dark immersive map, minimal floating UI, everything feels like it is part of the map not sitting on top of it*
+*13. The bottom sheet should feel like it is floating over the map with a subtle shadow*
+*14. All animations should be smooth and springy*
+*15. Make sure everything still works correctly on mobile screen sizes*
+
+*Do not change any other pages or any functionality. Only update the explore page and the where to search behaviour."*
+
+---
+
+This should make the explore page feel much more like Waze. Let me know what it looks like after!
