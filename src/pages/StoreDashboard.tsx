@@ -922,18 +922,6 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       ? Math.ceil(30 - minsElapsed)
       : 0;
 
-    console.log("[NoShow]", r.id.slice(-6), {
-      date: r.reservation_date,
-      start: r.start_time,
-      status: r.status,
-      apptStart_UTC: apptStartDate.toISOString(),
-      now_UTC: nowTick.toISOString(),
-      minsElapsed: Math.round(minsElapsed),
-      isToday,
-      canNoShow,
-      showNoShowCountdown,
-    });
-
     const svc = r.reservation_services?.[0] ?? null;
     const commitmentFee = store?.commitment_fee ?? 750;
     const total = svc ? svc.subtotal + commitmentFee : commitmentFee;
