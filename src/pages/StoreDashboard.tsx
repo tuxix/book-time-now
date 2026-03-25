@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, ArrowRight, Pencil, RefreshCw, CalendarDays,
-  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronUp, Receipt, Phone, User,
+  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User,
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import StoreCalendar from "@/components/StoreCalendar";
@@ -313,7 +313,7 @@ const StoreSetupScreen = ({
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const { user, signOut } = useAuth();
-  const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar" | "services">("reservations");
+  const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar" | "services" | "reviews">("reservations");
   const [store, setStore] = useState<StoreData | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [slots, setSlots] = useState<TimeSlot[]>([]);
@@ -1125,6 +1125,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     { id: "slots" as const, label: "Slots", icon: Clock },
     { id: "services" as const, label: "Menu", icon: Package },
     { id: "calendar" as const, label: "Calendar", icon: CalendarDays },
+    { id: "reviews" as const, label: "Reviews", icon: MessageSquare },
     { id: "profile" as const, label: "Profile", icon: Settings },
   ];
 
@@ -1620,55 +1621,95 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             {saving ? "Saving…" : "Save Changes"}
           </Button>
 
-          {/* Reviews section */}
-          {storeReviews.length > 0 && (
-            <div className="pt-4 border-t border-border space-y-3">
-              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <MessageSquare size={13} /> Customer Reviews
-              </h3>
-              {storeReviews.map((review) => (
-                <div key={review.id} className="p-4 rounded-2xl bg-card booka-shadow-sm">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm font-semibold text-foreground">{review.reviewer_name || "Customer"}</span>
-                    <span className="text-xs text-muted-foreground">{timeAgo(review.created_at)}</span>
-                  </div>
-                  <div className="flex items-center gap-0.5 mb-1.5">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <Star key={n} size={11} className={n <= Math.round(review.rating) ? "text-amber-400 fill-amber-400" : "text-border"} />
-                    ))}
-                  </div>
-                  {review.comment && (
-                    <p className="text-sm text-muted-foreground leading-relaxed">{review.comment}</p>
-                  )}
-                  {review.store_reply ? (
-                    <div className="mt-3 ml-2 pl-3 border-l-2 border-primary/30">
-                      <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1">Your Reply</p>
-                      <p className="text-xs text-muted-foreground leading-relaxed">{review.store_reply}</p>
-                      <button
-                        onClick={() => { setReplyTarget(review.id); setReplyText(review.store_reply || ""); }}
-                        className="text-xs text-primary font-medium mt-1"
-                      >
-                        Edit reply
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => { setReplyTarget(review.id); setReplyText(""); }}
-                      className="mt-2 flex items-center gap-1.5 text-xs text-primary font-semibold hover:underline"
-                    >
-                      <Reply size={12} /> Reply
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
           <Button data-testid="button-sign-out" variant="outline"
             className="w-full rounded-xl gap-2 text-destructive border-destructive/30 hover:bg-destructive/5"
             onClick={signOut}>
             <LogOut size={16} /> Sign Out
           </Button>
+        </div>
+      )}
+
+      {/* ── Reviews tab ───────────────────────────────────────────────────── */}
+      {tab === "reviews" && (
+        <div className="px-5 py-5 space-y-4">
+          {/* Summary card */}
+          {storeReviews.length > 0 && (() => {
+            const avg = (storeReviews.reduce((s, r) => s + r.rating, 0) / storeReviews.length);
+            const avgStr = avg.toFixed(1);
+            return (
+              <div className="p-5 rounded-2xl booka-gradient text-white booka-shadow-sm">
+                <div className="flex items-center gap-4">
+                  <div className="text-center">
+                    <p className="text-4xl font-bold leading-none">{avgStr}</p>
+                    <div className="flex items-center gap-0.5 mt-1.5 justify-center">
+                      {[1,2,3,4,5].map((n) => (
+                        <Star key={n} size={14} className={n <= Math.round(avg) ? "fill-white text-white" : "text-white/40"} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="w-px h-12 bg-white/30" />
+                  <div>
+                    <p className="text-2xl font-bold">{storeReviews.length}</p>
+                    <p className="text-xs text-white/75 mt-0.5">{storeReviews.length === 1 ? "review" : "total reviews"}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {storeReviews.length === 0 && (
+            <div className="text-center py-16 text-muted-foreground">
+              <MessageSquare size={36} className="mx-auto mb-3 opacity-20" />
+              <p className="text-sm font-medium">No reviews yet</p>
+              <p className="text-xs mt-1">Reviews from customers will appear here</p>
+            </div>
+          )}
+
+          {/* Review cards */}
+          {storeReviews.map((review) => {
+            const name = review.reviewer_name || "Customer";
+            const initials = name.slice(0, 2).toUpperCase();
+            return (
+              <div key={review.id} className="p-4 rounded-2xl bg-card booka-shadow-sm border border-border/50 space-y-2">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-full booka-gradient flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">
+                    {initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-sm font-semibold text-foreground truncate">{name}</span>
+                      <span className="text-xs text-muted-foreground ml-2 shrink-0">{timeAgo(review.created_at)}</span>
+                    </div>
+                    <Stars rating={review.rating} />
+                  </div>
+                </div>
+                {review.comment && (
+                  <p className="text-sm text-muted-foreground leading-relaxed pl-12">{review.comment}</p>
+                )}
+                {review.store_reply ? (
+                  <div className="ml-12 pl-3 border-l-2 border-primary/30 bg-primary/[0.03] rounded-r-lg py-2 pr-2">
+                    <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1">Your Reply</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{review.store_reply}</p>
+                    <button
+                      data-testid={`button-edit-reply-${review.id}`}
+                      onClick={() => { setReplyTarget(review.id); setReplyText(review.store_reply || ""); }}
+                      className="mt-1.5 flex items-center gap-1 text-xs text-primary font-semibold"
+                    >
+                      <Pencil size={11} /> Edit Reply
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    data-testid={`button-reply-${review.id}`}
+                    onClick={() => { setReplyTarget(review.id); setReplyText(""); }}
+                    className="ml-12 flex items-center gap-1.5 text-xs text-primary font-semibold"
+                  >
+                    <Reply size={12} /> Reply
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

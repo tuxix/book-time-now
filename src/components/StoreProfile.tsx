@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  ArrowLeft, Star, MapPin, Phone, Clock, MessageSquare, Heart, Flag,
+  ArrowLeft, Star, MapPin, Phone, Clock, MessageSquare, Heart, Flag, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,6 +70,8 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
   const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
   const [submittingReport, setSubmittingReport] = useState(false);
   const [reportSubmitted, setReportSubmitted] = useState(false);
+  const [carouselIdx, setCarouselIdx] = useState(0);
+  const [carouselPaused, setCarouselPaused] = useState(false);
 
   const fetchReviews = async () => {
     const { data } = await supabase
@@ -103,9 +105,20 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
       .on("postgres_changes" as any, {
         event: "INSERT", schema: "public", table: "reviews", filter: `store_id=eq.${store.id}`,
       }, () => fetchReviews())
+      .on("postgres_changes" as any, {
+        event: "UPDATE", schema: "public", table: "reviews", filter: `store_id=eq.${store.id}`,
+      }, () => fetchReviews())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [store.id]);
+
+  useEffect(() => {
+    if (reviews.length <= 1 || carouselPaused) return;
+    const timer = setInterval(() => {
+      setCarouselIdx((prev) => (prev + 1) % reviews.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [reviews.length, carouselPaused]);
 
   const submitReport = async () => {
     if (!user) return;
@@ -264,55 +277,108 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
 
       <div className="h-2 bg-secondary" />
 
-      {/* Reviews */}
+      {/* Reviews carousel */}
       <div className="px-5 py-4 pb-36">
-        <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-          <MessageSquare size={16} className="text-primary" />
-          Reviews
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <MessageSquare size={16} className="text-primary" />
+            Reviews
+          </h3>
           {liveRating.count > 0 && (
-            <span className="text-xs text-muted-foreground ml-1">({liveRating.count})</span>
+            <span className="text-sm font-semibold text-foreground">
+              {liveRating.rating} <span className="text-amber-400">★</span>
+              <span className="text-xs font-normal text-muted-foreground ml-1">· {liveRating.count} {liveRating.count === 1 ? "review" : "reviews"}</span>
+            </span>
           )}
-        </h3>
+        </div>
+
         {loadingReviews ? (
-          <div className="space-y-3">
-            {[1, 2].map((i) => <div key={i} className="h-24 rounded-xl booka-shimmer" />)}
-          </div>
+          <div className="h-32 rounded-xl booka-shimmer" />
         ) : reviews.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <MessageSquare size={28} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">No reviews yet. Be the first!</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {reviews.map((review) => {
-              const name = review.reviewer_name || "Customer";
-              const initials = name.slice(0, 2).toUpperCase();
-              return (
-                <div key={review.id} className="p-4 rounded-2xl bg-card booka-shadow-sm border border-border/50">
-                  <div className="flex items-start gap-3 mb-2">
-                    <div className="w-8 h-8 rounded-full booka-gradient flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">
-                      {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-foreground truncate">{name}</span>
-                        <span className="text-xs text-muted-foreground ml-2 shrink-0">{timeAgo(review.created_at)}</span>
+          <div
+            onMouseEnter={() => setCarouselPaused(true)}
+            onMouseLeave={() => setCarouselPaused(false)}
+            onTouchStart={() => setCarouselPaused(true)}
+            onTouchEnd={() => setCarouselPaused(false)}
+          >
+            {/* Carousel window */}
+            <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-card booka-shadow-sm">
+              {/* Arrow buttons */}
+              {reviews.length > 1 && (
+                <>
+                  <button
+                    data-testid="button-carousel-prev"
+                    onClick={() => { setCarouselIdx((p) => (p - 1 + reviews.length) % reviews.length); setCarouselPaused(true); }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-background/90 border border-border flex items-center justify-center shadow-sm active:scale-95 transition-all"
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+                  <button
+                    data-testid="button-carousel-next"
+                    onClick={() => { setCarouselIdx((p) => (p + 1) % reviews.length); setCarouselPaused(true); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-background/90 border border-border flex items-center justify-center shadow-sm active:scale-95 transition-all"
+                  >
+                    <ChevronRight size={15} />
+                  </button>
+                </>
+              )}
+
+              {/* Slide area */}
+              <div
+                className="flex transition-transform duration-500 ease-in-out"
+                style={{ transform: `translateX(-${carouselIdx * 100}%)` }}
+              >
+                {reviews.map((review) => {
+                  const name = review.reviewer_name || "Customer";
+                  const initials = name.slice(0, 2).toUpperCase();
+                  return (
+                    <div key={review.id} className="min-w-full p-4 px-10">
+                      <div className="flex items-start gap-3 mb-2">
+                        <div className="w-8 h-8 rounded-full booka-gradient flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">
+                          {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-foreground truncate">{name}</span>
+                            <span className="text-xs text-muted-foreground ml-2 shrink-0">{timeAgo(review.created_at)}</span>
+                          </div>
+                          <Stars rating={review.rating} />
+                        </div>
                       </div>
-                      <Stars rating={review.rating} />
+                      {review.comment && (
+                        <p className="text-sm text-muted-foreground leading-relaxed pl-11">{review.comment}</p>
+                      )}
+                      {review.store_reply && (
+                        <div className="mt-3 ml-11 pl-3 border-l-2 border-blue-800/40 bg-blue-950/10 dark:bg-blue-900/10 rounded-r-lg py-2 pr-2">
+                          <p className="text-[10px] font-bold text-blue-800 dark:text-blue-400 uppercase tracking-wider mb-1">Owner Response</p>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{review.store_reply}</p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  {review.comment && (
-                    <p className="text-sm text-muted-foreground leading-relaxed pl-11">{review.comment}</p>
-                  )}
-                  {review.store_reply && (
-                    <div className="mt-3 ml-11 pl-3 border-l-2 border-primary/25 bg-primary/[0.03] rounded-r-lg py-2 pr-2">
-                      <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1">Owner Reply</p>
-                      <p className="text-xs text-muted-foreground leading-relaxed">{review.store_reply}</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Dots indicator */}
+            {reviews.length > 1 && (
+              <div className="flex items-center justify-center gap-1.5 mt-3">
+                {reviews.map((_, i) => (
+                  <button
+                    key={i}
+                    data-testid={`button-carousel-dot-${i}`}
+                    onClick={() => { setCarouselIdx(i); setCarouselPaused(true); }}
+                    className={`rounded-full transition-all duration-300 ${i === carouselIdx ? "w-4 h-2 bg-primary" : "w-2 h-2 bg-border hover:bg-muted-foreground"}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
