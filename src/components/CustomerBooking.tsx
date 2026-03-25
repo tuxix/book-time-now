@@ -227,11 +227,34 @@ const CustomerBooking = ({ store, onBack }: Props) => {
 
       if (selectedService && inserted?.id) {
         const allSelectedIds = Object.values(selectedItems).flat();
+        // Keep existing selection record
         await supabase.from("reservation_service_selections").insert({
           reservation_id: inserted.id,
           service_id: selectedService.id,
           selected_item_ids: allSelectedIds,
           total_price: serviceTotal,
+        });
+        // Build rich options list for receipts/history
+        const selectedOptions: { group_label: string; item_label: string; price_modifier: number }[] = [];
+        let optionsTotal = 0;
+        for (const group of selectedService.service_option_groups) {
+          const pickedIds = selectedItems[group.id] ?? [];
+          for (const itemId of pickedIds) {
+            const item = group.service_option_items.find((i) => i.id === itemId);
+            if (item) {
+              selectedOptions.push({ group_label: group.label, item_label: item.label, price_modifier: item.price_modifier });
+              optionsTotal += item.price_modifier;
+            }
+          }
+        }
+        await supabase.from("reservation_services").insert({
+          reservation_id: inserted.id,
+          service_id: selectedService.id,
+          service_name: selectedService.name,
+          base_price: selectedService.base_price,
+          selected_options: selectedOptions,
+          options_total: optionsTotal,
+          subtotal: selectedService.base_price + optionsTotal,
         });
       }
 

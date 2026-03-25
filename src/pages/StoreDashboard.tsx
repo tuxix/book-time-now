@@ -4,8 +4,9 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, Pencil, RefreshCw, CalendarDays,
-  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight,
+  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, Receipt,
 } from "lucide-react";
+import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import StoreCalendar from "@/components/StoreCalendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,7 @@ interface Reservation {
   customer_phone?: string;
   checkin_code?: string;
   cancelled_by?: string;
+  reservation_services?: ReservationServiceData[];
 }
 
 interface TimeSlot {
@@ -349,6 +351,9 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [editCategory, setEditCategory] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Receipt
+  const [receiptTarget, setReceiptTarget] = useState<Reservation | null>(null);
+
   // Code entry dialog (arrived → in_progress)
   const [codeDialog, setCodeDialog] = useState<string | null>(null);
   const [codeInput, setCodeInput] = useState("");
@@ -422,7 +427,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     const [resRes, slotsRes, reviewsRes] = await Promise.all([
       supabase
         .from("reservations")
-        .select("id, reservation_date, start_time, end_time, status, fee, customer_id, checkin_code, cancelled_by")
+        .select("id, reservation_date, start_time, end_time, status, fee, customer_id, checkin_code, cancelled_by, reservation_services(*)")
         .eq("store_id", store.id)
         .order("reservation_date", { ascending: false }),
       supabase
@@ -858,38 +863,33 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     const canAdvanceDirect = cfg.next !== null && !isArrived;
     const canRevert = cfg.prev !== null;
     const isCancelled = r.status === "cancelled";
+    const isDone = r.status === "completed" || isCancelled;
     const isCancelledByStore = isCancelled && r.cancelled_by === "store";
     const isCancelledByCustomer = isCancelled && r.cancelled_by !== "store";
-
-    const badgeLabel = isCancelledByStore
-      ? "Cancelled by Store"
-      : isCancelledByCustomer
-      ? "Cancelled by Customer"
-      : cfg.label;
-
+    const badgeLabel = isCancelledByStore ? "Cancelled by Store" : isCancelledByCustomer ? "Cancelled by Customer" : cfg.label;
     const isToday = r.reservation_date === TODAY;
-    const canCancelForCustomer =
-      isToday && (r.status === "scheduled" || r.status === "arrived");
+    const canCancelForCustomer = isToday && (r.status === "scheduled" || r.status === "arrived");
+    const svc = r.reservation_services?.[0] ?? null;
+    const commitmentFee = store?.commitment_fee ?? 750;
+    const total = svc ? svc.subtotal + commitmentFee : commitmentFee;
+    const fmt = (p: number) => `J$${Number(p).toFixed(0)}`;
 
     return (
       <div
         data-testid={`card-reservation-${r.id}`}
-        className={`p-4 rounded-2xl bg-card booka-shadow-sm slide-up ${isCancelled ? "opacity-70" : ""}`}
+        className={`rounded-2xl bg-card booka-shadow-sm slide-up overflow-hidden ${isCancelled ? "opacity-75" : ""}`}
         style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
       >
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex-1 min-w-0 mr-2">
+        {/* Header: customer + status badge */}
+        <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
             <p className="font-semibold text-sm truncate">{r.customer_name || r.customer_label}</p>
             {r.customer_phone && (
-              <a
-                href={`tel:${r.customer_phone}`}
-                className="text-xs text-primary font-medium flex items-center gap-1 mt-0.5 hover:underline"
-              >
+              <a href={`tel:${r.customer_phone}`} className="text-xs text-primary font-medium flex items-center gap-1 mt-0.5 hover:underline">
                 📞 {r.customer_phone}
               </a>
             )}
           </div>
-          {/* Status badge — tappable to advance (except arrived which needs code) */}
           <button
             data-testid={`button-status-${r.id}`}
             onClick={() => { if (canAdvanceDirect) cycleStatus(r.id, r.status); }}
@@ -900,51 +900,96 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           </button>
         </div>
 
-        <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1.5">
-          <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
-          {r.reservation_date !== TODAY && ` · ${r.reservation_date}`}
-        </p>
+        <div className="px-4 pb-4 space-y-3">
+          {/* Date + time */}
+          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+            <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
+            {r.reservation_date !== TODAY && (
+              <span className="flex items-center gap-1 ml-1"><Calendar size={11} /> {r.reservation_date}</span>
+            )}
+          </p>
 
-        <div className="flex items-center justify-between mt-2">
-          {canAdvanceDirect ? (
-            <p className="text-[10px] text-muted-foreground">Tap status badge to advance →</p>
-          ) : isArrived ? (
-            <p className="text-[10px] text-muted-foreground">Enter code to advance →</p>
+          {/* Service summary */}
+          {svc ? (
+            <div className="p-3 rounded-xl bg-secondary/50 space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-foreground">{svc.service_name}</p>
+                <p className="text-xs font-bold text-foreground">{fmt(svc.base_price)}</p>
+              </div>
+              {(svc.selected_options as any[]).map((opt, idx) => (
+                <div key={idx} className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1 h-1 rounded-full bg-primary/40 shrink-0" />
+                    {opt.group_label}: {opt.item_label}
+                  </span>
+                  <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : opt.price_modifier === 0 ? "Incl." : fmt(opt.price_modifier)}</span>
+                </div>
+              ))}
+              <div className="pt-1 border-t border-border/50 flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">Total</span>
+                <span className="text-sm font-extrabold text-primary">{fmt(total)}</span>
+              </div>
+            </div>
           ) : (
-            <span />
+            <div className="p-3 rounded-xl bg-secondary/50 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Commitment fee</span>
+              <span className="text-sm font-extrabold text-primary">{fmt(commitmentFee)}</span>
+            </div>
           )}
-          {canRevert && !isCancelled && (
+
+          {/* Status advance hint + revert */}
+          <div className="flex items-center justify-between">
+            {canAdvanceDirect ? (
+              <p className="text-[10px] text-muted-foreground">Tap badge to advance →</p>
+            ) : isArrived ? (
+              <p className="text-[10px] text-muted-foreground">Enter code to advance →</p>
+            ) : (
+              <span />
+            )}
+            {canRevert && !isCancelled && (
+              <button
+                data-testid={`button-revert-${r.id}`}
+                onClick={() => revertStatus(r.id, r.status)}
+                className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors active:scale-95"
+              >
+                ↩ Undo to {(statusConfig[r.status]?.prev ?? "").replace("_", " ")}
+              </button>
+            )}
+          </div>
+
+          {/* Arrived: Enter Code */}
+          {isArrived && (
             <button
-              data-testid={`button-revert-${r.id}`}
-              onClick={() => revertStatus(r.id, r.status)}
-              className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors active:scale-95"
+              data-testid={`button-enter-code-${r.id}`}
+              onClick={() => { setCodeDialog(r.id); setCodeInput(""); setCodeError(""); }}
+              className="w-full py-2 rounded-xl bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-purple-600 active:scale-[0.97]"
             >
-              ↩ Undo to {(statusConfig[r.status]?.prev ?? "").replace("_", " ")}
+              🔑 Enter Customer Code
+            </button>
+          )}
+
+          {/* Receipt button */}
+          {isDone && (
+            <button
+              data-testid={`button-receipt-${r.id}`}
+              onClick={() => setReceiptTarget(r)}
+              className="w-full py-2 rounded-xl border border-border text-muted-foreground text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-secondary active:scale-[0.97]"
+            >
+              <Receipt size={13} /> View Receipt
+            </button>
+          )}
+
+          {/* Cancel for Customer */}
+          {canCancelForCustomer && (
+            <button
+              data-testid={`button-cancel-for-customer-${r.id}`}
+              onClick={() => setCancelForCustomerDialog(r.id)}
+              className="w-full py-2 rounded-xl border border-red-200 text-red-500 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-red-50 active:scale-[0.97]"
+            >
+              ✕ Cancel for Customer
             </button>
           )}
         </div>
-
-        {/* Arrived: Enter Code button */}
-        {isArrived && (
-          <button
-            data-testid={`button-enter-code-${r.id}`}
-            onClick={() => { setCodeDialog(r.id); setCodeInput(""); setCodeError(""); }}
-            className="mt-3 w-full py-2 rounded-xl bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-purple-600 active:scale-[0.97]"
-          >
-            🔑 Enter Customer Code
-          </button>
-        )}
-
-        {/* Cancel for Customer button (same-day, scheduled or arrived) */}
-        {canCancelForCustomer && (
-          <button
-            data-testid={`button-cancel-for-customer-${r.id}`}
-            onClick={() => setCancelForCustomerDialog(r.id)}
-            className="mt-2 w-full py-2 rounded-xl border border-red-200 text-red-500 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-red-50 active:scale-[0.97]"
-          >
-            ✕ Cancel for Customer
-          </button>
-        )}
       </div>
     );
   };
@@ -1601,6 +1646,25 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Receipt dialog ────────────────────────────────────────────────── */}
+      {receiptTarget && (
+        <ReceiptDialog
+          open={!!receiptTarget}
+          reservation={{
+            ...receiptTarget,
+            stores: store ? {
+              name: store.name,
+              category: store.category,
+              address: store.address,
+              commitment_fee: store.commitment_fee,
+            } : null,
+          }}
+          customerName={receiptTarget.customer_name || receiptTarget.customer_label}
+          service={receiptTarget.reservation_services?.[0] ?? null}
+          onClose={() => setReceiptTarget(null)}
+        />
+      )}
 
       {/* ── Code entry dialog (arrived → in_progress) ─────────────────────── */}
       <Dialog open={!!codeDialog} onOpenChange={(o) => { if (!o) { setCodeDialog(null); setCodeInput(""); setCodeError(""); } }}>
