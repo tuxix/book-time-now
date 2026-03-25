@@ -370,6 +370,17 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [cancelForCustomerDialog, setCancelForCustomerDialog] = useState<string | null>(null);
   const [cancellingForCustomer, setCancellingForCustomer] = useState(false);
 
+  // No Show confirmation
+  const [noShowDialog, setNoShowDialog] = useState<string | null>(null);
+  const [confirmingNoShow, setConfirmingNoShow] = useState(false);
+
+  // Ticks every minute so countdown labels + no-show button auto-update
+  const [nowTick, setNowTick] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   // Services (Menu) tab
   const [storeServices, setStoreServices] = useState<StoreService[]>([]);
   const [loadingServices, setLoadingServices] = useState(false);
@@ -676,10 +687,16 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   const markNoShow = async (id: string) => {
-    const { error } = await supabase.from("reservations").update({ status: "no_show" }).eq("id", id);
-    if (error) { toast.error("Failed to mark no show."); return; }
-    setReservations((rs) => rs.map((r) => (r.id === id ? { ...r, status: "no_show" } : r)));
-    toast.success("Marked as No Show");
+    setConfirmingNoShow(true);
+    const { error } = await supabase
+      .from("reservations")
+      .update({ status: "no_show", payment_status: "forfeited" })
+      .eq("id", id);
+    setConfirmingNoShow(false);
+    setNoShowDialog(null);
+    if (error) { toast.error(`Failed to mark no show: ${error.message}`); return; }
+    setReservations((rs) => rs.map((r) => r.id === id ? { ...r, status: "no_show" } : r));
+    toast.success("Marked as No Show — commitment fee retained.");
   };
 
   const handleCodeSubmit = async () => {
@@ -892,11 +909,15 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     const isToday = r.reservation_date === TODAY;
     const canCancelForCustomer = isToday && (r.status === "scheduled" || r.status === "arrived");
 
-    // No Show: visible when appointment end time has passed and status is scheduled/arrived
-    const now = new Date();
-    const apptEnd = new Date(`${r.reservation_date}T${r.end_time}`);
-    const isPastApptTime = now > apptEnd;
-    const canNoShow = isPastApptTime && (r.status === "scheduled" || r.status === "arrived");
+    // No Show: today + scheduled + ≥30 min past start time
+    const apptStartDate = new Date(`${r.reservation_date}T${r.start_time}:00`);
+    const noShowThreshold = new Date(apptStartDate.getTime() + 30 * 60_000);
+    const canNoShow = isToday && r.status === "scheduled" && nowTick >= noShowThreshold;
+    const showNoShowCountdown = isToday && r.status === "scheduled"
+      && nowTick > apptStartDate && nowTick < noShowThreshold;
+    const minsUntilNoShow = showNoShowCountdown
+      ? Math.ceil((noShowThreshold.getTime() - nowTick.getTime()) / 60_000)
+      : 0;
 
     const svc = r.reservation_services?.[0] ?? null;
     const commitmentFee = store?.commitment_fee ?? 750;
@@ -1043,11 +1064,18 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               </button>
             )}
 
-            {/* No Show — only when appointment time passed and status is still scheduled/arrived */}
+            {/* Countdown until No Show is available */}
+            {showNoShowCountdown && (
+              <p className="flex-1 text-[11px] text-muted-foreground text-center py-1">
+                ⏳ No Show in {minsUntilNoShow} min{minsUntilNoShow !== 1 ? "s" : ""}
+              </p>
+            )}
+
+            {/* No Show — today, scheduled, ≥30 min past start */}
             {canNoShow && (
               <button
                 data-testid={`button-no-show-${r.id}`}
-                onClick={() => markNoShow(r.id)}
+                onClick={() => setNoShowDialog(r.id)}
                 className="flex-1 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-200 dark:border-slate-700 transition-all hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-[0.97]"
               >
                 <User size={12} /> No Show
@@ -1842,6 +1870,34 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                 disabled={cancellingForCustomer}
               >
                 {cancellingForCustomer ? "Cancelling…" : "Yes, Cancel"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── No Show confirmation dialog ─────────────────────────────────────── */}
+      <Dialog open={!!noShowDialog} onOpenChange={(o) => { if (!o) setNoShowDialog(null); }}>
+        <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Mark as No Show?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200">
+              <p className="text-sm text-red-800 dark:text-red-200 leading-relaxed">
+                This customer has not checked in 30 minutes after their appointment time. Marking as No Show will retain the commitment fee.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setNoShowDialog(null)}>
+                Go Back
+              </Button>
+              <Button
+                className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+                onClick={() => noShowDialog && markNoShow(noShowDialog)}
+                disabled={confirmingNoShow}
+              >
+                {confirmingNoShow ? "Marking…" : "Mark No Show"}
               </Button>
             </div>
           </div>
