@@ -909,15 +909,30 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     const isToday = r.reservation_date === TODAY;
     const canCancelForCustomer = isToday && (r.status === "scheduled" || r.status === "arrived");
 
-    // No Show: today + scheduled + ≥30 min past start time
-    const apptStartDate = new Date(`${r.reservation_date}T${r.start_time}:00`);
+    // No Show: today + scheduled + ≥30 min past start time.
+    // start_time from DB is "HH:MM:SS" in Jamaica local time (UTC-5, no DST).
+    // Append the Jamaica UTC offset so comparison with nowTick (a real UTC Date) is correct.
+    const apptStartDate = new Date(`${r.reservation_date}T${r.start_time}-05:00`);
     const noShowThreshold = new Date(apptStartDate.getTime() + 30 * 60_000);
-    const canNoShow = isToday && r.status === "scheduled" && nowTick >= noShowThreshold;
+    const minsElapsed = (nowTick.getTime() - apptStartDate.getTime()) / 60_000;
+    const canNoShow = isToday && r.status === "scheduled" && minsElapsed >= 30;
     const showNoShowCountdown = isToday && r.status === "scheduled"
-      && nowTick > apptStartDate && nowTick < noShowThreshold;
+      && minsElapsed > 0 && minsElapsed < 30;
     const minsUntilNoShow = showNoShowCountdown
-      ? Math.ceil((noShowThreshold.getTime() - nowTick.getTime()) / 60_000)
+      ? Math.ceil(30 - minsElapsed)
       : 0;
+
+    console.log("[NoShow]", r.id.slice(-6), {
+      date: r.reservation_date,
+      start: r.start_time,
+      status: r.status,
+      apptStart_UTC: apptStartDate.toISOString(),
+      now_UTC: nowTick.toISOString(),
+      minsElapsed: Math.round(minsElapsed),
+      isToday,
+      canNoShow,
+      showNoShowCountdown,
+    });
 
     const svc = r.reservation_services?.[0] ?? null;
     const commitmentFee = store?.commitment_fee ?? 750;

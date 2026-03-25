@@ -1,0 +1,43 @@
+Paste this into Replit:
+
+---
+
+*"The No Show button and countdown timer are not appearing on the store dashboard at all even when the appointment time has passed by more than 30 minutes. Please investigate and fix:*
+
+***DIAGNOSE***
+*1. Find the exact condition in the code that controls when the No Show button appears and log the following to the console for every booking card on the dashboard:*
+- *The booking start time*
+- *The current time*
+- *The difference in minutes between now and the booking start time*
+- *The current status of the booking*
+- *Whether the No Show condition evaluated to true or false and why*
+
+***FIX THE TIMING LOGIC***
+*2. The No Show button must appear when ALL of these are true:*
+- *reservation_date is today's date*
+- *status is exactly scheduled — not arrived, in_progress, completed or cancelled*
+- *The current time is more than 30 minutes past the start_time*
+
+*3. Make sure the time comparison is done correctly:*
+- *The start_time in the database is stored as a time value for example 04:00:00*
+- *Combine today's date with the start_time to create a full datetime before comparing to the current time*
+- *Do not compare time strings directly — convert both to Date objects or timestamps before comparing*
+- *Account for the correct timezone — the app is used in Jamaica which is UTC-5*
+
+***FIX THE COUNTDOWN***
+*4. The countdown label showing No Show available in X mins must appear when:*
+- *reservation_date is today*
+- *status is scheduled*
+- *The current time is less than 30 minutes past the start_time*
+- *The appointment start time has already passed — do not show a countdown for future appointments*
+
+*5. Use a setInterval running every 60 seconds that recalculates the time difference for every booking and updates both the countdown label and the No Show button visibility automatically*
+
+***TEST CASE***
+*6. There is a test booking today from 4:00 AM to 6:48 AM with status scheduled. The current time is well past 4:30 AM. The No Show button must be visible on this booking right now. Please verify the fix works for this exact case*
+
+*Do not change anything else. Check all existing code before making changes."*
+
+---
+
+Let me know what Replit says!
