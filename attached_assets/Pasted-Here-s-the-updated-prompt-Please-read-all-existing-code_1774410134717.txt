@@ -1,0 +1,109 @@
+Here's the updated prompt:
+
+---
+
+*"Please read all existing code carefully before making any changes. Do not overwrite anything already working. Give me any SQL as a code block and wait for my confirmation before continuing. Here is everything that needs to be fixed and added:*
+
+***FIX: CUSTOMER BOOKINGS TAB***
+*1. The customer Bookings tab currently only shows appointment status and time slot. Fix it so each booking card shows:*
+- *Store name and category emoji*
+- *Date and time of appointment*
+- *Service name selected*
+- *Each option chosen for example Cut Style: Fade, Add-on: Hot Towel*
+- *Itemised price breakdown — base service price, each option price modifier, commitment fee, total paid*
+- *Current status badge*
+- *Check In button if applicable*
+- *Cancel button if applicable*
+- *Leave a Review button if completed*
+
+***FIX: STORE DASHBOARD BOOKING CARDS***
+*2. Store dashboard booking cards must also show full details for each reservation:*
+- *Customer name and tappable phone number*
+- *Date and time*
+- *Service name and all options the customer selected*
+- *Full itemised price breakdown*
+- *Current status badge with forward and back arrows*
+- *No Show button if applicable*
+- *Cancel for Customer button if applicable*
+
+***RECEIPT SYSTEM***
+*3. Add a View Receipt button on every completed or cancelled booking card on both the customer Bookings tab and the store dashboard*
+
+*4. The receipt screen must show:*
+- *Receipt title and unique booking reference number*
+- *Date and time the receipt was generated*
+- *Store name, category and address*
+- *Customer name*
+- *Appointment date and time*
+- *Itemised breakdown:*
+  - *Service name and base price*
+  - *Each selected option and its price modifier*
+  - *Subtotal*
+  - *Commitment fee*
+  - *Grand total*
+- *Payment status — Paid, Refunded or Forfeited*
+- *Appointment status — Completed, Cancelled or No Show*
+- *A note at the bottom saying thank you for using [app name]*
+
+*5. The receipt should be cleanly formatted and printable — use a white card layout with clear sections and a divider line between each section*
+
+*6. Add a Download Receipt button that saves the receipt as a PDF or allows the customer to share it*
+
+***BOOKING HISTORY***
+*7. Add a History tab or section on the customer Profile page showing all past bookings in chronological order newest first*
+
+*8. Each item in the history shows:*
+- *Store name and category*
+- *Appointment date and time*
+- *Service and options chosen*
+- *Total amount paid*
+- *Final status badge — Completed, Cancelled, No Show*
+- *A View Receipt button*
+
+*9. Add a similar Booking History section on the store dashboard showing all past reservations with full details and receipts*
+
+***SQL***
+*10. Give me this as a SQL code block to make sure service selections are stored correctly against each reservation:*
+```sql
+CREATE TABLE IF NOT EXISTS public.reservation_services (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reservation_id uuid NOT NULL REFERENCES public.reservations(id) ON DELETE CASCADE,
+  service_id uuid NOT NULL,
+  service_name text NOT NULL,
+  base_price numeric(10,2) NOT NULL DEFAULT 0,
+  selected_options jsonb NOT NULL DEFAULT '[]',
+  options_total numeric(10,2) NOT NULL DEFAULT 0,
+  subtotal numeric(10,2) NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.reservation_services ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Customers can read own reservation services"
+  ON public.reservation_services FOR SELECT TO authenticated
+  USING (
+    EXISTS (SELECT 1 FROM public.reservations WHERE id = reservation_services.reservation_id AND customer_id = auth.uid())
+  );
+
+CREATE POLICY "Store owners can read their reservation services"
+  ON public.reservation_services FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.reservations r
+      JOIN public.stores s ON s.id = r.store_id
+      WHERE r.id = reservation_services.reservation_id AND s.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Customers can insert reservation services"
+  ON public.reservation_services FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM public.reservations WHERE id = reservation_services.reservation_id AND customer_id = auth.uid())
+  );
+```
+
+*Give me all SQL code blocks first in one message and wait for my confirmation that every one ran successfully before writing any code."*
+
+---
+
+Ready to paste!
