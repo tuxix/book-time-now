@@ -924,7 +924,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               <span className="text-xs font-bold text-primary">{initials}</span>
             </div>
             <p className="font-bold text-sm flex-1 min-w-0 truncate">{displayName}</p>
-            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 ${cfg.bg}`}>
+            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 ${cfg.bg} ${(r.status === "scheduled" || r.status === "arrived") ? "pulse-badge" : ""}`}>
               {badgeLabel}
             </span>
           </div>
@@ -1100,7 +1100,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   return (
     <div className="max-w-lg mx-auto min-h-screen bg-background pb-20 flex flex-col">
       {/* ── Dark blue header ─────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-30 px-5 py-4" style={{ background: "hsl(var(--booka-blue-deep))" }}>
+      <div className="sticky top-0 z-30 px-5 py-4" style={{ background: "linear-gradient(135deg, hsl(220 85% 16%) 0%, hsl(213 82% 28%) 100%)" }}>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs text-white/70 font-medium">Business Dashboard</p>

@@ -152,7 +152,7 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
   );
 
   return (
-    <div className="absolute inset-x-0 top-0 overflow-y-auto bg-background fade-in" style={{ bottom: 56, zIndex: 300 }}>
+    <div className="absolute inset-x-0 top-0 overflow-y-auto bg-background slide-in-right" style={{ bottom: 56, zIndex: 300 }}>
       {/* Header */}
       <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-2">
         <button onClick={onBack} data-testid="button-back-profile"
@@ -342,7 +342,7 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
           ) : (
             <Button
               data-testid="button-book-now"
-              className="w-full h-12 rounded-xl font-semibold text-base booka-gradient booka-shadow-blue text-white border-0"
+              className="w-full h-12 rounded-xl font-semibold text-base booka-gradient text-white border-0 booka-cta-pulse"
               onClick={onBook}
             >
               {!store.is_open ? "Book in Advance" : "Book Now"}

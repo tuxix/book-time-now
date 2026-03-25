@@ -105,7 +105,10 @@ const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, use
   return (
     <div className="absolute inset-x-0 top-0 overflow-y-auto bg-background fade-in" style={{ bottom: 56 }}>
       <div className="px-5 pt-8 pb-5 flex flex-col items-center border-b border-border">
-        <div className="w-20 h-20 rounded-full booka-gradient flex items-center justify-center text-primary-foreground text-2xl font-bold mb-3">
+        <div
+          className="w-20 h-20 rounded-full booka-gradient flex items-center justify-center text-primary-foreground text-2xl font-bold mb-3"
+          style={{ boxShadow: "0 0 0 4px hsl(213 82% 48% / 0.15), 0 8px 24px -4px hsl(213 82% 48% / 0.3)" }}
+        >
           {initials}
         </div>
         <h1 className="text-lg font-bold text-foreground">{displayName}</h1>
@@ -117,7 +120,7 @@ const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, use
           <button
             data-testid="button-switch-dashboard"
             onClick={onSwitchToDashboard}
-            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-primary/10 border border-primary/20 transition-all active:scale-[0.98]"
+            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-primary/10 border border-primary/20 transition-all active:scale-[0.98] menu-item-animate relative overflow-hidden"
           >
             <div className="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
               <Briefcase size={18} className="text-primary" />
@@ -135,11 +138,12 @@ const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, use
           </button>
         )}
 
-        {menuItems.map((item) => (
+        {menuItems.map((item, idx) => (
           <button
             key={item.label}
             onClick={() => toast.info("Coming soon!")}
-            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98]"
+            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98] menu-item-animate"
+            style={{ animationDelay: `${(idx + (onSwitchToDashboard ? 1 : 0)) * 40}ms` }}
           >
             <item.icon size={18} className="text-muted-foreground shrink-0" />
             <span className="flex-1 text-sm font-medium text-foreground">{item.label}</span>

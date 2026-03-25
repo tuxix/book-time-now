@@ -189,7 +189,7 @@ const CustomerReservations = () => {
       ref={scrollRef}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      className="absolute inset-x-0 top-0 overflow-y-auto bg-background"
+      className="absolute inset-x-0 top-0 overflow-y-auto bg-background slide-in-right"
       style={{ bottom: 56 }}
     >
       <div className="px-5 pt-6 pb-8">

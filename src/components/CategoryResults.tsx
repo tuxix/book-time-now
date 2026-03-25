@@ -20,7 +20,7 @@ const CategoryResults = ({ category, stores, userLocation, onBack, onSelect, fav
   ];
 
   return (
-    <div className="absolute inset-x-0 top-0 overflow-y-auto bg-background fade-in" style={{ bottom: 56, zIndex: 300 }}>
+    <div className="absolute inset-x-0 top-0 overflow-y-auto bg-background slide-in-right" style={{ bottom: 56, zIndex: 300 }}>
       {/* Header */}
       <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
         <button onClick={onBack} data-testid="button-back-category"

@@ -1,0 +1,90 @@
+Here's the prompt to paste into Replit:
+
+---
+
+*"Please do a full UI polish pass on the entire app and add smooth animations throughout. Read all existing code carefully before making changes. Do not break any functionality. Here is everything that needs to be done:*
+
+***LANDING PAGE — WAZE STYLE***
+*1. Redesign the landing page to feel like the Waze app. It should have:*
+- *A full screen map background using Leaflet showing Kingston Jamaica as the default view*
+- *Store pins visible on the map in the background to show the app is live and active*
+- *A dark semi transparent overlay on the bottom third of the screen*
+- *The app logo and name centered at the top with a clean bold font*
+- *A tagline below the logo for example Find and book local services near you*
+- *A large Get Started button and a Sign In button side by side or stacked at the bottom over the overlay*
+- *Smooth fade in animation when the page loads*
+- *The overall feel should be bold, modern and location focused like Waze or Uber*
+
+***GLOBAL ANIMATIONS***
+*2. Add these animations throughout the entire app:*
+- *Page transitions — every screen change should slide in from the right and slide out to the left smoothly*
+- *Bottom sheet on the explore screen should animate up smoothly when it opens and down when it closes*
+- *Buttons should have a subtle scale down effect when pressed — scale to 0.96 on tap and back to 1.0 on release*
+- *Cards should fade in and slide up slightly when a list loads — stagger each card by 50ms so they appear one after another*
+- *Status badges should have a subtle pulse animation on Scheduled and Arrived statuses to draw attention*
+- *The check in code should animate in with a pop scale effect when it appears*
+- *Loading skeletons should have a smooth shimmer animation moving left to right*
+- *Toast notifications should slide in from the top and slide out smoothly*
+- *The map pins should drop in with a bounce animation when the map loads*
+- *Modals and dialogs should scale in from 0.95 to 1.0 with a fade*
+- *The bottom navigation bar should have a smooth color transition when switching tabs*
+- *Star ratings should animate in one star at a time when a review loads*
+
+***CUSTOMER EXPLORE SCREEN***
+*3. Polish the explore screen:*
+- *The Where to search bar should have a subtle shadow and lift effect when tapped*
+- *Category cards should have a gentle scale up on hover and tap*
+- *Store cards in the bottom sheet list should slide up one by one when the category results load*
+- *The user location dot should pulse continuously like a radar ping*
+- *Map pins should show a ripple effect when tapped*
+
+***BOOKING FLOW***
+*4. Polish the booking flow:*
+- *Date picker dates should animate in from the right when the week changes*
+- *Time slot buttons should have a smooth color fill animation when selected*
+- *The price total should animate the number counting up when options are added*
+- *The confirmation screen should have a large animated checkmark drawing itself on screen*
+- *The booking reference number should fade in after the checkmark animation completes*
+
+***STORE DASHBOARD***
+*5. Polish the store dashboard:*
+- *The dark blue header should have a subtle gradient from dark blue to slightly lighter blue*
+- *Booking cards should animate in when the dashboard loads*
+- *Status badge changes should animate with a smooth crossfade between colors*
+- *The analytics charts should animate in with bars growing up from zero*
+- *The open/closed toggle should have a smooth slide animation*
+
+***CUSTOMER PROFILE***
+*6. Polish the profile screen:*
+- *The avatar circle should have a soft glow or shadow*
+- *Menu items should slide in staggered from the left when the profile loads*
+- *The Switch to Business Dashboard button should have a subtle shimmer animation to draw attention*
+- *Favourite store cards should animate in when the favourites section loads*
+
+***STORE PROFILE PAGE***
+*7. Polish the store profile page:*
+- *The store avatar or photo should animate in with a fade and scale*
+- *The star rating should fill in star by star when the page loads*
+- *Reviews should load in staggered one after another*
+- *The Book Now button should have a subtle pulse animation to encourage tapping*
+- *The announcement banner should slide down from above when it appears*
+
+***TYPOGRAPHY AND COLORS***
+*8. Do a full typography pass:*
+- *Make sure heading sizes are consistent across all screens*
+- *Make sure body text is readable at 14px minimum on mobile*
+- *Make sure all grey text has enough contrast to be readable*
+- *Use the dark blue primary color consistently for all buttons, active states and highlights*
+- *Make sure all buttons have consistent height of at least 48px for easy tapping on mobile*
+
+***OVERALL FEEL***
+*9. The app should feel premium, smooth and responsive — every interaction should have feedback whether that is a color change, a scale effect or a subtle animation. No screen should feel static or unresponsive*
+*10. All animations must respect the prefers-reduced-motion media query — if the user has reduced motion enabled on their device skip all animations gracefully*
+*11. Keep all animations under 300ms for micro interactions and under 500ms for page transitions so the app feels fast not slow*
+*12. Make sure everything still works correctly on mobile screen sizes after the UI changes*
+
+*Do not change any functionality, database queries, or business logic — only improve the visual design and add animations. Check all existing code before making changes."*
+
+---
+
+This will give the app a really polished premium feel. Let me know what it looks like after!

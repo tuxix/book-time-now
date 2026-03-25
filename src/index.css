@@ -196,6 +196,42 @@
   .heart-pop {
     animation: heartPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   }
+
+  /* Slide in from right (screen transitions) */
+  .slide-in-right {
+    animation: slideInRight 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  /* Pulse for status badges (scheduled / arrived) */
+  .pulse-badge {
+    animation: pulseBadge 2.5s ease-in-out infinite;
+  }
+
+  /* CTA button pulse (Book Now) */
+  .booka-cta-pulse {
+    animation: ctaPulse 2.8s ease-in-out infinite;
+  }
+
+  /* Map pin drop-in with bounce */
+  .pin-drop {
+    animation: pinDrop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  /* Stagger slide-in for menu items */
+  .menu-item-animate {
+    animation: slideInRight 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .menu-item-animate:nth-child(1) { animation-delay: 0ms; }
+  .menu-item-animate:nth-child(2) { animation-delay: 40ms; }
+  .menu-item-animate:nth-child(3) { animation-delay: 80ms; }
+  .menu-item-animate:nth-child(4) { animation-delay: 120ms; }
+  .menu-item-animate:nth-child(5) { animation-delay: 160ms; }
+  .menu-item-animate:nth-child(6) { animation-delay: 200ms; }
+
+  /* Pop in for check-in code */
+  .pop-in {
+    animation: popIn 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
 }
 
 /* ── Keyframes ──────────────────────────────────────────────────────────────── */
@@ -240,6 +276,42 @@
 @keyframes pulse-ring {
   0%   { transform: scale(0.8); opacity: 1; }
   100% { transform: scale(2); opacity: 0; }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(28px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes pulseBadge {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.05); opacity: 0.85; }
+}
+
+@keyframes ctaPulse {
+  0%, 100% { box-shadow: 0 8px 24px -4px hsl(213 82% 48% / 0.4); }
+  50%       { box-shadow: 0 8px 36px -4px hsl(213 82% 48% / 0.7), 0 0 0 5px hsl(213 82% 48% / 0.12); }
+}
+
+@keyframes pinDrop {
+  from { transform: translateY(-24px) scale(0.7); opacity: 0; }
+  to   { transform: translateY(0)     scale(1);   opacity: 1; }
+}
+
+@keyframes popIn {
+  from { transform: scale(0.7); opacity: 0; }
+  60%  { transform: scale(1.08); }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+/* ── Respect reduced motion ─────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ── Leaflet ─────────────────────────────────────────────────────────────────── */
