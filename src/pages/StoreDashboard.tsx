@@ -3,8 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Clock, Calendar, Settings, LogOut,
-  Plus, Trash2, Store, ArrowLeft, Pencil, RefreshCw, CalendarDays,
-  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, Receipt,
+  Plus, Trash2, Store, ArrowLeft, ArrowRight, Pencil, RefreshCw, CalendarDays,
+  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronUp, Receipt, Phone, User,
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import StoreCalendar from "@/components/StoreCalendar";
@@ -123,7 +123,10 @@ const statusConfig: Record<string, { bg: string; label: string; next: string | n
   in_progress: { bg: "bg-orange-500 text-white",  label: "In Progress", next: "completed",   prev: "arrived" },
   completed:   { bg: "bg-green-500 text-white",   label: "Completed",   next: null,          prev: "in_progress" },
   cancelled:   { bg: "bg-red-400 text-white",     label: "Cancelled",   next: null,          prev: null },
+  no_show:     { bg: "bg-slate-500 text-white",   label: "No Show",     next: null,          prev: null },
 };
+
+const PAST_STATUSES = new Set(["completed", "cancelled", "no_show"]);
 
 async function geocodeAddress(addr: string): Promise<{ lat: number; lng: number } | null> {
   try {
@@ -353,6 +356,9 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // Receipt
   const [receiptTarget, setReceiptTarget] = useState<Reservation | null>(null);
+
+  // Past bookings collapsed/expanded
+  const [showPast, setShowPast] = useState(false);
 
   // Code entry dialog (arrived → in_progress)
   const [codeDialog, setCodeDialog] = useState<string | null>(null);
@@ -669,6 +675,13 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     toast.success(`Reverted to ${prev.replace("_", " ")}`);
   };
 
+  const markNoShow = async (id: string) => {
+    const { error } = await supabase.from("reservations").update({ status: "no_show" }).eq("id", id);
+    if (error) { toast.error("Failed to mark no show."); return; }
+    setReservations((rs) => rs.map((r) => (r.id === id ? { ...r, status: "no_show" } : r)));
+    toast.success("Marked as No Show");
+  };
+
   const handleCodeSubmit = async () => {
     if (!codeDialog || codeInput.length !== 4) return;
     setCodeSubmitting(true);
@@ -854,141 +867,215 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     );
   }
 
-  const todayReservations = reservations.filter((r) => r.reservation_date === TODAY);
-  const pastReservations = reservations.filter((r) => r.reservation_date !== TODAY);
+  const todayActive = reservations
+    .filter((r) => r.reservation_date === TODAY && !PAST_STATUSES.has(r.status))
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+
+  const upcomingReservations = reservations
+    .filter((r) => r.reservation_date > TODAY && !PAST_STATUSES.has(r.status))
+    .sort((a, b) => a.reservation_date.localeCompare(b.reservation_date) || a.start_time.localeCompare(b.start_time));
+
+  const pastReservations = reservations
+    .filter((r) => PAST_STATUSES.has(r.status))
+    .sort((a, b) => b.reservation_date.localeCompare(a.reservation_date) || b.start_time.localeCompare(a.start_time));
 
   const ReservationCard = ({ r, i }: { r: Reservation; i: number }) => {
     const cfg = statusConfig[r.status] || statusConfig.scheduled;
     const isArrived = r.status === "arrived";
-    const canAdvanceDirect = cfg.next !== null && !isArrived;
-    const canRevert = cfg.prev !== null;
+    const isPast = PAST_STATUSES.has(r.status);
     const isCancelled = r.status === "cancelled";
-    const isDone = r.status === "completed" || isCancelled;
+    const canRevert = cfg.prev !== null && !isPast;
+    const canAdvanceDirect = cfg.next !== null && !isArrived && !isPast;
     const isCancelledByStore = isCancelled && r.cancelled_by === "store";
     const isCancelledByCustomer = isCancelled && r.cancelled_by !== "store";
     const badgeLabel = isCancelledByStore ? "Cancelled by Store" : isCancelledByCustomer ? "Cancelled by Customer" : cfg.label;
     const isToday = r.reservation_date === TODAY;
     const canCancelForCustomer = isToday && (r.status === "scheduled" || r.status === "arrived");
+
+    // No Show: visible when appointment end time has passed and status is scheduled/arrived
+    const now = new Date();
+    const apptEnd = new Date(`${r.reservation_date}T${r.end_time}`);
+    const isPastApptTime = now > apptEnd;
+    const canNoShow = isPastApptTime && (r.status === "scheduled" || r.status === "arrived");
+
     const svc = r.reservation_services?.[0] ?? null;
     const commitmentFee = store?.commitment_fee ?? 750;
     const total = svc ? svc.subtotal + commitmentFee : commitmentFee;
     const fmt = (p: number) => `J$${Number(p).toFixed(0)}`;
+    const displayName = r.customer_name || r.customer_label || "Customer";
+    const initials = displayName.slice(0, 2).toUpperCase();
+
+    const Divider = () => <div className="border-t border-border/60" />;
+    const SectionLabel = ({ label }: { label: string }) => (
+      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{label}</p>
+    );
 
     return (
       <div
         data-testid={`card-reservation-${r.id}`}
-        className={`rounded-2xl bg-card booka-shadow-sm slide-up overflow-hidden ${isCancelled ? "opacity-75" : ""}`}
-        style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
+        className={`rounded-2xl bg-card booka-shadow-sm slide-up overflow-hidden ${isPast ? "opacity-80" : ""}`}
+        style={{ animationDelay: `${i * 40}ms`, animationFillMode: "both" }}
       >
-        {/* Header: customer + status badge */}
-        <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm truncate">{r.customer_name || r.customer_label}</p>
-            {r.customer_phone && (
-              <a href={`tel:${r.customer_phone}`} className="text-xs text-primary font-medium flex items-center gap-1 mt-0.5 hover:underline">
-                📞 {r.customer_phone}
-              </a>
-            )}
+        <div className="p-4 space-y-3">
+
+          {/* Row 1: Avatar + name + status badge */}
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <span className="text-xs font-bold text-primary">{initials}</span>
+            </div>
+            <p className="font-bold text-sm flex-1 min-w-0 truncate">{displayName}</p>
+            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 ${cfg.bg}`}>
+              {badgeLabel}
+            </span>
           </div>
-          <button
-            data-testid={`button-status-${r.id}`}
-            onClick={() => { if (canAdvanceDirect) cycleStatus(r.id, r.status); }}
-            disabled={!canAdvanceDirect}
-            className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all active:scale-95 shrink-0 ${cfg.bg} ${canAdvanceDirect ? "cursor-pointer hover:opacity-90" : "cursor-default opacity-80"}`}
-          >
-            {badgeLabel}
-          </button>
-        </div>
 
-        <div className="px-4 pb-4 space-y-3">
-          {/* Date + time */}
-          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <Clock size={11} /> {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
-            {r.reservation_date !== TODAY && (
-              <span className="flex items-center gap-1 ml-1"><Calendar size={11} /> {r.reservation_date}</span>
-            )}
-          </p>
-
-          {/* Service summary */}
-          {svc ? (
-            <div className="p-3 rounded-xl bg-secondary/50 space-y-1">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-foreground">{svc.service_name}</p>
-                <p className="text-xs font-bold text-foreground">{fmt(svc.base_price)}</p>
-              </div>
-              {(svc.selected_options as any[]).map((opt, idx) => (
-                <div key={idx} className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span className="w-1 h-1 rounded-full bg-primary/40 shrink-0" />
-                    {opt.group_label}: {opt.item_label}
-                  </span>
-                  <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : opt.price_modifier === 0 ? "Incl." : fmt(opt.price_modifier)}</span>
-                </div>
-              ))}
-              <div className="pt-1 border-t border-border/50 flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">Total</span>
-                <span className="text-sm font-extrabold text-primary">{fmt(total)}</span>
-              </div>
-            </div>
+          {/* Row 2: Phone */}
+          {r.customer_phone ? (
+            <a
+              href={`tel:${r.customer_phone}`}
+              data-testid={`link-phone-${r.id}`}
+              className="flex items-center gap-2 text-xs text-primary font-medium hover:underline active:scale-95 transition-all"
+            >
+              <Phone size={12} className="shrink-0" />
+              {r.customer_phone}
+            </a>
           ) : (
-            <div className="p-3 rounded-xl bg-secondary/50 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Commitment fee</span>
-              <span className="text-sm font-extrabold text-primary">{fmt(commitmentFee)}</span>
-            </div>
+            <p className="flex items-center gap-2 text-xs text-muted-foreground italic">
+              <Phone size={12} className="shrink-0 opacity-40" />
+              No phone on file
+            </p>
           )}
 
-          {/* Status advance hint + revert */}
-          <div className="flex items-center justify-between">
-            {canAdvanceDirect ? (
-              <p className="text-[10px] text-muted-foreground">Tap badge to advance →</p>
-            ) : isArrived ? (
-              <p className="text-[10px] text-muted-foreground">Enter code to advance →</p>
+          <Divider />
+
+          {/* APPOINTMENT */}
+          <div className="space-y-1.5">
+            <SectionLabel label="Appointment" />
+            <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Calendar size={13} className="text-muted-foreground shrink-0" />
+              {r.reservation_date === TODAY ? "Today" : format(new Date(r.reservation_date + "T12:00:00"), "EEE, MMM d")}
+              &nbsp;·&nbsp;
+              {r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
+            </p>
+          </div>
+
+          <Divider />
+
+          {/* SERVICE */}
+          <div className="space-y-1.5">
+            <SectionLabel label="Service" />
+            {svc ? (
+              <>
+                <p className="text-sm font-bold text-foreground">{svc.service_name}</p>
+                {(svc.selected_options as any[]).map((opt, idx) => (
+                  <p key={idx} className="text-xs text-muted-foreground pl-2">
+                    {opt.group_label}: {opt.item_label}
+                  </p>
+                ))}
+              </>
             ) : (
-              <span />
+              <p className="text-xs text-muted-foreground italic">No service selected</p>
             )}
-            {canRevert && !isCancelled && (
+          </div>
+
+          <Divider />
+
+          {/* PRICE BREAKDOWN */}
+          <div className="space-y-1.5">
+            <SectionLabel label="Price Breakdown" />
+            {svc ? (
+              <>
+                <div className="flex justify-between text-xs text-foreground">
+                  <span>{svc.service_name}</span>
+                  <span>{fmt(svc.base_price)}</span>
+                </div>
+                {(svc.selected_options as any[]).filter((o) => o.price_modifier !== 0).map((opt, idx) => (
+                  <div key={idx} className="flex justify-between text-xs text-muted-foreground">
+                    <span>{opt.item_label}</span>
+                    <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : fmt(opt.price_modifier)}</span>
+                  </div>
+                ))}
+              </>
+            ) : null}
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Commitment fee</span>
+              <span>{fmt(commitmentFee)}</span>
+            </div>
+            <div className="flex justify-between text-sm font-extrabold text-foreground pt-0.5 border-t border-border/60">
+              <span>Total</span>
+              <span className="text-primary">{fmt(total)}</span>
+            </div>
+          </div>
+
+          <Divider />
+
+          {/* ACTION BUTTONS ROW */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Back arrow — revert status */}
+            <button
+              data-testid={`button-revert-${r.id}`}
+              onClick={() => canRevert && revertStatus(r.id, r.status)}
+              disabled={!canRevert}
+              title={canRevert ? `Revert to ${(cfg.prev ?? "").replace("_", " ")}` : "Already at first status"}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-95 border ${canRevert ? "border-border text-foreground hover:bg-secondary" : "border-border/30 text-muted-foreground/30 cursor-not-allowed"}`}
+            >
+              <ArrowLeft size={15} />
+            </button>
+
+            {/* Forward arrow — advance status */}
+            {isArrived ? (
               <button
-                data-testid={`button-revert-${r.id}`}
-                onClick={() => revertStatus(r.id, r.status)}
-                className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors active:scale-95"
+                data-testid={`button-enter-code-${r.id}`}
+                onClick={() => { setCodeDialog(r.id); setCodeInput(""); setCodeError(""); }}
+                className="flex-1 h-9 rounded-xl bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-purple-600 active:scale-[0.97]"
               >
-                ↩ Undo to {(statusConfig[r.status]?.prev ?? "").replace("_", " ")}
+                🔑 Enter Code
+              </button>
+            ) : (
+              <button
+                data-testid={`button-advance-${r.id}`}
+                onClick={() => canAdvanceDirect && cycleStatus(r.id, r.status)}
+                disabled={!canAdvanceDirect}
+                title={canAdvanceDirect ? `Advance to ${(cfg.next ?? "").replace("_", " ")}` : isPast ? "Booking is closed" : "Already at final status"}
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-95 border ${canAdvanceDirect ? "border-border text-foreground hover:bg-secondary" : "border-border/30 text-muted-foreground/30 cursor-not-allowed"}`}
+              >
+                <ArrowRight size={15} />
+              </button>
+            )}
+
+            {/* No Show — only when appointment time passed and status is still scheduled/arrived */}
+            {canNoShow && (
+              <button
+                data-testid={`button-no-show-${r.id}`}
+                onClick={() => markNoShow(r.id)}
+                className="flex-1 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-200 dark:border-slate-700 transition-all hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-[0.97]"
+              >
+                <User size={12} /> No Show
+              </button>
+            )}
+
+            {/* Receipt — completed or cancelled */}
+            {isPast && (
+              <button
+                data-testid={`button-receipt-${r.id}`}
+                onClick={() => setReceiptTarget(r)}
+                className="flex-1 h-9 rounded-xl border border-border text-muted-foreground text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-secondary active:scale-[0.97]"
+              >
+                <Receipt size={13} /> Receipt
+              </button>
+            )}
+
+            {/* Cancel for Customer — same-day, not yet past */}
+            {canCancelForCustomer && (
+              <button
+                data-testid={`button-cancel-for-customer-${r.id}`}
+                onClick={() => setCancelForCustomerDialog(r.id)}
+                className="flex-1 h-9 rounded-xl border border-red-200 text-red-500 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-red-50 active:scale-[0.97]"
+              >
+                ✕ Cancel
               </button>
             )}
           </div>
-
-          {/* Arrived: Enter Code */}
-          {isArrived && (
-            <button
-              data-testid={`button-enter-code-${r.id}`}
-              onClick={() => { setCodeDialog(r.id); setCodeInput(""); setCodeError(""); }}
-              className="w-full py-2 rounded-xl bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-purple-600 active:scale-[0.97]"
-            >
-              🔑 Enter Customer Code
-            </button>
-          )}
-
-          {/* Receipt button */}
-          {isDone && (
-            <button
-              data-testid={`button-receipt-${r.id}`}
-              onClick={() => setReceiptTarget(r)}
-              className="w-full py-2 rounded-xl border border-border text-muted-foreground text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-secondary active:scale-[0.97]"
-            >
-              <Receipt size={13} /> View Receipt
-            </button>
-          )}
-
-          {/* Cancel for Customer */}
-          {canCancelForCustomer && (
-            <button
-              data-testid={`button-cancel-for-customer-${r.id}`}
-              onClick={() => setCancelForCustomerDialog(r.id)}
-              className="w-full py-2 rounded-xl border border-red-200 text-red-500 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-red-50 active:scale-[0.97]"
-            >
-              ✕ Cancel for Customer
-            </button>
-          )}
         </div>
       </div>
     );
@@ -1072,24 +1159,47 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
           <AnalyticsSection reservations={reservations} reviews={storeReviews} />
 
-          <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">Today's Bookings</h2>
-          {todayReservations.length === 0 ? (
+          {/* ── TODAY ─────────────────────────────────────────── */}
+          <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Today</h2>
+          {todayActive.length === 0 ? (
             <div className="p-4 rounded-2xl bg-secondary text-center mb-5">
-              <p className="text-sm text-muted-foreground">No bookings today</p>
+              <p className="text-sm text-muted-foreground">No active bookings today</p>
             </div>
           ) : (
-            <div className="space-y-3 mb-5">
-              {todayReservations.map((r, i) => <ReservationCard key={r.id} r={r} i={i} />)}
+            <div className="space-y-3 mb-6">
+              {todayActive.map((r, i) => <ReservationCard key={r.id} r={r} i={i} />)}
             </div>
           )}
 
-          {pastReservations.length > 0 && (
+          {/* ── UPCOMING ──────────────────────────────────────── */}
+          {upcomingReservations.length > 0 && (
             <>
-              <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">All Bookings</h2>
-              <div className="space-y-3">
-                {pastReservations.map((r, i) => <ReservationCard key={r.id} r={r} i={i} />)}
+              <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Upcoming</h2>
+              <div className="space-y-3 mb-6">
+                {upcomingReservations.map((r, i) => <ReservationCard key={r.id} r={r} i={i} />)}
               </div>
             </>
+          )}
+
+          {/* ── PAST ──────────────────────────────────────────── */}
+          {pastReservations.length > 0 && (
+            <div className="mb-4">
+              <button
+                data-testid="button-toggle-past"
+                onClick={() => setShowPast((p) => !p)}
+                className="w-full flex items-center justify-between py-2.5 px-3 rounded-xl bg-secondary hover:bg-secondary/80 transition-all active:scale-[0.98] mb-3"
+              >
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                  Past Bookings ({pastReservations.length})
+                </span>
+                {showPast ? <ChevronUp size={15} className="text-muted-foreground" /> : <ChevronDown size={15} className="text-muted-foreground" />}
+              </button>
+              {showPast && (
+                <div className="space-y-3">
+                  {pastReservations.map((r, i) => <ReservationCard key={r.id} r={r} i={i} />)}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

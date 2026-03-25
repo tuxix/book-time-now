@@ -1,0 +1,47 @@
+Here's the prompt to paste into Replit:
+
+---
+
+*"The Bookings tab on the store dashboard is jumbled and hard to read. Please reorganize each booking card cleanly in this exact order from top to bottom:*
+
+***BOOKING CARD LAYOUT***
+*1. Top row — customer avatar circle with initials on the left, customer full name in bold next to it, and the status badge on the far right*
+*2. Second row — tappable phone number with a phone icon*
+*3. Divider line*
+*4. Appointment section label in small grey caps: APPOINTMENT*
+*5. Date and time on one line with a calendar icon*
+*6. Divider line*
+*7. Service section label in small grey caps: SERVICE*
+*8. Service name in bold*
+*9. Each selected option on its own line in smaller grey text for example Cut Style: Fade*
+*10. Divider line*
+*11. Price section label in small grey caps: PRICE BREAKDOWN*
+*12. Each price line item left aligned with the amount right aligned:*
+- *Service base price*
+- *Each option modifier*
+- *Commitment fee*
+- *Bold total line at the bottom*
+*13. Divider line*
+*14. Action buttons row at the very bottom:*
+- *Back arrow button on the far left to revert status — greyed out if already Scheduled*
+- *Forward arrow button next to it to advance status — greyed out if Completed*
+- *No Show button — only visible if appointment time has passed and status is Scheduled or Arrived*
+- *Cancel for Customer button — only visible on same day bookings*
+
+***SECTION ORGANIZATION***
+*15. Group bookings into three clearly labeled sections:*
+- *TODAY — bookings scheduled for today sorted by appointment time*
+- *UPCOMING — future bookings sorted by date*
+- *PAST — completed, cancelled and no show bookings sorted newest first, collapsed by default with a Show Past Bookings button to expand*
+
+***GENERAL***
+*16. Make sure each card has consistent padding and spacing — nothing should feel cramped or overlapping*
+*17. Make sure the cards look clean on mobile screen sizes*
+*18. Use subtle card shadows and rounded corners to separate each booking clearly*
+*19. Do not change any booking logic or functionality — only reorganize the visual layout*
+
+*Check all existing code before making changes. Do not break anything already working."*
+
+---
+
+Let me know what it looks like after!
