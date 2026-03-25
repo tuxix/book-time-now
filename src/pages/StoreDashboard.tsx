@@ -651,7 +651,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     if (!file || !store) return;
     setAvatarUploading(true);
     const ext = file.name.split(".").pop() || "jpg";
-    const path = `${store.id}/avatar.${ext}`;
+    const path = `${user!.id}/avatar.${ext}`;
     const { error: upErr } = await supabase.storage
       .from("store-avatars")
       .upload(path, file, { upsert: true, contentType: file.type });
