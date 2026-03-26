@@ -211,6 +211,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         return;
       }
 
+      const totalCharged = selectedService ? serviceTotal : commitmentFee;
       const { data: inserted, error } = await supabase
         .from("reservations")
         .insert({
@@ -219,6 +220,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           reservation_date: selectedDateStr,
           start_time: slot.start_time,
           end_time: slot.end_time,
+          total_amount: totalCharged,
         })
         .select("id")
         .single();
@@ -337,11 +339,17 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               <div>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Service</p>
                 <p className="text-sm font-semibold text-foreground mt-0.5">{confirmed.serviceName}</p>
-                {confirmed.serviceTotal !== undefined && (
-                  <p className="text-xs text-primary font-bold mt-0.5">{fmt(confirmed.serviceTotal)}</p>
-                )}
               </div>
             )}
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Charged</p>
+              <p className="text-xl font-extrabold text-primary mt-0.5">
+                {fmt(confirmed.serviceTotal ?? commitmentFee)}
+              </p>
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
+                Includes {fmt(commitmentFee)} commitment deposit
+              </p>
+            </div>
             <div>
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Date</p>
               <p className="text-sm font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
@@ -563,25 +571,31 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                       );
                     });
                   })}
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Commitment Fee</span>
-                    <span className="text-muted-foreground">+{fmt(commitmentFee)}</span>
+                  <div className="flex items-center justify-between pt-1.5 border-t border-border/50 text-xs text-muted-foreground">
+                    <span>Subtotal</span>
+                    <span>{fmt(serviceTotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400">
+                    <span>Commitment deposit (held until appointment)</span>
+                    <span>{fmt(commitmentFee)}</span>
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t border-border">
-                    <span className="text-sm font-bold text-foreground">Total</span>
-                    <span className="text-2xl font-extrabold text-primary">{fmt(serviceTotal + commitmentFee)}</span>
+                    <span className="text-sm font-bold text-foreground">Total charged today</span>
+                    <span className="text-2xl font-extrabold text-primary">{fmt(serviceTotal)}</span>
                   </div>
                 </div>
               ) : (
                 <div className="pt-2 border-t border-border">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Commitment Fee</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total charged today</p>
                   <p className="text-2xl font-extrabold text-primary mt-0.5">{fmt(commitmentFee)}</p>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    This deposit will be deducted from your final service price at the store.
-                  </p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Commitment deposit — held until your appointment</p>
                 </div>
               )}
             </div>
+
+            <p className="text-[11px] text-muted-foreground text-center leading-relaxed px-1">
+              Your {fmt(commitmentFee)} deposit is released to the store on completion. If you do not show up, the deposit is retained by the store and the remainder is refunded.
+            </p>
 
             <Button
               data-testid="button-confirm-pay"
@@ -597,7 +611,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               ) : (
                 <span className="flex items-center justify-center gap-2">
                   <CreditCard size={16} />
-                  Pay Commitment Fee {fmt(commitmentFee)}
+                  Pay {fmt(selectedService ? serviceTotal : commitmentFee)} · Confirm Booking
                 </span>
               )}
             </Button>

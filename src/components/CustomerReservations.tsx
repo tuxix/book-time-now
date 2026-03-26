@@ -20,6 +20,10 @@ interface Reservation {
   end_time: string;
   status: string;
   fee: number;
+  payment_status?: string;
+  total_amount?: number;
+  refund_amount?: number;
+  retained_amount?: number;
   checkin_code?: string;
   cancelled_by?: string;
   stores: {
@@ -153,17 +157,28 @@ const CustomerReservations = () => {
   const handleCancelConfirm = async () => {
     if (!cancelTarget) return;
     setCancelling(true);
+    const info = checkCancellation(cancelTarget);
+    const commitmentFee = cancelTarget.stores?.commitment_fee ?? 750;
+    const svc = cancelTarget.reservation_services?.[0] ?? null;
+    const totalAmount = cancelTarget.total_amount ?? (svc ? svc.subtotal : commitmentFee);
+    const paymentFields = info.feeForfeited
+      ? { payment_status: "partially_refunded", retained_amount: commitmentFee, refund_amount: Math.max(0, totalAmount - commitmentFee) }
+      : { payment_status: "refunded", retained_amount: 0, refund_amount: totalAmount };
     const { error } = await supabase
       .from("reservations")
-      .update({ status: "cancelled", cancelled_by: "customer" })
+      .update({ status: "cancelled", cancelled_by: "customer", ...paymentFields })
       .eq("id", cancelTarget.id);
     if (error) {
       toast.error("Could not cancel. Please try again.");
     } else {
       setReservations((prev) =>
-        prev.map((r) => r.id === cancelTarget.id ? { ...r, status: "cancelled", cancelled_by: "customer" } : r)
+        prev.map((r) => r.id === cancelTarget.id ? { ...r, status: "cancelled", cancelled_by: "customer", ...paymentFields } : r)
       );
-      toast.success("Appointment cancelled.");
+      toast.success(
+        info.feeForfeited
+          ? `Cancelled — ${fmt(paymentFields.refund_amount!)} will be refunded, ${fmt(commitmentFee)} retained.`
+          : "Appointment cancelled — full refund will be processed."
+      );
     }
     setCancelling(false);
     setCancelTarget(null);
@@ -213,7 +228,7 @@ const CustomerReservations = () => {
     const canCancel = r.status === "scheduled";
     const svc = r.reservation_services?.[0] ?? null;
     const commitmentFee = r.stores?.commitment_fee ?? 750;
-    const total = svc ? svc.subtotal + commitmentFee : commitmentFee;
+    const total = r.total_amount ?? (svc ? svc.subtotal : commitmentFee);
     const emoji = getCategoryEmoji(r.stores?.category ?? "");
     const isActive = r.status === "scheduled" || r.status === "arrived";
 
@@ -270,18 +285,18 @@ const CustomerReservations = () => {
                   <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : opt.price_modifier === 0 ? "Incl." : fmt(opt.price_modifier)}</span>
                 </div>
               ))}
-              <div className="border-t border-border/50 pt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>Commitment fee</span>
-                <span>+{fmt(commitmentFee)}</span>
+              <div className="border-t border-border/50 pt-1.5 flex items-center justify-between text-[11px] text-amber-600 dark:text-amber-400">
+                <span>Commitment deposit (included)</span>
+                <span>{fmt(commitmentFee)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">Total paid</span>
+                <span className="text-xs font-bold text-foreground">Total charged</span>
                 <span className="text-sm font-extrabold text-primary">{fmt(total)}</span>
               </div>
             </div>
           ) : (
             <div className="p-3 rounded-xl bg-secondary/50 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Commitment fee</span>
+              <span className="text-xs text-muted-foreground">Commitment deposit</span>
               <span className="text-sm font-extrabold text-primary">{fmt(commitmentFee)}</span>
             </div>
           )}
@@ -325,7 +340,7 @@ const CustomerReservations = () => {
   const renderHistoryCard = (r: Reservation, i: number) => {
     const svc = r.reservation_services?.[0] ?? null;
     const commitmentFee = r.stores?.commitment_fee ?? 750;
-    const total = svc ? svc.subtotal + commitmentFee : commitmentFee;
+    const total = r.total_amount ?? (svc ? svc.subtotal : commitmentFee);
     const emoji = getCategoryEmoji(r.stores?.category ?? "");
 
     return (
@@ -375,9 +390,26 @@ const CustomerReservations = () => {
                 </div>
               ))}
               <div className="border-t border-border/50 pt-1.5 flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">Total paid</span>
+                <span className="text-xs font-bold text-foreground">Total charged</span>
                 <span className="text-sm font-extrabold text-primary">{fmt(total)}</span>
               </div>
+            </div>
+          )}
+
+          {/* Payment outcome */}
+          {r.status === "completed" && (
+            <div className="px-3 py-2 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700">
+              <p className="text-xs font-semibold text-green-700 dark:text-green-300">
+                Payment complete · {fmt(total)} paid
+              </p>
+            </div>
+          )}
+          {r.status === "no_show" && r.refund_amount != null && r.retained_amount != null && (
+            <div className="px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">No Show</p>
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">
+                {fmt(r.retained_amount)} retained by store · {fmt(r.refund_amount)} to be refunded
+              </p>
             </div>
           )}
 
@@ -443,13 +475,37 @@ const CustomerReservations = () => {
           </div>
 
           {/* Cancellation notice */}
-          <div className={`px-3 py-2.5 rounded-xl border ${isCancelledByStore ? "bg-orange-50 border-orange-200" : "bg-red-50 border-red-100"}`}>
-            <p className={`text-xs font-semibold ${isCancelledByStore ? "text-orange-700" : "text-red-600"}`}>
-              {isCancelledByStore ? "Cancelled by Store" : "Cancelled by You"}
+          <div className={`px-3 py-2.5 rounded-xl border ${
+            isCancelledByStore
+              ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700"
+              : r.payment_status === "refunded"
+              ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
+              : "bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-700"
+          }`}>
+            <p className={`text-xs font-semibold ${
+              isCancelledByStore
+                ? "text-blue-700 dark:text-blue-300"
+                : r.payment_status === "refunded"
+                ? "text-green-700 dark:text-green-300"
+                : "text-red-600 dark:text-red-300"
+            }`}>
+              {isCancelledByStore ? "Appointment cancelled by store" : "Cancelled by You"}
             </p>
-            {svc && (
+            {isCancelledByStore && r.refund_amount != null ? (
+              <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-0.5">
+                Full refund of {fmt(r.refund_amount)} processed
+              </p>
+            ) : r.payment_status === "partially_refunded" && r.refund_amount != null && r.retained_amount != null ? (
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Commitment fee of {fmt(commitmentFee)} — {isCancelledByStore ? "refunded" : "not refunded"}
+                {fmt(r.refund_amount)} refunded · {fmt(r.retained_amount)} retained as per cancellation policy
+              </p>
+            ) : r.payment_status === "refunded" && r.refund_amount != null ? (
+              <p className="text-[11px] text-green-600 dark:text-green-400 mt-0.5">
+                Full refund of {fmt(r.refund_amount)} processed
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {isCancelledByStore ? "Full refund will be processed" : `${fmt(commitmentFee)} commitment deposit retained`}
               </p>
             )}
           </div>

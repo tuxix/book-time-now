@@ -26,6 +26,10 @@ export interface ReceiptReservation {
   status: string;
   cancelled_by?: string;
   fee?: number;
+  payment_status?: string;
+  total_amount?: number;
+  refund_amount?: number;
+  retained_amount?: number;
   stores: {
     name: string;
     category?: string;
@@ -44,7 +48,11 @@ interface Props {
 
 const fmt = (p: number) => `J$${Number(p).toFixed(0)}`;
 
-const paymentStatus = (status: string, cancelledBy?: string) => {
+const resolvePaymentStatus = (ps: string | undefined, status: string, cancelledBy?: string) => {
+  if (ps === "paid") return { label: "Paid in Full", cls: "text-green-600" };
+  if (ps === "refunded") return { label: "Fully Refunded", cls: "text-blue-600" };
+  if (ps === "partially_refunded") return { label: "Partially Refunded", cls: "text-amber-600" };
+  if (ps === "forfeited") return { label: "Forfeited", cls: "text-red-600" };
   if (status === "completed") return { label: "Paid", cls: "text-green-600" };
   if (status === "cancelled")
     return cancelledBy === "store"
@@ -64,8 +72,8 @@ const ReceiptDialog = ({ reservation: r, customerName, service, open, onClose }:
   const ref = r.id.split("-")[0].toUpperCase();
   const emoji = getCategoryEmoji(r.stores?.category ?? "");
   const commitmentFee = r.stores?.commitment_fee ?? 750;
-  const total = service ? service.subtotal + commitmentFee : commitmentFee;
-  const pStatus = paymentStatus(r.status, r.cancelled_by);
+  const total = r.total_amount ?? (service ? service.subtotal : commitmentFee);
+  const pStatus = resolvePaymentStatus(r.payment_status, r.status, r.cancelled_by);
   const apptStatus = apptStatusLabel(r.status, r.cancelled_by);
   const generatedAt = format(new Date(), "MMM d, yyyy 'at' h:mm a");
 
@@ -159,25 +167,39 @@ const ReceiptDialog = ({ reservation: r, customerName, service, open, onClose }:
                     <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : opt.price_modifier === 0 ? "Included" : fmt(opt.price_modifier)}</span>
                   </div>
                 ))}
-                <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/50">
-                  <span>Service subtotal</span>
-                  <span>{fmt(service.subtotal)}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Commitment fee</span>
-                  <span>+{fmt(commitmentFee)}</span>
+                <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 pt-1 border-t border-border/50">
+                  <span>Commitment deposit (held until appointment)</span>
+                  <span>{fmt(commitmentFee)}</span>
                 </div>
               </>
             ) : (
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>Commitment fee</span>
+              <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 text-xs">
+                <span>Commitment deposit (held until appointment)</span>
                 <span>{fmt(commitmentFee)}</span>
               </div>
             )}
             <div className="flex items-center justify-between pt-2 border-t border-border">
-              <span className="font-bold text-foreground text-sm">Total Paid</span>
+              <span className="font-bold text-foreground text-sm">Total Charged</span>
               <span className="text-2xl font-extrabold text-primary">{fmt(total)}</span>
             </div>
+            {r.payment_status === "partially_refunded" && r.refund_amount != null && r.retained_amount != null && (
+              <div className="pt-1 space-y-1 border-t border-border/50">
+                <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400">
+                  <span>Retained by store</span>
+                  <span>{fmt(r.retained_amount)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-400">
+                  <span>Refunded to customer</span>
+                  <span>{fmt(r.refund_amount)}</span>
+                </div>
+              </div>
+            )}
+            {r.payment_status === "refunded" && r.refund_amount != null && (
+              <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-400 pt-1 border-t border-border/50">
+                <span>Full refund processed</span>
+                <span>{fmt(r.refund_amount)}</span>
+              </div>
+            )}
           </div>
 
           {/* Payment + Appt status */}

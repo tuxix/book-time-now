@@ -29,6 +29,10 @@ interface Reservation {
   end_time: string;
   status: string;
   fee: number;
+  payment_status?: string;
+  total_amount?: number;
+  refund_amount?: number;
+  retained_amount?: number;
   customer_id: string;
   customer_label: string;
   customer_name?: string;
@@ -444,7 +448,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     const [resRes, slotsRes, reviewsRes] = await Promise.all([
       supabase
         .from("reservations")
-        .select("id, reservation_date, start_time, end_time, status, fee, customer_id, checkin_code, cancelled_by, reservation_services(*)")
+        .select("id, reservation_date, start_time, end_time, status, fee, payment_status, total_amount, refund_amount, retained_amount, customer_id, checkin_code, cancelled_by, reservation_services(*)")
         .eq("store_id", store.id)
         .order("reservation_date", { ascending: false }),
       supabase
@@ -688,15 +692,32 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const markNoShow = async (id: string) => {
     setConfirmingNoShow(true);
+    const reservation = reservations.find((r) => r.id === id);
+    const commitmentFee = store?.commitment_fee ?? 750;
+    const totalAmount = reservation?.total_amount ?? commitmentFee;
+    const retainedAmount = commitmentFee;
+    const refundAmount = Math.max(0, totalAmount - retainedAmount);
     const { error } = await supabase
       .from("reservations")
-      .update({ status: "no_show", payment_status: "forfeited" })
+      .update({
+        status: "no_show",
+        payment_status: "partially_refunded",
+        retained_amount: retainedAmount,
+        refund_amount: refundAmount,
+      })
       .eq("id", id);
     setConfirmingNoShow(false);
     setNoShowDialog(null);
     if (error) { toast.error(`Failed to mark no show: ${error.message}`); return; }
-    setReservations((rs) => rs.map((r) => r.id === id ? { ...r, status: "no_show" } : r));
-    toast.success("Marked as No Show — commitment fee retained.");
+    setReservations((rs) => rs.map((r) => r.id === id ? {
+      ...r,
+      status: "no_show",
+      payment_status: "partially_refunded",
+      retained_amount: retainedAmount,
+      refund_amount: refundAmount,
+    } : r));
+    const fmt = (p: number) => `J$${Number(p).toFixed(0)}`;
+    toast.success(`No Show marked — ${fmt(retainedAmount)} retained, ${fmt(refundAmount)} to be refunded.`);
   };
 
   const handleCodeSubmit = async () => {
@@ -733,15 +754,31 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const handleCancelForCustomer = async () => {
     if (!cancelForCustomerDialog) return;
     setCancellingForCustomer(true);
+    const reservation = reservations.find((r) => r.id === cancelForCustomerDialog);
+    const commitmentFee = store?.commitment_fee ?? 750;
+    const totalAmount = reservation?.total_amount ?? commitmentFee;
     const { error } = await supabase
       .from("reservations")
-      .update({ status: "cancelled", cancelled_by: "store" })
+      .update({
+        status: "cancelled",
+        cancelled_by: "store",
+        payment_status: "refunded",
+        refund_amount: totalAmount,
+        retained_amount: 0,
+      })
       .eq("id", cancelForCustomerDialog);
     setCancellingForCustomer(false);
     if (error) { toast.error("Failed to cancel."); return; }
-    setReservations((prev) => prev.map((r) => r.id === cancelForCustomerDialog ? { ...r, status: "cancelled", cancelled_by: "store" } : r));
+    setReservations((prev) => prev.map((r) => r.id === cancelForCustomerDialog ? {
+      ...r,
+      status: "cancelled",
+      cancelled_by: "store",
+      payment_status: "refunded",
+      refund_amount: totalAmount,
+      retained_amount: 0,
+    } : r));
     setCancelForCustomerDialog(null);
-    toast.success("Appointment cancelled on behalf of customer.");
+    toast.success("Appointment cancelled — full refund will be processed for the customer.");
   };
 
   // ── Review reply ──────────────────────────────────────────────────────────
@@ -924,7 +961,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
     const svc = r.reservation_services?.[0] ?? null;
     const commitmentFee = store?.commitment_fee ?? 750;
-    const total = svc ? svc.subtotal + commitmentFee : commitmentFee;
+    const total = r.total_amount ?? (svc ? svc.subtotal + commitmentFee : commitmentFee);
     const fmt = (p: number) => `J$${Number(p).toFixed(0)}`;
     const displayName = r.customer_name || r.customer_label || "Customer";
     const initials = displayName.slice(0, 2).toUpperCase();
@@ -1019,16 +1056,39 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                     <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : fmt(opt.price_modifier)}</span>
                   </div>
                 ))}
+                <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400 border-t border-border/40 pt-1">
+                  <span>Commitment deposit (included)</span>
+                  <span>{fmt(commitmentFee)}</span>
+                </div>
               </>
-            ) : null}
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Commitment fee</span>
-              <span>{fmt(commitmentFee)}</span>
-            </div>
+            ) : (
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Commitment deposit</span>
+                <span>{fmt(commitmentFee)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm font-extrabold text-foreground pt-0.5 border-t border-border/60">
-              <span>Total</span>
+              <span>Total charged</span>
               <span className="text-primary">{fmt(total)}</span>
             </div>
+            {r.payment_status === "partially_refunded" && r.refund_amount != null && r.retained_amount != null && (
+              <div className="pt-1 space-y-0.5">
+                <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400">
+                  <span>Retained by store</span>
+                  <span>{fmt(r.retained_amount)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-blue-600 dark:text-blue-400">
+                  <span>Refunded to customer</span>
+                  <span>{fmt(r.refund_amount)}</span>
+                </div>
+              </div>
+            )}
+            {r.payment_status === "refunded" && r.refund_amount != null && (
+              <div className="flex justify-between text-xs text-blue-600 dark:text-blue-400 pt-1">
+                <span>Full refund processed</span>
+                <span>{fmt(r.refund_amount)}</span>
+              </div>
+            )}
           </div>
 
           <Divider />
