@@ -261,7 +261,15 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       setPaymentStep(false);
       setServiceStep(false);
 
-      // ── Fygaro payment redirect ──────────────────────────────────────────
+      // ── PLACEHOLDER: mark payment as paid immediately (Fygaro not yet active) ─
+      if (commitmentFee > 0 && inserted?.id) {
+        await supabase
+          .from("reservations")
+          .update({ payment_status: "paid" })
+          .eq("id", inserted.id as string);
+      }
+
+      /* ── FYGARO REDIRECT (uncomment when Fygaro account is active) ──────────
       if (commitmentFee > 0 && inserted?.id) {
         const reservationId = inserted.id as string;
         const confirmedDetails = {
@@ -287,8 +295,9 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         window.location.href = fygaroUrl;
         return;
       }
+      ── END FYGARO REDIRECT ──────────────────────────────────────────────── */
 
-      // No commitment fee — show confirmation immediately
+      // Show confirmation immediately (placeholder + no-fee path)
       setConfirmed({
         date: format(activeDateObj, "MMMM d, yyyy"),
         startTime: slot.start_time.slice(0, 5),
@@ -576,25 +585,24 @@ const CustomerBooking = ({ store, onBack }: Props) => {
 
             <Button
               data-testid="button-confirm-pay"
-              className="w-full h-12 rounded-xl font-semibold text-white border-0"
-              style={{ background: "linear-gradient(135deg, #1a56db 0%, #1e3a8a 100%)" }}
+              className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
               onClick={handleBook}
               disabled={booking}
             >
               {booking ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Redirecting to Fygaro…
+                  Processing…
                 </span>
               ) : (
                 <span className="flex items-center justify-center gap-2">
                   <CreditCard size={16} />
-                  Pay {fmt(commitmentFee)} via Fygaro
+                  Pay Commitment Fee {fmt(commitmentFee)}
                 </span>
               )}
             </Button>
             <p className="text-[11px] text-muted-foreground text-center">
-              You'll be taken to Fygaro's secure payment page
+              🔒 Secure payment coming soon
             </p>
             <button
               onClick={() => { setPaymentStep(false); if (hasServices && selectedServiceId) setServiceStep(true); }}
