@@ -647,7 +647,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
                       className={`flex flex-col items-center gap-2 py-4 px-2 rounded-2xl border transition-all duration-150 active:scale-90 booka-shadow-sm ${palette}`}
                     >
                       <span className="text-3xl leading-none">{cat.emoji}</span>
-                      <span className="text-[9px] font-bold text-foreground/80 text-center leading-tight">{cat.label}</span>
+                      <span className="text-[9px] font-bold text-slate-700 text-center leading-tight">{cat.label}</span>
                     </button>
                   );
                 })}
