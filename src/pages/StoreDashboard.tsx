@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 import {
   Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, ArrowRight, Pencil, RefreshCw, CalendarDays,
-  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User,
+  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User, Sun, Moon,
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import StoreCalendar from "@/components/StoreCalendar";
@@ -317,6 +318,7 @@ const StoreSetupScreen = ({
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const { user, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar" | "services" | "reviews">("reservations");
   const [store, setStore] = useState<StoreData | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -1199,13 +1201,23 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             <h1 className="text-lg font-bold text-white">{store?.name || "My Store"}</h1>
             <p className="text-xs text-white/60 mt-0.5">{format(new Date(), "EEEE, MMM d")}</p>
           </div>
-          <button
-            data-testid="button-back-to-app"
-            onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-semibold active:scale-95 transition-all"
-          >
-            <ArrowLeft size={14} /> Back to App
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="button-toggle-theme-dashboard"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-white/15 text-white active:scale-95 transition-all"
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button
+              data-testid="button-back-to-app"
+              onClick={onBack}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-semibold active:scale-95 transition-all"
+            >
+              <ArrowLeft size={14} /> Back to App
+            </button>
+          </div>
         </div>
       </div>
 

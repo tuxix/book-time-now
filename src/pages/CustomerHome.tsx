@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 import {
   Search, Calendar, User, MapPin, ChevronRight, Star,
   X, Briefcase, Settings, HelpCircle, LogOut, Heart, Mic, Sun, Moon, CheckCircle2, CreditCard, Clock,
@@ -38,6 +39,7 @@ interface ProfileTabProps {
 
 const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, userLocation, onViewStore }: ProfileTabProps) => {
   const { user, profile, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [newBookingCount, setNewBookingCount] = useState(0);
 
   const displayName =
@@ -119,6 +121,25 @@ const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, use
             <ChevronRight size={16} className="text-muted-foreground" />
           </button>
         ))}
+
+        {/* Dark mode toggle */}
+        <button
+          data-testid="button-toggle-theme"
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98] menu-item-animate"
+        >
+          {theme === "dark" ? (
+            <Sun size={18} className="text-amber-400 shrink-0" />
+          ) : (
+            <Moon size={18} className="text-slate-500 shrink-0" />
+          )}
+          <span className="flex-1 text-sm font-medium text-foreground">
+            {theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          </span>
+          <div className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${theme === "dark" ? "bg-primary" : "bg-secondary border border-border"}`}>
+            <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-300 ${theme === "dark" ? "left-[22px]" : "left-0.5"}`} />
+          </div>
+        </button>
 
         {/* Favourites section */}
         <div className="pt-3">

@@ -55,6 +55,57 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+
+  .dark {
+    --background: 222 28% 8%;
+    --foreground: 210 20% 90%;
+
+    --card: 220 24% 12%;
+    --card-foreground: 210 20% 90%;
+
+    --popover: 220 24% 13%;
+    --popover-foreground: 210 20% 90%;
+
+    --primary: 213 82% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 20% 17%;
+    --secondary-foreground: 210 15% 72%;
+
+    --muted: 220 18% 15%;
+    --muted-foreground: 215 14% 52%;
+
+    --accent: 213 82% 58%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 18% 22%;
+    --input: 220 18% 22%;
+    --ring: 213 82% 58%;
+
+    /* Booka custom tokens */
+    --booka-blue-deep: 220 85% 20%;
+    --booka-blue: 213 82% 58%;
+    --booka-blue-light: 213 82% 20%;
+    --booka-blue-glow: 213 90% 65%;
+    --booka-surface: 220 24% 12%;
+    --booka-surface-raised: 220 22% 16%;
+    --booka-text-primary: 210 20% 90%;
+    --booka-text-secondary: 215 14% 52%;
+    --booka-success: 152 60% 45%;
+    --booka-warning: 38 92% 55%;
+
+    --sidebar-background: 222 28% 10%;
+    --sidebar-foreground: 210 20% 85%;
+    --sidebar-primary: 213 82% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 17%;
+    --sidebar-accent-foreground: 210 15% 80%;
+    --sidebar-border: 220 18% 22%;
+    --sidebar-ring: 213 82% 58%;
+  }
 }
 
 @layer base {
@@ -67,6 +118,10 @@
     scroll-behavior: smooth;
     color-scheme: light;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
