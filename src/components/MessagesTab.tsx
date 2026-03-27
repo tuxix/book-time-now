@@ -51,7 +51,7 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
     const { data: reservations } = await supabase
       .from("reservations")
       .select("id, stores(name)")
-      .eq("user_id", user.id);
+      .eq("customer_id", user.id);
 
     if (!reservations || reservations.length === 0) {
       setConversations((prev) => (prev.length > 0 ? prev : []));
