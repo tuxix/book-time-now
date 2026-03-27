@@ -10,12 +10,14 @@ import AuthPage from "@/pages/AuthPage";
 import RoleSelectPage from "@/pages/RoleSelectPage";
 import CustomerHome from "@/pages/CustomerHome";
 import StoreDashboard from "@/pages/StoreDashboard";
+import AdminDashboard from "@/pages/AdminDashboard";
 
 const queryClient = new QueryClient();
 
 const AppRoutes = () => {
   const { user, profile, loading } = useAuth();
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   if (loading) {
     return (
@@ -28,21 +30,30 @@ const AppRoutes = () => {
   if (!user) return <AuthPage />;
   if (!profile) return <RoleSelectPage />;
 
+  if (showAdmin && profile.is_admin) {
+    return <AdminDashboard onBack={() => setShowAdmin(false)} />;
+  }
+
   if (showDashboard) {
-    return (
-      <StoreDashboard onBack={() => setShowDashboard(false)} />
-    );
+    return <StoreDashboard onBack={() => setShowDashboard(false)} />;
   }
 
   return (
     <Routes>
       <Route
+        path="/admin"
+        element={
+          profile.is_admin
+            ? <AdminDashboard onBack={() => {}} />
+            : <Navigate to="/" replace />
+        }
+      />
+      <Route
         path="/"
         element={
           <CustomerHome
-            onSwitchToDashboard={
-              profile.role === "store" ? () => setShowDashboard(true) : undefined
-            }
+            onSwitchToDashboard={profile.role === "store" ? () => setShowDashboard(true) : undefined}
+            onSwitchToAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
           />
         }
       />

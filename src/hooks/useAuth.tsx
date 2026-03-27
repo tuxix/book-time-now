@@ -2,10 +2,19 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 
+interface Profile {
+  role: string;
+  is_admin: boolean;
+  is_suspended: boolean;
+  full_name: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+}
+
 interface AuthContext {
   user: User | null;
   session: Session | null;
-  profile: { role: string } | null;
+  profile: Profile | null;
   loading: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -16,16 +25,24 @@ const Ctx = createContext<AuthContext | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<{ role: string } | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string): Promise<{ role: string } | null> => {
+  const fetchProfile = async (userId: string): Promise<Profile | null> => {
     const { data } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, is_admin, is_suspended, full_name, phone, avatar_url")
       .eq("id", userId)
       .maybeSingle();
-    return data ?? null;
+    if (!data) return null;
+    return {
+      role: data.role ?? "customer",
+      is_admin: data.is_admin ?? false,
+      is_suspended: data.is_suspended ?? false,
+      full_name: data.full_name ?? null,
+      phone: data.phone ?? null,
+      avatar_url: data.avatar_url ?? null,
+    };
   };
 
   useEffect(() => {

@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  Calendar, Clock, MapPin, Star, RefreshCw, XCircle, LogIn, Receipt, Search,
+  Calendar, Clock, MapPin, Star, RefreshCw, XCircle, LogIn, Receipt, Search, MessageSquare,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import ReviewDialog from "@/components/ReviewDialog";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
+import ChatScreen from "@/components/ChatScreen";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -37,6 +38,8 @@ interface Reservation {
 }
 
 type BookingsTab = "upcoming" | "history" | "cancelled";
+
+interface ChatTarget { reservationId: string; storeName: string; customerName: string; }
 
 const TODAY = format(new Date(), "yyyy-MM-dd");
 
@@ -81,10 +84,11 @@ function checkCancellation(r: Reservation): {
   };
 }
 
-const CustomerReservations = () => {
+const CustomerReservations = ({ onUnreadChange }: { onUnreadChange?: (n: number) => void }) => {
   const { user } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [activeTab, setActiveTab] = useState<BookingsTab>("upcoming");
+  const [chatTarget, setChatTarget] = useState<ChatTarget | null>(null);
   const [historyDateFilter, setHistoryDateFilter] = useState("");
   const [reviewTarget, setReviewTarget] = useState<Reservation | null>(null);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
@@ -328,6 +332,17 @@ const CustomerReservations = () => {
                 <LogIn size={13} /> {checkingIn === r.id ? "Checking in…" : "Check In — I'm here!"}
               </button>
             )}
+            <button
+              data-testid={`button-message-store-${r.id}`}
+              onClick={() => setChatTarget({
+                reservationId: r.id,
+                storeName: r.stores?.name || "Store",
+                customerName: displayName,
+              })}
+              className="w-full py-2.5 rounded-xl border border-primary/30 text-primary text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-primary/5 active:scale-[0.97]"
+            >
+              <MessageSquare size={13} /> Message Store
+            </button>
             {canCancel && (
               <button
                 data-testid={`button-cancel-reservation-${r.id}`}
@@ -722,6 +737,20 @@ const CustomerReservations = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Chat screen overlay ────────────────────────────────────────────── */}
+      {chatTarget && (
+        <ChatScreen
+          reservationId={chatTarget.reservationId}
+          storeName={chatTarget.storeName}
+          customerName={chatTarget.customerName}
+          currentRole="customer"
+          onBack={() => {
+            setChatTarget(null);
+            onUnreadChange?.(0);
+          }}
+        />
+      )}
     </div>
   );
 };

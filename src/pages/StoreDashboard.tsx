@@ -8,6 +8,7 @@ import {
   TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User, Sun, Moon,
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
+import ChatScreen from "@/components/ChatScreen";
 import StoreCalendar from "@/components/StoreCalendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -352,6 +353,9 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [togglingOpen, setTogglingOpen] = useState(false);
   const [togglingAccepting, setTogglingAccepting] = useState(false);
+
+  // Chat / messaging
+  const [chatTarget, setChatTarget] = useState<{ reservationId: string; storeName: string; customerName: string } | null>(null);
 
   // Reply to review
   const [replyTarget, setReplyTarget] = useState<string | null>(null);
@@ -1112,6 +1116,19 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
 
           <Divider />
+
+          {/* Message Customer button */}
+          <button
+            data-testid={`button-message-customer-${r.id}`}
+            onClick={() => setChatTarget({
+              reservationId: r.id,
+              storeName: store?.name ?? "Store",
+              customerName: displayName,
+            })}
+            className="w-full h-9 rounded-xl border border-primary/30 text-primary text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-primary/5 active:scale-[0.97] mb-2"
+          >
+            <MessageSquare size={13} /> Message Customer
+          </button>
 
           {/* ACTION BUTTONS ROW */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -2055,6 +2072,17 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Chat screen overlay ────────────────────────────────────────────── */}
+      {chatTarget && (
+        <ChatScreen
+          reservationId={chatTarget.reservationId}
+          storeName={chatTarget.storeName}
+          customerName={chatTarget.customerName}
+          currentRole="store"
+          onBack={() => setChatTarget(null)}
+        />
+      )}
     </div>
   );
 };

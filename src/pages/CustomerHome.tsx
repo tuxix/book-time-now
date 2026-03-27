@@ -5,6 +5,7 @@ import { useTheme } from "@/hooks/useTheme";
 import {
   Search, Calendar, User, MapPin, ChevronRight, Star,
   X, Briefcase, Settings, HelpCircle, LogOut, Heart, Mic, Sun, Moon, CheckCircle2, CreditCard, Clock,
+  Bell, Download, MessageSquare, Shield,
 } from "lucide-react";
 import { CATEGORIES, distanceKm, getCategoryEmoji } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
@@ -12,7 +13,12 @@ import StoreProfile from "@/components/StoreProfile";
 import SearchScreen from "@/components/SearchScreen";
 import CustomerBooking from "@/components/CustomerBooking";
 import CustomerReservations from "@/components/CustomerReservations";
+import EditProfileScreen from "@/components/EditProfileScreen";
 import { toast } from "sonner";
+import {
+  getPermission, requestPermission, showNotification,
+  NOTIFICATION_PROMPT_KEY,
+} from "@/lib/notifications";
 
 declare global { interface Window { L: any; } }
 
@@ -29,21 +35,45 @@ type Tab = "explore" | "search" | "bookings" | "profile";
 // ── Profile tab ───────────────────────────────────────────────────────────────
 interface ProfileTabProps {
   onSwitchToDashboard?: () => void;
+  onSwitchToAdmin?: () => void;
+  onEditProfile: () => void;
   stores: Store[];
   favStoreIds: Set<string>;
   onToggleFav: (id: string) => void;
   userLocation: [number, number] | null;
   onViewStore: (store: Store) => void;
+  profileAvatarUrl: string | null;
+  onAvatarSaved: (url: string | null) => void;
 }
 
-const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, userLocation, onViewStore }: ProfileTabProps) => {
+const ProfileTab = ({
+  onSwitchToDashboard, onSwitchToAdmin, onEditProfile, stores, favStoreIds,
+  onToggleFav, userLocation, onViewStore, profileAvatarUrl,
+}: ProfileTabProps) => {
   const { user, profile, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [newBookingCount, setNewBookingCount] = useState(0);
+  const [notifPermission, setNotifPermission] = useState(getPermission());
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showIosBanner, setShowIosBanner] = useState(false);
 
   const displayName =
+    profile?.full_name ||
     (user?.user_metadata?.full_name as string | undefined) ||
     user?.email?.split("@")[0] || "Customer";
+
+  const isIos = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
+  const isInStandalone = (navigator as any).standalone === true;
+
+  useEffect(() => {
+    if (isIos && !isInStandalone) {
+      const seen = localStorage.getItem("booka-ios-banner");
+      if (!seen) setShowIosBanner(true);
+    }
+    const handler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
 
   useEffect(() => {
     if (profile?.role !== "store" || !user) return;
@@ -63,29 +93,98 @@ const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, use
   }, [user, profile]);
 
   const initials = displayName.slice(0, 2).toUpperCase();
+  const avatarUrl = profileAvatarUrl || profile?.avatar_url || null;
 
-  const menuItems = [
-    { icon: User, label: "Edit Profile" },
-    { icon: Settings, label: "Settings" },
-    { icon: HelpCircle, label: "Help & Support" },
-  ];
+  const handleEnableNotifications = async () => {
+    const granted = await requestPermission();
+    setNotifPermission(granted ? "granted" : "denied");
+    if (granted) {
+      toast.success("Notifications enabled!");
+      localStorage.setItem(NOTIFICATION_PROMPT_KEY, "done");
+    } else {
+      toast.error("Notifications blocked. Enable them in your browser settings.");
+    }
+  };
+
+  const handleInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === "accepted") { setDeferredPrompt(null); toast.success("Booka added to your home screen!"); }
+    }
+  };
 
   const favStores = stores.filter((s) => favStoreIds.has(s.id));
 
   return (
     <div className="absolute inset-x-0 top-0 overflow-y-auto bg-background fade-in" style={{ bottom: 56 }}>
       <div className="px-5 pt-8 pb-5 flex flex-col items-center border-b border-border">
-        <div
-          className="w-20 h-20 rounded-full booka-gradient flex items-center justify-center text-primary-foreground text-2xl font-bold mb-3"
-          style={{ boxShadow: "0 0 0 4px hsl(213 82% 48% / 0.15), 0 8px 24px -4px hsl(213 82% 48% / 0.3)" }}
+        <button
+          onClick={onEditProfile}
+          className="relative group mb-3"
         >
-          {initials}
-        </div>
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
+              style={{ boxShadow: "0 0 0 4px hsl(213 82% 48% / 0.15)" }}
+            />
+          ) : (
+            <div
+              className="w-20 h-20 rounded-full booka-gradient flex items-center justify-center text-primary-foreground text-2xl font-bold"
+              style={{ boxShadow: "0 0 0 4px hsl(213 82% 48% / 0.15), 0 8px 24px -4px hsl(213 82% 48% / 0.3)" }}
+            >
+              {initials}
+            </div>
+          )}
+          <div className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-primary flex items-center justify-center border-2 border-background">
+            <User size={11} className="text-white" />
+          </div>
+        </button>
         <h1 className="text-lg font-bold text-foreground">{displayName}</h1>
-        <p className="text-sm text-muted-foreground">{user?.email}</p>
+        <p className="text-sm text-muted-foreground">{profile?.phone || user?.email}</p>
       </div>
 
       <div className="px-5 py-4 space-y-3">
+        {/* iOS install banner */}
+        {showIosBanner && (
+          <div className="p-4 rounded-2xl bg-primary/5 border border-primary/20 relative">
+            <button
+              onClick={() => { setShowIosBanner(false); localStorage.setItem("booka-ios-banner", "1"); }}
+              className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+            >
+              <X size={14} />
+            </button>
+            <div className="flex items-start gap-3">
+              <Download size={18} className="text-primary shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-foreground mb-0.5">Add Booka to Home Screen</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Tap the <strong>Share</strong> button in Safari, then choose <strong>Add to Home Screen</strong> for the full app experience.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Android install button */}
+        {deferredPrompt && (
+          <button
+            onClick={handleInstall}
+            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-primary/10 border border-primary/20 transition-all active:scale-[0.98]"
+          >
+            <div className="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+              <Download size={18} className="text-primary" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-semibold text-foreground">Install Booka App</p>
+              <p className="text-xs text-muted-foreground">Add to your home screen</p>
+            </div>
+            <ChevronRight size={16} className="text-muted-foreground shrink-0" />
+          </button>
+        )}
+
         {onSwitchToDashboard && (
           <button
             data-testid="button-switch-dashboard"
@@ -108,12 +207,57 @@ const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, use
           </button>
         )}
 
-        {menuItems.map((item, idx) => (
+        {onSwitchToAdmin && (
+          <button
+            data-testid="button-switch-admin"
+            onClick={onSwitchToAdmin}
+            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-200 dark:bg-amber-900/10 dark:border-amber-700/30 transition-all active:scale-[0.98]"
+          >
+            <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-800/30 flex items-center justify-center shrink-0">
+              <Shield size={18} className="text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Admin Dashboard</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400/70">Platform management</p>
+            </div>
+            <ChevronRight size={16} className="text-amber-500 shrink-0" />
+          </button>
+        )}
+
+        {/* Edit Profile */}
+        <button
+          data-testid="button-edit-profile"
+          onClick={onEditProfile}
+          className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98] menu-item-animate"
+        >
+          <User size={18} className="text-muted-foreground shrink-0" />
+          <span className="flex-1 text-sm font-medium text-foreground">Edit Profile</span>
+          <ChevronRight size={16} className="text-muted-foreground" />
+        </button>
+
+        {/* Notifications toggle */}
+        {notifPermission !== "unsupported" && notifPermission !== "granted" && (
+          <button
+            data-testid="button-enable-notifications"
+            onClick={handleEnableNotifications}
+            className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98]"
+          >
+            <Bell size={18} className="text-muted-foreground shrink-0" />
+            <div className="flex-1 text-left">
+              <span className="text-sm font-medium text-foreground">Enable Notifications</span>
+              <p className="text-xs text-muted-foreground">Get alerts for bookings and messages</p>
+            </div>
+            <ChevronRight size={16} className="text-muted-foreground" />
+          </button>
+        )}
+
+        {/* Settings / Help */}
+        {[{ icon: Settings, label: "Settings" }, { icon: HelpCircle, label: "Help & Support" }].map((item, idx) => (
           <button
             key={item.label}
             onClick={() => toast.info("Coming soon!")}
             className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98] menu-item-animate"
-            style={{ animationDelay: `${(idx + (onSwitchToDashboard ? 1 : 0)) * 40}ms` }}
+            style={{ animationDelay: `${idx * 40}ms` }}
           >
             <item.icon size={18} className="text-muted-foreground shrink-0" />
             <span className="flex-1 text-sm font-medium text-foreground">{item.label}</span>
@@ -212,11 +356,17 @@ const ProfileTab = ({ onSwitchToDashboard, stores, favStoreIds, onToggleFav, use
 };
 
 // ── Main CustomerHome ─────────────────────────────────────────────────────────
-interface Props { onSwitchToDashboard?: () => void; }
+interface Props {
+  onSwitchToDashboard?: () => void;
+  onSwitchToAdmin?: () => void;
+}
 
-const CustomerHome = ({ onSwitchToDashboard }: Props) => {
-  const { user } = useAuth();
+const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
+  const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("explore");
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
+  const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const [filterCat, setFilterCat] = useState<string | null>(null);
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [bookingStore, setBookingStore] = useState<Store | null>(null);
@@ -251,6 +401,37 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     window.addEventListener("offline", off);
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
+
+  // ── Sync profile avatar from DB ───────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("profiles").select("avatar_url").eq("id", user.id).maybeSingle()
+      .then(({ data }) => { if (data?.avatar_url) setProfileAvatarUrl(data.avatar_url); });
+  }, [user]);
+
+  // ── Unread message count for bookings badge ───────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const fetchUnread = async () => {
+      const { data: resData } = await supabase
+        .from("reservations").select("id").eq("customer_id", user.id);
+      if (!resData || resData.length === 0) { setUnreadMsgCount(0); return; }
+      const resIds = resData.map((r) => r.id);
+      const { count } = await supabase
+        .from("messages")
+        .select("id", { count: "exact" })
+        .in("reservation_id", resIds)
+        .eq("sender_role", "store")
+        .eq("read", false);
+      setUnreadMsgCount(count ?? 0);
+    };
+    fetchUnread();
+    const channel = supabase
+      .channel(`unread-msgs-${user.id}`)
+      .on("postgres_changes" as any, { event: "*", schema: "public", table: "messages" }, fetchUnread)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
 
   // ── Fygaro payment return handler ─────────────────────────────────────────
   useEffect(() => {
@@ -868,17 +1049,31 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
       )}
 
       {activeTab === "bookings" && !selectedStore && !bookingStore && (
-        <CustomerReservations />
+        <CustomerReservations onUnreadChange={setUnreadMsgCount} />
       )}
 
       {activeTab === "profile" && !selectedStore && !bookingStore && (
         <ProfileTab
           onSwitchToDashboard={onSwitchToDashboard}
+          onSwitchToAdmin={onSwitchToAdmin}
+          onEditProfile={() => setShowEditProfile(true)}
           stores={stores}
           favStoreIds={favStoreIds}
           onToggleFav={toggleFav}
           userLocation={userLocation}
           onViewStore={(store) => { setSelectedStore(store); }}
+          profileAvatarUrl={profileAvatarUrl}
+          onAvatarSaved={(url) => setProfileAvatarUrl(url)}
+        />
+      )}
+
+      {/* ── Edit Profile overlay ─────────────────────────────────────────────── */}
+      {showEditProfile && (
+        <EditProfileScreen
+          onBack={() => setShowEditProfile(false)}
+          onSaved={(name, phone, url) => {
+            setProfileAvatarUrl(url);
+          }}
         />
       )}
 
@@ -890,6 +1085,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
         <div className="flex items-center justify-around h-full px-2">
           {tabs.map((t) => {
             const active = activeTab === t.id && !selectedStore && !bookingStore;
+            const badge = t.id === "bookings" && unreadMsgCount > 0 ? unreadMsgCount : 0;
             return (
               <button
                 key={t.id}
@@ -899,11 +1095,18 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
                   active ? "bg-primary/[0.08]" : "hover:bg-secondary"
                 }`}
               >
-                <t.icon
-                  size={21}
-                  strokeWidth={active ? 2.5 : 1.7}
-                  color={active ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))"}
-                />
+                <div className="relative">
+                  <t.icon
+                    size={21}
+                    strokeWidth={active ? 2.5 : 1.7}
+                    color={active ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))"}
+                  />
+                  {badge > 0 && (
+                    <span className="absolute -top-1.5 -right-2 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                      {badge > 9 ? "9+" : badge}
+                    </span>
+                  )}
+                </div>
                 <span
                   className={`text-[10px] ${active ? "font-semibold" : "font-medium"}`}
                   style={{ color: active ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))" }}
