@@ -13,6 +13,7 @@ import StoreProfile from "@/components/StoreProfile";
 import SearchScreen from "@/components/SearchScreen";
 import CustomerBooking from "@/components/CustomerBooking";
 import CustomerReservations from "@/components/CustomerReservations";
+import MessagesTab from "@/components/MessagesTab";
 import EditProfileScreen from "@/components/EditProfileScreen";
 import { toast } from "sonner";
 import {
@@ -30,7 +31,7 @@ function stableOffset(id: string, seed: number): number {
   return ((h >>> 0) / 0xffffffff - 0.5) * 0.04;
 }
 
-type Tab = "explore" | "search" | "bookings" | "profile";
+type Tab = "explore" | "search" | "bookings" | "messages" | "profile";
 
 // ── Profile tab ───────────────────────────────────────────────────────────────
 interface ProfileTabProps {
@@ -683,6 +684,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
     { id: "explore",  label: "Explore",  icon: MapPin },
     { id: "search",   label: "Search",   icon: Search },
     { id: "bookings", label: "Bookings", icon: Calendar },
+    { id: "messages", label: "Messages", icon: MessageSquare },
     { id: "profile",  label: "Profile",  icon: User },
   ];
 
@@ -1049,7 +1051,11 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
       )}
 
       {activeTab === "bookings" && !selectedStore && !bookingStore && (
-        <CustomerReservations onUnreadChange={setUnreadMsgCount} />
+        <CustomerReservations />
+      )}
+
+      {activeTab === "messages" && !selectedStore && !bookingStore && (
+        <MessagesTab onUnreadChange={setUnreadMsgCount} />
       )}
 
       {activeTab === "profile" && !selectedStore && !bookingStore && (
@@ -1085,7 +1091,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
         <div className="flex items-center justify-around h-full px-2">
           {tabs.map((t) => {
             const active = activeTab === t.id && !selectedStore && !bookingStore;
-            const badge = t.id === "bookings" && unreadMsgCount > 0 ? unreadMsgCount : 0;
+            const badge = t.id === "messages" && unreadMsgCount > 0 ? unreadMsgCount : 0;
             return (
               <button
                 key={t.id}
