@@ -30,11 +30,11 @@ export interface ReceiptReservation {
   total_amount?: number;
   refund_amount?: number;
   retained_amount?: number;
+  commitment_fee_amount?: number;
   stores: {
     name: string;
     category?: string;
     address?: string;
-    commitment_fee?: number;
   } | null;
 }
 
@@ -71,8 +71,8 @@ const apptStatusLabel = (status: string, cancelledBy?: string) => {
 const ReceiptDialog = ({ reservation: r, customerName, service, open, onClose }: Props) => {
   const ref = r.id.split("-")[0].toUpperCase();
   const emoji = getCategoryEmoji(r.stores?.category ?? "");
-  const commitmentFee = r.stores?.commitment_fee ?? 750;
-  const total = r.total_amount ?? (service ? service.subtotal : commitmentFee);
+  const total = r.total_amount ?? (service ? service.subtotal : 750);
+  const commitmentFee = r.commitment_fee_amount ?? Math.round(total * 0.25);
   const pStatus = resolvePaymentStatus(r.payment_status, r.status, r.cancelled_by);
   const apptStatus = apptStatusLabel(r.status, r.cancelled_by);
   const generatedAt = format(new Date(), "MMM d, yyyy 'at' h:mm a");
@@ -167,21 +167,23 @@ const ReceiptDialog = ({ reservation: r, customerName, service, open, onClose }:
                     <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : opt.price_modifier === 0 ? "Included" : fmt(opt.price_modifier)}</span>
                   </div>
                 ))}
-                <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400 pt-1 border-t border-border/50">
-                  <span>Commitment deposit (held until appointment)</span>
-                  <span>{fmt(commitmentFee)}</span>
+                <div className="flex items-center justify-between text-xs text-foreground font-semibold pt-1 border-t border-border/50">
+                  <span>Service subtotal</span>
+                  <span>{fmt(total)}</span>
                 </div>
               </>
-            ) : (
-              <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 text-xs">
-                <span>Commitment deposit (held until appointment)</span>
-                <span>{fmt(commitmentFee)}</span>
-              </div>
-            )}
+            ) : null}
+            <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400">
+              <span>Commitment deposit (25%)</span>
+              <span>{fmt(commitmentFee)}</span>
+            </div>
             <div className="flex items-center justify-between pt-2 border-t border-border">
               <span className="font-bold text-foreground text-sm">Total Charged</span>
               <span className="text-2xl font-extrabold text-primary">{fmt(total)}</span>
             </div>
+            <p className="text-[10px] text-muted-foreground leading-relaxed pt-1">
+              Your 25% deposit of {fmt(commitmentFee)} is held until your appointment is completed. If you do not show up, this deposit is retained by the store and the remainder is refunded.
+            </p>
             {r.payment_status === "partially_refunded" && r.refund_amount != null && r.retained_amount != null && (
               <div className="pt-1 space-y-1 border-t border-border/50">
                 <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400">

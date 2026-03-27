@@ -299,7 +299,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   useEffect(() => {
     supabase
       .from("stores")
-      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, commitment_fee, cancellation_hours, announcement, avatar_url")
+      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, cancellation_hours, announcement, avatar_url")
       .then(({ data, error }) => {
         console.log("[Booka] stores response:", { data, error });
         if (data) setStores(data as Store[]);

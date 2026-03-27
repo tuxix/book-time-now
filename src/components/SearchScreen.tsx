@@ -33,7 +33,7 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
   useEffect(() => {
     supabase
       .from("stores")
-      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, commitment_fee, cancellation_hours, announcement, avatar_url")
+      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, cancellation_hours, announcement, avatar_url")
       .then(({ data }) => { if (data) setAllStores(data as Store[]); });
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);

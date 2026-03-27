@@ -24,6 +24,7 @@ interface Reservation {
   total_amount?: number;
   refund_amount?: number;
   retained_amount?: number;
+  commitment_fee_amount?: number;
   checkin_code?: string;
   cancelled_by?: string;
   stores: {
@@ -31,7 +32,6 @@ interface Reservation {
     category?: string;
     address: string;
     cancellation_hours?: number;
-    commitment_fee?: number;
   } | null;
   reservation_services?: ReservationServiceData[];
 }
@@ -72,11 +72,11 @@ function checkCancellation(r: Reservation): {
   }
   const cancHours = r.stores?.cancellation_hours ?? 24;
   const feeForfeited = hoursUntil < cancHours;
-  const fee = r.stores?.commitment_fee ?? 750;
+  const depositAmt = r.commitment_fee_amount ?? Math.round((r.total_amount ?? 750) * 0.25);
   return {
     allowed: true, tooLate: false, feeForfeited,
     message: feeForfeited
-      ? `You are within the ${cancHours}-hour cancellation window. Your commitment fee of ${fmt(fee)} will not be refunded. Are you sure you want to cancel?`
+      ? `You are within the ${cancHours}-hour cancellation window. Your 25% deposit of ${fmt(depositAmt)} will be retained by the store. Are you sure you want to cancel?`
       : "You can cancel this appointment for free. Would you like to proceed?",
   };
 }
@@ -106,7 +106,7 @@ const CustomerReservations = () => {
     const [resResult, reviewResult] = await Promise.all([
       supabase
         .from("reservations")
-        .select("*, stores(name, category, address, cancellation_hours, commitment_fee), reservation_services(*)")
+        .select("*, stores(name, category, address, cancellation_hours), reservation_services(*)")
         .eq("customer_id", user.id)
         .order("reservation_date", { ascending: false }),
       supabase.from("reviews").select("reservation_id").eq("customer_id", user.id),
@@ -158,11 +158,11 @@ const CustomerReservations = () => {
     if (!cancelTarget) return;
     setCancelling(true);
     const info = checkCancellation(cancelTarget);
-    const commitmentFee = cancelTarget.stores?.commitment_fee ?? 750;
     const svc = cancelTarget.reservation_services?.[0] ?? null;
-    const totalAmount = cancelTarget.total_amount ?? (svc ? svc.subtotal : commitmentFee);
+    const totalAmount = cancelTarget.total_amount ?? (svc ? svc.subtotal : 750);
+    const depositAmt = cancelTarget.commitment_fee_amount ?? Math.round(totalAmount * 0.25);
     const paymentFields = info.feeForfeited
-      ? { payment_status: "partially_refunded", retained_amount: commitmentFee, refund_amount: Math.max(0, totalAmount - commitmentFee) }
+      ? { payment_status: "partially_refunded", retained_amount: depositAmt, refund_amount: Math.max(0, totalAmount - depositAmt) }
       : { payment_status: "refunded", retained_amount: 0, refund_amount: totalAmount };
     const { error } = await supabase
       .from("reservations")
@@ -176,7 +176,7 @@ const CustomerReservations = () => {
       );
       toast.success(
         info.feeForfeited
-          ? `Cancelled — ${fmt(paymentFields.refund_amount!)} will be refunded, ${fmt(commitmentFee)} retained.`
+          ? `Cancelled — ${fmt(paymentFields.refund_amount!)} will be refunded, ${fmt(depositAmt)} retained.`
           : "Appointment cancelled — full refund will be processed."
       );
     }
@@ -227,8 +227,8 @@ const CustomerReservations = () => {
     const canCheckIn = r.status === "scheduled" && isToday;
     const canCancel = r.status === "scheduled";
     const svc = r.reservation_services?.[0] ?? null;
-    const commitmentFee = r.stores?.commitment_fee ?? 750;
-    const total = r.total_amount ?? (svc ? svc.subtotal : commitmentFee);
+    const total = r.total_amount ?? (svc ? svc.subtotal : 750);
+    const depositAmt = r.commitment_fee_amount ?? Math.round(total * 0.25);
     const emoji = getCategoryEmoji(r.stores?.category ?? "");
     const isActive = r.status === "scheduled" || r.status === "arrived";
 
@@ -286,8 +286,8 @@ const CustomerReservations = () => {
                 </div>
               ))}
               <div className="border-t border-border/50 pt-1.5 flex items-center justify-between text-[11px] text-amber-600 dark:text-amber-400">
-                <span>Commitment deposit (included)</span>
-                <span>{fmt(commitmentFee)}</span>
+                <span>Commitment deposit (25%)</span>
+                <span>{fmt(depositAmt)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-foreground">Total charged</span>
@@ -295,9 +295,15 @@ const CustomerReservations = () => {
               </div>
             </div>
           ) : (
-            <div className="p-3 rounded-xl bg-secondary/50 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Commitment deposit</span>
-              <span className="text-sm font-extrabold text-primary">{fmt(commitmentFee)}</span>
+            <div className="p-3 rounded-xl bg-secondary/50 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-amber-600 dark:text-amber-400">Commitment deposit (25%)</span>
+                <span className="text-xs text-amber-600 dark:text-amber-400">{fmt(depositAmt)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">Total charged</span>
+                <span className="text-sm font-extrabold text-primary">{fmt(total)}</span>
+              </div>
             </div>
           )}
 
@@ -339,8 +345,8 @@ const CustomerReservations = () => {
 
   const renderHistoryCard = (r: Reservation, i: number) => {
     const svc = r.reservation_services?.[0] ?? null;
-    const commitmentFee = r.stores?.commitment_fee ?? 750;
-    const total = r.total_amount ?? (svc ? svc.subtotal : commitmentFee);
+    const total = r.total_amount ?? (svc ? svc.subtotal : 750);
+    const depositAmt = r.commitment_fee_amount ?? Math.round(total * 0.25);
     const emoji = getCategoryEmoji(r.stores?.category ?? "");
 
     return (
@@ -374,27 +380,33 @@ const CustomerReservations = () => {
           </div>
 
           {/* Service + options */}
-          {svc && (
-            <div className="p-3 rounded-xl bg-secondary/50 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-foreground">{svc.service_name}</p>
-                <p className="text-xs font-bold text-foreground">{fmt(svc.base_price)}</p>
-              </div>
-              {(svc.selected_options as any[]).map((opt, idx) => (
-                <div key={idx} className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span className="w-1 h-1 rounded-full bg-primary/40 shrink-0" />
-                    {opt.item_label}
-                  </span>
-                  <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : ""}</span>
+          <div className="p-3 rounded-xl bg-secondary/50 space-y-1.5">
+            {svc ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-foreground">{svc.service_name}</p>
+                  <p className="text-xs font-bold text-foreground">{fmt(svc.base_price)}</p>
                 </div>
-              ))}
-              <div className="border-t border-border/50 pt-1.5 flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">Total charged</span>
-                <span className="text-sm font-extrabold text-primary">{fmt(total)}</span>
-              </div>
+                {(svc.selected_options as any[]).map((opt, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <span className="w-1 h-1 rounded-full bg-primary/40 shrink-0" />
+                      {opt.item_label}
+                    </span>
+                    <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : ""}</span>
+                  </div>
+                ))}
+              </>
+            ) : null}
+            <div className="border-t border-border/50 pt-1.5 flex items-center justify-between text-[11px] text-amber-600 dark:text-amber-400">
+              <span>Commitment deposit (25%)</span>
+              <span>{fmt(depositAmt)}</span>
             </div>
-          )}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground">Total charged</span>
+              <span className="text-sm font-extrabold text-primary">{fmt(total)}</span>
+            </div>
+          </div>
 
           {/* Payment outcome */}
           {r.status === "completed" && (
@@ -440,7 +452,8 @@ const CustomerReservations = () => {
 
   const renderCancelledCard = (r: Reservation, i: number) => {
     const svc = r.reservation_services?.[0] ?? null;
-    const commitmentFee = r.stores?.commitment_fee ?? 750;
+    const total = r.total_amount ?? (svc ? svc.subtotal : 750);
+    const depositAmt = r.commitment_fee_amount ?? Math.round(total * 0.25);
     const emoji = getCategoryEmoji(r.stores?.category ?? "");
     const isCancelledByStore = r.cancelled_by === "store";
 
@@ -505,7 +518,7 @@ const CustomerReservations = () => {
               </p>
             ) : (
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {isCancelledByStore ? "Full refund will be processed" : `${fmt(commitmentFee)} commitment deposit retained`}
+                {isCancelledByStore ? "Full refund will be processed" : `${fmt(depositAmt)} deposit retained`}
               </p>
             )}
           </div>

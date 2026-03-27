@@ -25,7 +25,6 @@ export interface Store {
   is_open: boolean;
   buffer_minutes: number;
   accepting_bookings?: boolean;
-  commitment_fee?: number;
   cancellation_hours?: number;
   announcement?: string;
   avatar_url?: string;
@@ -414,9 +413,9 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
               {!store.is_open ? "Book in Advance" : "Book Now"}
             </Button>
           )}
-          {(store.commitment_fee ?? 0) > 0 && store.accepting_bookings !== false && (
+          {store.accepting_bookings !== false && (
             <p className="text-xs text-muted-foreground text-center mt-2">
-              J${(store.commitment_fee!).toFixed(0)} commitment fee · applied to your final service price
+              25% commitment deposit required at booking
             </p>
           )}
         </div>

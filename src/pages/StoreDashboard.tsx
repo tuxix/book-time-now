@@ -34,6 +34,7 @@ interface Reservation {
   total_amount?: number;
   refund_amount?: number;
   retained_amount?: number;
+  commitment_fee_amount?: number;
   customer_id: string;
   customer_label: string;
   customer_name?: string;
@@ -75,7 +76,6 @@ interface StoreData {
   is_open: boolean;
   buffer_minutes: number;
   accepting_bookings?: boolean;
-  commitment_fee?: number;
   cancellation_hours?: number;
   announcement?: string;
   avatar_url?: string;
@@ -330,7 +330,6 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [isOpen, setIsOpen] = useState(true);
   const [acceptingBookings, setAcceptingBookings] = useState(true);
   const [bufferMinutes, setBufferMinutes] = useState(15);
-  const [commitmentFee, setCommitmentFee] = useState(750);
   const [cancellationHours, setCancellationHours] = useState(24);
   const [announcementText, setAnnouncementText] = useState("");
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -436,7 +435,6 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         setIsOpen(s.is_open !== false);
         setAcceptingBookings(s.accepting_bookings !== false);
         setBufferMinutes(s.buffer_minutes ?? 15);
-        setCommitmentFee(s.commitment_fee ?? 750);
         setCancellationHours(s.cancellation_hours ?? 24);
         setAnnouncementText(s.announcement || "");
       }
@@ -450,7 +448,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     const [resRes, slotsRes, reviewsRes] = await Promise.all([
       supabase
         .from("reservations")
-        .select("id, reservation_date, start_time, end_time, status, fee, payment_status, total_amount, refund_amount, retained_amount, customer_id, checkin_code, cancelled_by, reservation_services(*)")
+        .select("id, reservation_date, start_time, end_time, status, fee, payment_status, total_amount, refund_amount, retained_amount, commitment_fee_amount, customer_id, checkin_code, cancelled_by, reservation_services(*)")
         .eq("store_id", store.id)
         .order("reservation_date", { ascending: false }),
       supabase
@@ -631,12 +629,6 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     toast.success("Buffer time saved");
   };
 
-  const saveCommitmentFee = async () => {
-    if (!store) return;
-    await supabase.from("stores").update({ commitment_fee: commitmentFee }).eq("id", store.id);
-    toast.success("Commitment fee saved");
-  };
-
   const saveCancellationHours = async (val: string) => {
     if (!store) return;
     const num = Number(val);
@@ -695,9 +687,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const markNoShow = async (id: string) => {
     setConfirmingNoShow(true);
     const reservation = reservations.find((r) => r.id === id);
-    const commitmentFee = store?.commitment_fee ?? 750;
-    const totalAmount = reservation?.total_amount ?? commitmentFee;
-    const retainedAmount = commitmentFee;
+    const totalAmount = reservation?.total_amount ?? 750;
+    const retainedAmount = reservation?.commitment_fee_amount ?? Math.round(totalAmount * 0.25);
     const refundAmount = Math.max(0, totalAmount - retainedAmount);
     const { error } = await supabase
       .from("reservations")
@@ -757,8 +748,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     if (!cancelForCustomerDialog) return;
     setCancellingForCustomer(true);
     const reservation = reservations.find((r) => r.id === cancelForCustomerDialog);
-    const commitmentFee = store?.commitment_fee ?? 750;
-    const totalAmount = reservation?.total_amount ?? commitmentFee;
+    const totalAmount = reservation?.total_amount ?? 750;
     const { error } = await supabase
       .from("reservations")
       .update({
@@ -962,8 +952,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       : 0;
 
     const svc = r.reservation_services?.[0] ?? null;
-    const commitmentFee = store?.commitment_fee ?? 750;
-    const total = r.total_amount ?? (svc ? svc.subtotal + commitmentFee : commitmentFee);
+    const total = r.total_amount ?? (svc ? svc.subtotal : 750);
+    const depositAmt = r.commitment_fee_amount ?? Math.round(total * 0.25);
     const fmt = (p: number) => `J$${Number(p).toFixed(0)}`;
     const displayName = r.customer_name || r.customer_label || "Customer";
     const initials = displayName.slice(0, 2).toUpperCase();
@@ -1058,17 +1048,16 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                     <span>{opt.price_modifier > 0 ? `+${fmt(opt.price_modifier)}` : fmt(opt.price_modifier)}</span>
                   </div>
                 ))}
-                <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400 border-t border-border/40 pt-1">
-                  <span>Commitment deposit (included)</span>
-                  <span>{fmt(commitmentFee)}</span>
+                <div className="flex justify-between text-xs text-foreground font-semibold border-t border-border/40 pt-1">
+                  <span>Service subtotal</span>
+                  <span>{fmt(total)}</span>
                 </div>
               </>
-            ) : (
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Commitment deposit</span>
-                <span>{fmt(commitmentFee)}</span>
-              </div>
-            )}
+            ) : null}
+            <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400">
+              <span>Commitment deposit (25%)</span>
+              <span>{fmt(depositAmt)}</span>
+            </div>
             <div className="flex justify-between text-sm font-extrabold text-foreground pt-0.5 border-t border-border/60">
               <span>Total charged</span>
               <span className="text-primary">{fmt(total)}</span>
@@ -1629,25 +1618,6 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             </Select>
           </div>
 
-          {/* Commitment fee */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1.5">Commitment Fee (J$)</p>
-            <Input
-              data-testid="input-commitment-fee"
-              type="number"
-              min={0}
-              step={50}
-              value={commitmentFee}
-              onChange={(e) => setCommitmentFee(Number(e.target.value))}
-              onBlur={saveCommitmentFee}
-              className="rounded-xl"
-              placeholder="750"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Shown to customers during booking. Deducted from their final service price.
-            </p>
-          </div>
-
           {/* Cancellation window */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground mb-1.5">Cancellation Window</p>
@@ -1911,7 +1881,6 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               name: store.name,
               category: store.category,
               address: store.address,
-              commitment_fee: store.commitment_fee,
             } : null,
           }}
           customerName={receiptTarget.customer_name || receiptTarget.customer_label}

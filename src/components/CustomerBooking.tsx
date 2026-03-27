@@ -185,7 +185,10 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     });
   };
 
-  const commitmentFee = store.commitment_fee ?? 750;
+  // Always 25% of service total, minimum J$750 for no-service bookings
+  const commitmentFee = selectedService
+    ? Math.round(serviceTotal * 0.25)
+    : 750;
 
   const handleBook = async () => {
     const slot = slots.find((s) => s.id === selectedSlot);
@@ -221,6 +224,8 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           start_time: slot.start_time,
           end_time: slot.end_time,
           total_amount: totalCharged,
+          service_total: selectedService ? serviceTotal : null,
+          commitment_fee_amount: commitmentFee,
         })
         .select("id")
         .single();
@@ -341,14 +346,24 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                 <p className="text-sm font-semibold text-foreground mt-0.5">{confirmed.serviceName}</p>
               </div>
             )}
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Charged</p>
-              <p className="text-xl font-extrabold text-primary mt-0.5">
-                {fmt(confirmed.serviceTotal ?? commitmentFee)}
-              </p>
-              <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
-                Includes {fmt(commitmentFee)} commitment deposit
-              </p>
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Payment</p>
+              {confirmed.serviceTotal != null && (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Service subtotal</span>
+                  <span>{fmt(confirmed.serviceTotal)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400">
+                <span>Commitment deposit (25%)</span>
+                <span>{fmt(commitmentFee)}</span>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t border-border">
+                <span className="text-xs font-bold text-foreground">Total charged today</span>
+                <span className="text-xl font-extrabold text-primary">
+                  {fmt(confirmed.serviceTotal ?? commitmentFee)}
+                </span>
+              </div>
             </div>
             <div>
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Date</p>
@@ -490,7 +505,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             onClick={() => { setSelectedServiceId(null); setSelectedItems({}); setServiceStep(false); setPaymentStep(true); }}
             className="w-full py-3 text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
           >
-            Skip service selection → proceed with commitment fee only
+            Skip service selection → proceed with deposit only
           </button>
         </div>
 
@@ -549,7 +564,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
 
               {showService ? (
                 <div className="pt-2 border-t border-border space-y-2">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Service Summary</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Price Breakdown</p>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-foreground">{selectedService!.name}</span>
                     <span className="text-sm font-semibold text-foreground">{fmt(selectedService!.base_price)}</span>
@@ -571,12 +586,12 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                       );
                     });
                   })}
-                  <div className="flex items-center justify-between pt-1.5 border-t border-border/50 text-xs text-muted-foreground">
-                    <span>Subtotal</span>
+                  <div className="flex items-center justify-between pt-1.5 border-t border-border/50 text-xs font-semibold text-foreground">
+                    <span>Service subtotal</span>
                     <span>{fmt(serviceTotal)}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400">
-                    <span>Commitment deposit (held until appointment)</span>
+                    <span>Commitment deposit (25%)</span>
                     <span>{fmt(commitmentFee)}</span>
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t border-border">
@@ -585,17 +600,24 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                   </div>
                 </div>
               ) : (
-                <div className="pt-2 border-t border-border">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total charged today</p>
-                  <p className="text-2xl font-extrabold text-primary mt-0.5">{fmt(commitmentFee)}</p>
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Commitment deposit — held until your appointment</p>
+                <div className="pt-2 border-t border-border space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400">
+                    <span>Commitment deposit (25%)</span>
+                    <span>{fmt(commitmentFee)}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1.5 border-t border-border">
+                    <span className="text-sm font-bold text-foreground">Total charged today</span>
+                    <span className="text-2xl font-extrabold text-primary">{fmt(commitmentFee)}</span>
+                  </div>
                 </div>
               )}
             </div>
 
-            <p className="text-[11px] text-muted-foreground text-center leading-relaxed px-1">
-              Your {fmt(commitmentFee)} deposit is released to the store on completion. If you do not show up, the deposit is retained by the store and the remainder is refunded.
-            </p>
+            <div className="px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
+                Your 25% deposit of <strong>{fmt(commitmentFee)}</strong> is held until your appointment is completed. If you do not show up, this deposit is retained by the store and the remainder is refunded.
+              </p>
+            </div>
 
             <Button
               data-testid="button-confirm-pay"
