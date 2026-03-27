@@ -356,8 +356,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [togglingOpen, setTogglingOpen] = useState(false);
   const [togglingAccepting, setTogglingAccepting] = useState(false);
 
-  // Chat / messaging
-  const [chatTarget, setChatTarget] = useState<{ reservationId: string; storeName: string; customerName: string } | null>(null);
+  // Chat / messaging — routes to Messages tab instead of floating overlay
+  const [pendingChat, setPendingChat] = useState<{ reservationId: string; customerName: string } | null>(null);
 
   // Reply to review
   const [replyTarget, setReplyTarget] = useState<string | null>(null);
@@ -1119,14 +1119,13 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
           <Divider />
 
-          {/* Message Customer button */}
+          {/* Message Customer button — opens Messages tab */}
           <button
             data-testid={`button-message-customer-${r.id}`}
-            onClick={() => setChatTarget({
-              reservationId: r.id,
-              storeName: store?.name ?? "Store",
-              customerName: displayName,
-            })}
+            onClick={() => {
+              setPendingChat({ reservationId: r.id, customerName: displayName });
+              setTab("messages");
+            }}
             className="w-full h-9 rounded-xl border border-primary/30 text-primary text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-primary/5 active:scale-[0.97] mb-2"
           >
             <MessageSquare size={13} /> Message Customer
@@ -1847,6 +1846,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           storeId={store.id}
           storeName={store.name}
           onUnreadChange={setStoreUnreadMsgCount}
+          autoOpen={pendingChat}
+          onAutoOpenHandled={() => setPendingChat(null)}
         />
       )}
 
@@ -2094,16 +2095,6 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Chat screen overlay ────────────────────────────────────────────── */}
-      {chatTarget && (
-        <ChatScreen
-          reservationId={chatTarget.reservationId}
-          storeName={chatTarget.storeName}
-          customerName={chatTarget.customerName}
-          currentRole="store"
-          onBack={() => setChatTarget(null)}
-        />
-      )}
     </div>
   );
 };

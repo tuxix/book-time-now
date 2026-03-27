@@ -17,9 +17,11 @@ interface StoreMessagesTabProps {
   storeId: string;
   storeName: string;
   onUnreadChange?: (n: number) => void;
+  autoOpen?: { reservationId: string; customerName: string } | null;
+  onAutoOpenHandled?: () => void;
 }
 
-const StoreMessagesTab = ({ storeId, storeName, onUnreadChange }: StoreMessagesTabProps) => {
+const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAutoOpenHandled }: StoreMessagesTabProps) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -27,6 +29,14 @@ const StoreMessagesTab = ({ storeId, storeName, onUnreadChange }: StoreMessagesT
     reservationId: string;
     customerName: string;
   } | null>(null);
+
+  // Auto-open a specific conversation when navigated from a booking card
+  useEffect(() => {
+    if (autoOpen) {
+      setChatTarget({ reservationId: autoOpen.reservationId, customerName: autoOpen.customerName });
+      onAutoOpenHandled?.();
+    }
+  }, [autoOpen]);
 
   const fetchConversations = async () => {
     const { data: reservations } = await supabase
