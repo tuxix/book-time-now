@@ -7,7 +7,6 @@ import {
 import { format, parseISO } from "date-fns";
 import ReviewDialog from "@/components/ReviewDialog";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
-import ChatScreen from "@/components/ChatScreen";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -84,11 +83,16 @@ function checkCancellation(r: Reservation): {
   };
 }
 
-const CustomerReservations = ({ onUnreadChange }: { onUnreadChange?: (n: number) => void }) => {
+const CustomerReservations = ({
+  onUnreadChange,
+  onOpenChat,
+}: {
+  onUnreadChange?: (n: number) => void;
+  onOpenChat?: (target: ChatTarget) => void;
+}) => {
   const { user } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [activeTab, setActiveTab] = useState<BookingsTab>("upcoming");
-  const [chatTarget, setChatTarget] = useState<ChatTarget | null>(null);
   const [historyDateFilter, setHistoryDateFilter] = useState("");
   const [reviewTarget, setReviewTarget] = useState<Reservation | null>(null);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
@@ -334,7 +338,7 @@ const CustomerReservations = ({ onUnreadChange }: { onUnreadChange?: (n: number)
             )}
             <button
               data-testid={`button-message-store-${r.id}`}
-              onClick={() => setChatTarget({
+              onClick={() => onOpenChat?.({
                 reservationId: r.id,
                 storeName: r.stores?.name || "Store",
                 customerName: displayName,
@@ -738,19 +742,6 @@ const CustomerReservations = ({ onUnreadChange }: { onUnreadChange?: (n: number)
         </DialogContent>
       </Dialog>
 
-      {/* ── Chat screen overlay ────────────────────────────────────────────── */}
-      {chatTarget && (
-        <ChatScreen
-          reservationId={chatTarget.reservationId}
-          storeName={chatTarget.storeName}
-          customerName={chatTarget.customerName}
-          currentRole="customer"
-          onBack={() => {
-            setChatTarget(null);
-            onUnreadChange?.(0);
-          }}
-        />
-      )}
     </div>
   );
 };

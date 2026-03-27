@@ -368,6 +368,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
+  const [pendingChat, setPendingChat] = useState<{ reservationId: string; storeName: string; customerName: string } | null>(null);
   const [filterCat, setFilterCat] = useState<string | null>(null);
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [bookingStore, setBookingStore] = useState<Store | null>(null);
@@ -1051,11 +1052,20 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
       )}
 
       {activeTab === "bookings" && !selectedStore && !bookingStore && (
-        <CustomerReservations />
+        <CustomerReservations
+          onOpenChat={(target) => {
+            setPendingChat(target);
+            setActiveTab("messages");
+          }}
+        />
       )}
 
       {activeTab === "messages" && !selectedStore && !bookingStore && (
-        <MessagesTab onUnreadChange={setUnreadMsgCount} />
+        <MessagesTab
+          onUnreadChange={setUnreadMsgCount}
+          autoOpen={pendingChat}
+          onAutoOpenHandled={() => setPendingChat(null)}
+        />
       )}
 
       {activeTab === "profile" && !selectedStore && !bookingStore && (

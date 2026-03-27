@@ -16,9 +16,11 @@ interface Conversation {
 
 interface MessagesTabProps {
   onUnreadChange?: (n: number) => void;
+  autoOpen?: { reservationId: string; storeName: string; customerName: string } | null;
+  onAutoOpenHandled?: () => void;
 }
 
-const MessagesTab = ({ onUnreadChange }: MessagesTabProps) => {
+const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTabProps) => {
   const { user, profile } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +30,14 @@ const MessagesTab = ({ onUnreadChange }: MessagesTabProps) => {
     storeName: string;
     customerName: string;
   } | null>(null);
+
+  // Auto-open a conversation when navigated from a booking card
+  useEffect(() => {
+    if (autoOpen) {
+      setChatTarget(autoOpen);
+      onAutoOpenHandled?.();
+    }
+  }, [autoOpen]);
 
   const customerName =
     profile?.full_name ||
