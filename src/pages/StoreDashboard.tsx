@@ -528,6 +528,30 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     return () => { supabase.removeChannel(channel); };
   }, [store]);
 
+  // ── Global unread message listener — keeps badge updated on all tabs ───
+  useEffect(() => {
+    if (!store) return;
+    const fetchStoreUnread = async () => {
+      const { data: resData } = await supabase
+        .from("reservations").select("id").eq("store_id", store.id);
+      if (!resData || resData.length === 0) { setStoreUnreadMsgCount(0); return; }
+      const resIds = resData.map((r) => r.id);
+      const { count } = await supabase
+        .from("messages")
+        .select("id", { count: "exact" })
+        .in("reservation_id", resIds)
+        .eq("sender_role", "customer")
+        .eq("read", false);
+      setStoreUnreadMsgCount(count ?? 0);
+    };
+    fetchStoreUnread();
+    const channel = supabase
+      .channel(`store-unread-msgs-${store.id}`)
+      .on("postgres_changes" as any, { event: "*", schema: "public", table: "messages" }, fetchStoreUnread)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [store]);
+
   // ── Fetch services ───────────────────────────────────────────────────────
   const fetchServices = async () => {
     if (!store) return;
