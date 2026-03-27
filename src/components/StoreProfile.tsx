@@ -165,9 +165,9 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
   );
 
   return (
-    <div className="absolute inset-x-0 top-0 overflow-y-auto bg-background slide-in-right" style={{ bottom: 56, zIndex: 300 }}>
+    <div className="absolute inset-x-0 top-0 flex flex-col bg-background slide-in-right" style={{ bottom: 56, zIndex: 300 }}>
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-2">
+      <div className="shrink-0 bg-card/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-2">
         <button onClick={onBack} data-testid="button-back-profile"
           className="p-2 -ml-2 rounded-xl hover:bg-secondary active:scale-95 transition-all">
           <ArrowLeft size={20} />
@@ -187,6 +187,9 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
           </button>
         )}
       </div>
+
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto">
 
       {/* Announcement banner */}
       {!!store.announcement && (
@@ -284,7 +287,7 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
       <div className="h-2 bg-secondary" />
 
       {/* Reviews carousel */}
-      <div className="px-5 py-4 pb-36">
+      <div className="px-5 py-4 pb-28">
         {/* Header row */}
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-foreground flex items-center gap-2">
@@ -400,32 +403,32 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
         </div>
       </div>
 
-      {/* Fixed Book Now */}
-      <div className="fixed inset-x-0 p-4 bg-card/95 backdrop-blur-md border-t border-border" style={{ bottom: 56, zIndex: 310 }}>
-        <div className="max-w-lg mx-auto">
-          {store.accepting_bookings === false ? (
-            <Button
-              data-testid="button-not-accepting"
-              className="w-full h-12 rounded-xl font-semibold text-base bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted"
-              disabled
-            >
-              Not Taking Bookings Right Now
-            </Button>
-          ) : (
-            <Button
-              data-testid="button-book-now"
-              className="w-full h-12 rounded-xl font-semibold text-base booka-gradient text-white border-0 booka-cta-pulse"
-              onClick={onBook}
-            >
-              {!store.is_open ? "Book in Advance" : "Book Now"}
-            </Button>
-          )}
-          {store.accepting_bookings !== false && (
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              25% commitment deposit required at booking
-            </p>
-          )}
-        </div>
+      </div>{/* end scrollable body */}
+
+      {/* Sticky Book Now footer */}
+      <div className="shrink-0 px-4 pt-3 pb-3 bg-background border-t border-border shadow-[0_-4px_12px_0_rgb(0_0_0_/_0.08)]">
+        {store.accepting_bookings === false ? (
+          <Button
+            data-testid="button-not-accepting"
+            className="w-full h-12 rounded-xl font-semibold text-base bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted"
+            disabled
+          >
+            Not Taking Bookings Right Now
+          </Button>
+        ) : (
+          <Button
+            data-testid="button-book-now"
+            className="w-full h-12 rounded-xl font-semibold text-base booka-gradient text-white border-0 booka-cta-pulse"
+            onClick={onBook}
+          >
+            {!store.is_open ? "Book in Advance" : "Book Now"}
+          </Button>
+        )}
+        {store.accepting_bookings !== false && (
+          <p className="text-xs text-muted-foreground text-center mt-2">
+            25% commitment deposit required at booking
+          </p>
+        )}
       </div>
 
       {/* Report dialog */}
