@@ -9,7 +9,6 @@ import {
 import { CATEGORIES, distanceKm, getCategoryEmoji } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
 import StoreProfile from "@/components/StoreProfile";
-import CategoryResults from "@/components/CategoryResults";
 import SearchScreen from "@/components/SearchScreen";
 import CustomerBooking from "@/components/CustomerBooking";
 import CustomerReservations from "@/components/CustomerReservations";
@@ -219,7 +218,6 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("explore");
   const [filterCat, setFilterCat] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<{ emoji: string; label: string } | null>(null);
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [bookingStore, setBookingStore] = useState<Store | null>(null);
   const [mapPinStore, setMapPinStore] = useState<Store | null>(null);
@@ -243,7 +241,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   const sheetTouchStartY = useRef(0);
   const sheetTouchDeltaY = useRef(0);
 
-  const showMap = activeTab === "explore" && !selectedCategory && !selectedStore && !bookingStore;
+  const showMap = activeTab === "explore" && !selectedStore && !bookingStore;
 
   // ── Online/offline ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -379,7 +377,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
       ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 
-    const map = L.map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 13, zoomControl: false });
+    const map = L.map(mapContainerRef.current, { center: DEFAULT_CENTER, zoom: 11, zoomControl: false });
     tileLayerRef.current = L.tileLayer(tileUrl, {
       attribution: "© OpenStreetMap contributors © CARTO", maxZoom: 20,
     }).addTo(map);
@@ -397,7 +395,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
 
     navigator.geolocation?.getCurrentPosition(
       ({ coords }) => {
-        map.setView([coords.latitude, coords.longitude], 15);
+        map.setView([coords.latitude, coords.longitude], 11);
         setUserLocation([coords.latitude, coords.longitude]);
         const dot = L.divIcon({
           className: "",
@@ -444,13 +442,12 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     setActiveTab(tab);
     setSelectedStore(null);
     setBookingStore(null);
-    setSelectedCategory(null);
+    setFilterCat(null);
     setMapPinStore(null);
   };
 
   const handleCategoryTap = (cat: { emoji: string; label: string }) => {
     setFilterCat(cat.label);
-    setSelectedCategory(cat);
     setMapPinStore(null);
     setSheetExpanded(true);
   };
@@ -663,53 +660,61 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
           {/* Filtered store list when category filter active */}
           {sheetExpanded && filterCat && (
             <div className="px-4 pb-4 space-y-2 overflow-y-auto fade-in" style={{ maxHeight: "calc(57vh - 130px)" }}>
-              <p className="text-xs text-muted-foreground mb-1">{filteredForSheet.length} nearby</p>
+              <p className="text-xs font-medium text-slate-400 mb-2">
+                {filteredForSheet.length} nearby
+              </p>
               {filteredForSheet.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No {filterCat} stores yet</p>
+                <p className="text-sm text-slate-400 text-center py-6">No {filterCat} stores yet</p>
               ) : (
-                filteredForSheet.map((store) => (
-                  <div key={store.id} className="flex items-center gap-3 p-3 rounded-xl bg-secondary">
-                    <button
-                      className="flex-1 flex items-center gap-3 text-left"
-                      onClick={() => setSelectedStore(store)}
-                    >
-                      {store.avatar_url ? (
-                        <img src={store.avatar_url} alt={store.name}
-                          className="w-9 h-9 rounded-lg object-cover shrink-0" />
-                      ) : (
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 ${store.is_open !== false ? "booka-gradient" : "bg-red-400"}`}>
-                          {store.name.slice(0, 2).toUpperCase()}
+                filteredForSheet.map((store) => {
+                  const dist = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, store.latitude, store.longitude);
+                  return (
+                    <div key={store.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60">
+                      <button
+                        className="flex-1 flex items-center gap-3 text-left"
+                        onClick={() => setSelectedStore(store)}
+                      >
+                        {store.avatar_url ? (
+                          <img src={store.avatar_url} alt={store.name}
+                            className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl booka-gradient flex items-center justify-center text-white font-bold text-xs shrink-0">
+                            {store.name.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-bold text-foreground truncate">{store.name}</p>
+                            {store.is_open === false && (
+                              <span className="text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                              <Star size={10} className="text-amber-400 fill-amber-400" />
+                              {store.review_count > 0 ? store.rating : "New"}
+                            </span>
+                            {dist && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                                <MapPin size={9} /> {dist}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="text-sm font-semibold text-foreground truncate">{store.name}</p>
-                          {store.is_open === false && (
-                            <span className="text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
-                          )}
-                          {store.is_open !== false && store.accepting_bookings === false && (
-                            <span className="text-[9px] font-bold bg-slate-400 text-white px-1.5 py-0.5 rounded-full shrink-0">NO BOOKINGS</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Star size={10} className="text-amber-400 fill-amber-400" />
-                          {store.review_count > 0 ? store.rating : "New"}
-                        </p>
-                      </div>
-                      <ChevronRight size={15} className="text-muted-foreground shrink-0" />
-                    </button>
-                    <button
-                      onClick={() => toggleFav(store.id)}
-                      className="p-1.5 rounded-lg hover:bg-muted active:scale-95 shrink-0"
-                    >
-                      <Heart
-                        size={14}
-                        className={favStoreIds.has(store.id) ? "text-red-500" : "text-muted-foreground"}
-                        fill={favStoreIds.has(store.id) ? "currentColor" : "none"}
-                      />
-                    </button>
-                  </div>
-                ))
+                      </button>
+                      <button
+                        onClick={() => toggleFav(store.id)}
+                        className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 shrink-0 transition-all"
+                      >
+                        <Heart
+                          size={15}
+                          className={favStoreIds.has(store.id) ? "text-red-500" : "text-slate-400"}
+                          fill={favStoreIds.has(store.id) ? "currentColor" : "none"}
+                        />
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
           )}
@@ -717,18 +722,6 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
       )}
 
       {/* ── Overlays ────────────────────────────────────────────────────────── */}
-      {selectedCategory && !selectedStore && !bookingStore && (
-        <CategoryResults
-          category={selectedCategory}
-          stores={stores}
-          userLocation={userLocation}
-          onBack={() => setSelectedCategory(null)}
-          onSelect={(store) => setSelectedStore(store as Store)}
-          favStoreIds={favStoreIds}
-          onToggleFav={toggleFav}
-        />
-      )}
-
       {selectedStore && !bookingStore && (
         <StoreProfile
           store={selectedStore}
