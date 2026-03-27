@@ -5,7 +5,7 @@ import { useTheme } from "@/hooks/useTheme";
 import {
   Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, ArrowRight, Pencil, RefreshCw, CalendarDays,
-  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User, Sun, Moon,
+  TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User, Sun, Moon, Bell, X as XIcon,
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import ChatScreen from "@/components/ChatScreen";
@@ -340,6 +340,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const { theme, toggleTheme } = useTheme();
   const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar" | "services" | "reviews" | "messages">("reservations");
   const [storeUnreadMsgCount, setStoreUnreadMsgCount] = useState(0);
+  const [storeAnnouncement, setStoreAnnouncement] = useState<{ id: string; title: string; message: string } | null>(null);
   const [store, setStore] = useState<StoreData | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [slots, setSlots] = useState<TimeSlot[]>([]);
@@ -551,6 +552,22 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [store]);
+
+  // ── Announcements for store owners ───────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const fetchAnn = async () => {
+      const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
+      const { data } = await supabase.from("announcements").select("id, title, message").in("audience", ["all", "stores"]).order("created_at", { ascending: false }).limit(10);
+      if (data) {
+        const next = data.find((a: any) => !dismissed.includes(a.id));
+        setStoreAnnouncement(next ?? null);
+      }
+    };
+    fetchAnn();
+    const ch = supabase.channel("ann-store").on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "announcements" }, fetchAnn).subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user]);
 
   // ── Fetch services ───────────────────────────────────────────────────────
   const fetchServices = async () => {
@@ -1282,6 +1299,27 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
         </div>
       </div>
+
+      {/* ── Announcement banner ──────────────────────────────────────────── */}
+      {storeAnnouncement && (
+        <div className="flex items-start gap-2 px-4 py-2.5 border-b border-blue-800/30" style={{ background: "linear-gradient(135deg, hsl(220 85% 20%) 0%, hsl(213 82% 32%) 100%)" }}>
+          <Bell size={13} className="text-blue-200 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-xs font-bold leading-tight">{storeAnnouncement.title}</p>
+            <p className="text-blue-100 text-[11px] leading-snug mt-0.5 line-clamp-2">{storeAnnouncement.message}</p>
+          </div>
+          <button
+            onClick={() => {
+              const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
+              localStorage.setItem("booka_dismissed_ann", JSON.stringify([...dismissed, storeAnnouncement.id]));
+              setStoreAnnouncement(null);
+            }}
+            className="w-5 h-5 flex items-center justify-center text-blue-200 hover:text-white active:scale-90 transition-all shrink-0 mt-0.5"
+          >
+            <XIcon size={13} />
+          </button>
+        </div>
+      )}
 
       {/* ── Toggles ──────────────────────────────────────────────────────── */}
       <div className="px-5 py-3 border-b border-border bg-card space-y-2">

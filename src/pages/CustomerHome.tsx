@@ -368,6 +368,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
+  const [announcement, setAnnouncement] = useState<{ id: string; title: string; message: string } | null>(null);
   const [pendingChat, setPendingChat] = useState<{ reservationId: string; storeName: string; customerName: string } | null>(null);
   const [filterCat, setFilterCat] = useState<string | null>(null);
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
@@ -403,6 +404,22 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
     window.addEventListener("offline", off);
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
+
+  // ── Announcements ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const fetchAnn = async () => {
+      const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
+      const { data } = await supabase.from("announcements").select("id, title, message").in("audience", ["all", "customers"]).order("created_at", { ascending: false }).limit(10);
+      if (data) {
+        const next = data.find((a: any) => !dismissed.includes(a.id));
+        setAnnouncement(next ?? null);
+      }
+    };
+    fetchAnn();
+    const ch = supabase.channel("ann-customer").on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "announcements" }, fetchAnn).subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user]);
 
   // ── Sync profile avatar from DB ───────────────────────────────────────────
   useEffect(() => {
@@ -704,6 +721,27 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
       {!isOnline && (
         <div className="absolute inset-x-0 top-0 z-[700] bg-orange-500 text-white text-center py-2 text-xs font-semibold">
           No internet connection. Check your connection and try again.
+        </div>
+      )}
+
+      {/* ── Announcement banner ────────────────────────────────────────────── */}
+      {announcement && activeTab === "explore" && (
+        <div className="absolute inset-x-0 top-0 z-[690] flex items-start gap-2 px-3 py-2.5" style={{ background: "linear-gradient(135deg, hsl(220 85% 16%) 0%, hsl(213 82% 28%) 100%)" }}>
+          <Bell size={13} className="text-blue-200 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-xs font-bold leading-tight">{announcement.title}</p>
+            <p className="text-blue-100 text-[11px] leading-snug mt-0.5 line-clamp-2">{announcement.message}</p>
+          </div>
+          <button
+            onClick={() => {
+              const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
+              localStorage.setItem("booka_dismissed_ann", JSON.stringify([...dismissed, announcement.id]));
+              setAnnouncement(null);
+            }}
+            className="w-5 h-5 flex items-center justify-center text-blue-200 hover:text-white active:scale-90 transition-all shrink-0 mt-0.5"
+          >
+            <X size={13} />
+          </button>
         </div>
       )}
 
