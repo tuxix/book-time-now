@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import ChatScreen from "@/components/ChatScreen";
+import StoreMessagesTab from "@/components/StoreMessagesTab";
 import StoreCalendar from "@/components/StoreCalendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -337,7 +338,8 @@ const StoreSetupScreen = ({
 const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar" | "services" | "reviews">("reservations");
+  const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar" | "services" | "reviews" | "messages">("reservations");
+  const [storeUnreadMsgCount, setStoreUnreadMsgCount] = useState(0);
   const [store, setStore] = useState<StoreData | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [slots, setSlots] = useState<TimeSlot[]>([]);
@@ -1221,8 +1223,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     { id: "reservations" as const, label: "Bookings", icon: Calendar },
     { id: "slots" as const, label: "Slots", icon: Clock },
     { id: "services" as const, label: "Menu", icon: Package },
-    { id: "calendar" as const, label: "Calendar", icon: CalendarDays },
-    { id: "reviews" as const, label: "Reviews", icon: MessageSquare },
+    { id: "messages" as const, label: "Messages", icon: MessageSquare },
+    { id: "reviews" as const, label: "Reviews", icon: Star },
     { id: "profile" as const, label: "Profile", icon: Settings },
   ];
 
@@ -1839,23 +1841,42 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         </div>
       )}
 
+      {/* ── Messages tab ──────────────────────────────────────────────────── */}
+      {tab === "messages" && store && (
+        <StoreMessagesTab
+          storeId={store.id}
+          storeName={store.name}
+          onUnreadChange={setStoreUnreadMsgCount}
+        />
+      )}
+
       {/* ── Bottom nav ────────────────────────────────────────────────────── */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border">
         <div className="max-w-lg mx-auto flex items-center justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-          {navTabs.map((t) => (
-            <button key={t.id} data-testid={`tab-${t.id}`} onClick={() => setTab(t.id)}
-              className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 active:scale-95">
-              <t.icon
-                size={22}
-                strokeWidth={tab === t.id ? 2.5 : 1.8}
-                color={tab === t.id ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))"}
-              />
-              <span className="text-[10px] font-medium"
-                style={{ color: tab === t.id ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))" }}>
-                {t.label}
-              </span>
-            </button>
-          ))}
+          {navTabs.map((t) => {
+            const badge = t.id === "messages" && storeUnreadMsgCount > 0 ? storeUnreadMsgCount : 0;
+            return (
+              <button key={t.id} data-testid={`tab-${t.id}`} onClick={() => setTab(t.id)}
+                className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 active:scale-95">
+                <div className="relative">
+                  <t.icon
+                    size={22}
+                    strokeWidth={tab === t.id ? 2.5 : 1.8}
+                    color={tab === t.id ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))"}
+                  />
+                  {badge > 0 && (
+                    <span className="absolute -top-1.5 -right-2 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                      {badge > 9 ? "9+" : badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] font-medium"
+                  style={{ color: tab === t.id ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))" }}>
+                  {t.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </nav>
 
