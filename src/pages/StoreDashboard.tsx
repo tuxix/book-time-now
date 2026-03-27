@@ -1254,7 +1254,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   ];
 
   return (
-    <div className="max-w-lg mx-auto bg-background flex flex-col" style={{ height: "100dvh", overflow: "hidden" }}>
+    <div className="max-w-lg mx-auto min-h-screen bg-background pb-20 flex flex-col">
       {/* ── Dark blue header ─────────────────────────────────────────────── */}
       <div className="sticky top-0 z-30 px-5 py-4" style={{ background: "linear-gradient(135deg, hsl(220 85% 16%) 0%, hsl(213 82% 28%) 100%)" }}>
         <div className="flex items-center justify-between">
@@ -1884,8 +1884,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       )}
 
       {/* ── Bottom nav ────────────────────────────────────────────────────── */}
-      <nav className="shrink-0 bg-card/95 backdrop-blur-md border-t border-border z-40">
-        <div className="flex items-center justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border">
+        <div className="max-w-lg mx-auto flex items-center justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           {navTabs.map((t) => {
             const badge = t.id === "messages" && storeUnreadMsgCount > 0 ? storeUnreadMsgCount : 0;
             return (
