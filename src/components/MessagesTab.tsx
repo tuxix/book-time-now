@@ -6,6 +6,7 @@ import { formatDistanceToNow, parseISO } from "date-fns";
 import ChatScreen from "@/components/ChatScreen";
 
 interface Conversation {
+  storeId: string;
   reservationId: string;
   storeName: string;
   lastMessage: string;
@@ -31,7 +32,6 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
     customerName: string;
   } | null>(null);
 
-  // Auto-open a conversation when navigated from a booking card
   useEffect(() => {
     if (autoOpen) {
       setChatTarget(autoOpen);
@@ -50,7 +50,7 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
 
     const { data: reservations } = await supabase
       .from("reservations")
-      .select("id, stores(name)")
+      .select("id, store_id, stores(id, name)")
       .eq("customer_id", user.id);
 
     if (!reservations || reservations.length === 0) {
@@ -58,6 +58,14 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
       setLoading(false);
       setRefreshing(false);
       return;
+    }
+
+    // Build lookup maps
+    const resIdToStoreId: Record<string, string> = {};
+    const storeIdToName: Record<string, string> = {};
+    for (const r of reservations) {
+      resIdToStoreId[r.id] = r.store_id;
+      storeIdToName[r.store_id] = (r.stores as any)?.name ?? "Store";
     }
 
     const resIds = reservations.map((r) => r.id);
@@ -69,47 +77,39 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
       .order("created_at", { ascending: false });
 
     if (msgError) {
-      // Query blocked (likely RLS) — don't wipe any optimistic conversations
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
     if (!messages || messages.length === 0) {
-      // Only show empty state if we don't have any locally-held conversations
       setConversations((prev) => (prev.length > 0 ? prev : []));
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
-    const storeNameMap: Record<string, string> = {};
-    for (const r of reservations) {
-      storeNameMap[r.id] = (r.stores as any)?.name ?? "Store";
-    }
-
-    const seen = new Set<string>();
+    // Group by store — one conversation per store, most recent message first
     const convMap: Record<string, Conversation> = {};
 
     for (const m of messages) {
-      if (!seen.has(m.reservation_id)) {
-        seen.add(m.reservation_id);
-        convMap[m.reservation_id] = {
+      const storeId = resIdToStoreId[m.reservation_id];
+      if (!storeId) continue;
+
+      if (!convMap[storeId]) {
+        convMap[storeId] = {
+          storeId,
           reservationId: m.reservation_id,
-          storeName: storeNameMap[m.reservation_id] ?? "Store",
+          storeName: storeIdToName[storeId] ?? "Store",
           lastMessage: m.message,
           lastMessageAt: m.created_at,
           lastSenderRole: m.sender_role as "store" | "customer",
           unreadCount: 0,
         };
       }
-    }
 
-    for (const m of messages) {
       if (m.sender_role === "store" && !m.read) {
-        if (convMap[m.reservation_id]) {
-          convMap[m.reservation_id].unreadCount += 1;
-        }
+        convMap[storeId].unreadCount += 1;
       }
     }
 
@@ -182,8 +182,8 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
         <div className="divide-y divide-border">
           {conversations.map((c) => (
             <button
-              key={c.reservationId}
-              data-testid={`conversation-${c.reservationId}`}
+              key={c.storeId}
+              data-testid={`conversation-${c.storeId}`}
               onClick={() =>
                 setChatTarget({
                   reservationId: c.reservationId,
@@ -193,7 +193,6 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
               }
               className="w-full flex items-center gap-3.5 px-5 py-4 hover:bg-secondary/50 active:bg-secondary transition-colors text-left"
             >
-              {/* Avatar */}
               <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0 relative">
                 <Store size={22} className="text-primary" />
                 {c.unreadCount > 0 && (
@@ -203,7 +202,6 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
                 )}
               </div>
 
-              {/* Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-0.5">
                   <p className={`text-sm truncate ${c.unreadCount > 0 ? "font-bold text-foreground" : "font-semibold text-foreground"}`}>
@@ -222,7 +220,6 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
         </div>
       )}
 
-      {/* Chat screen — fills the tab, no floating overlay */}
       {chatTarget && (
         <ChatScreen
           reservationId={chatTarget.reservationId}
@@ -230,21 +227,7 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
           customerName={chatTarget.customerName}
           currentRole="customer"
           onBack={() => {
-            const closed = chatTarget;
             setChatTarget(null);
-            // Optimistically ensure this conversation stays in the list
-            // while the async re-fetch runs in the background
-            setConversations((prev) => {
-              if (prev.some((c) => c.reservationId === closed.reservationId)) return prev;
-              return [{
-                reservationId: closed.reservationId,
-                storeName: closed.storeName,
-                lastMessage: "…",
-                lastMessageAt: new Date().toISOString(),
-                lastSenderRole: "customer" as const,
-                unreadCount: 0,
-              }, ...prev];
-            });
             fetchConversations();
           }}
         />

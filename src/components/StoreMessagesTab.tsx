@@ -4,6 +4,7 @@ import { MessageSquare, RefreshCw, User } from "lucide-react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 
 interface Conversation {
+  customerId: string;
   reservationId: string;
   customerName: string;
   lastMessage: string;
@@ -41,9 +42,10 @@ const StoreMessagesTab = ({
   }, [autoOpen]);
 
   const fetchConversations = async () => {
+    // Step 1: get all reservations for this store (only need id + customer_id)
     const { data: reservations } = await supabase
       .from("reservations")
-      .select("id, customer_name, customer_label")
+      .select("id, customer_id")
       .eq("store_id", storeId);
 
     if (!reservations || reservations.length === 0) {
@@ -53,13 +55,27 @@ const StoreMessagesTab = ({
       return;
     }
 
-    const resIds = reservations.map((r) => r.id);
+    // Step 2: fetch customer names from profiles
+    const customerIds = [...new Set(reservations.map((r) => r.customer_id as string))];
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", customerIds);
 
-    const customerNameMap: Record<string, string> = {};
-    for (const r of reservations) {
-      customerNameMap[r.id] = r.customer_name || r.customer_label || "Customer";
+    const customerIdToName: Record<string, string> = {};
+    for (const p of profiles ?? []) {
+      customerIdToName[p.id] = p.full_name || "Customer";
     }
 
+    // Build lookup: resId -> customerId
+    const resIdToCustomerId: Record<string, string> = {};
+    for (const r of reservations) {
+      resIdToCustomerId[r.id] = r.customer_id as string;
+    }
+
+    const resIds = reservations.map((r) => r.id);
+
+    // Step 3: fetch all messages for these reservations
     const { data: messages, error: msgError } = await supabase
       .from("messages")
       .select("*")
@@ -79,28 +95,27 @@ const StoreMessagesTab = ({
       return;
     }
 
-    const seen = new Set<string>();
+    // Group by customer — one conversation per customer, most recent message first
     const convMap: Record<string, Conversation> = {};
 
     for (const m of messages) {
-      if (!seen.has(m.reservation_id)) {
-        seen.add(m.reservation_id);
-        convMap[m.reservation_id] = {
+      const custId = resIdToCustomerId[m.reservation_id];
+      if (!custId) continue;
+
+      if (!convMap[custId]) {
+        convMap[custId] = {
+          customerId: custId,
           reservationId: m.reservation_id,
-          customerName: customerNameMap[m.reservation_id] ?? "Customer",
+          customerName: customerIdToName[custId] ?? "Customer",
           lastMessage: m.message,
           lastMessageAt: m.created_at,
           lastSenderRole: m.sender_role as "store" | "customer",
           unreadCount: 0,
         };
       }
-    }
 
-    for (const m of messages) {
       if (m.sender_role === "customer" && !m.read) {
-        if (convMap[m.reservation_id]) {
-          convMap[m.reservation_id].unreadCount += 1;
-        }
+        convMap[custId].unreadCount += 1;
       }
     }
 
@@ -182,8 +197,8 @@ const StoreMessagesTab = ({
         <div className="divide-y divide-border">
           {conversations.map((c) => (
             <button
-              key={c.reservationId}
-              data-testid={`store-conversation-${c.reservationId}`}
+              key={c.customerId}
+              data-testid={`store-conversation-${c.customerId}`}
               onClick={() => onOpenChat({ reservationId: c.reservationId, customerName: c.customerName })}
               className="w-full flex items-center gap-3.5 px-5 py-4 hover:bg-secondary/50 active:bg-secondary transition-colors text-left"
             >
