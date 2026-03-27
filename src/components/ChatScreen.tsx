@@ -58,9 +58,10 @@ const ChatScreen = ({ reservationId, storeName, customerName, currentRole, onBac
     fetchMessages().then(() => markRead());
   }, [reservationId]);
 
+  // Real-time subscription — picks up messages from the OTHER side
   useEffect(() => {
     const channel = supabase
-      .channel(`chat-${reservationId}`)
+      .channel(`chat-${reservationId}-${currentRole}`)
       .on("postgres_changes" as any, {
         event: "INSERT",
         schema: "public",
@@ -83,6 +84,7 @@ const ChatScreen = ({ reservationId, storeName, customerName, currentRole, onBac
     return () => { supabase.removeChannel(channel); };
   }, [reservationId, currentRole]);
 
+  // Scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -92,17 +94,43 @@ const ChatScreen = ({ reservationId, storeName, customerName, currentRole, onBac
     const msg = text.trim();
     setText("");
     setSending(true);
-    const { error } = await supabase.from("messages").insert({
+
+    // Optimistic update — show message immediately without waiting for realtime event
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: Message = {
+      id: tempId,
       reservation_id: reservationId,
       sender_id: user.id,
       sender_role: currentRole,
       message: msg,
       read: false,
-    });
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimistic]);
+
+    const { data: inserted, error } = await supabase
+      .from("messages")
+      .insert({
+        reservation_id: reservationId,
+        sender_id: user.id,
+        sender_role: currentRole,
+        message: msg,
+        read: false,
+      })
+      .select()
+      .single();
+
     setSending(false);
+
     if (error) {
+      // Roll back optimistic message
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setText(msg);
     } else {
+      // Replace temp entry with the real DB row (has the real id + created_at)
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? (inserted as Message) : m))
+      );
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
@@ -165,6 +193,7 @@ const ChatScreen = ({ reservationId, storeName, customerName, currentRole, onBac
           <>
             {messages.map((m, i) => {
               const isMine = m.sender_role === currentRole;
+              const isTemp = m.id.startsWith("temp-");
               const showTime =
                 i === messages.length - 1 ||
                 new Date(messages[i + 1]?.created_at).getTime() - new Date(m.created_at).getTime() > 5 * 60 * 1000;
@@ -174,7 +203,7 @@ const ChatScreen = ({ reservationId, storeName, customerName, currentRole, onBac
                   <div
                     className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
                       isMine
-                        ? "bg-[hsl(213_82%_42%)] text-white rounded-br-md"
+                        ? `bg-[hsl(213_82%_42%)] text-white rounded-br-md ${isTemp ? "opacity-70" : ""}`
                         : "bg-secondary text-foreground rounded-bl-md"
                     }`}
                   >
@@ -182,8 +211,8 @@ const ChatScreen = ({ reservationId, storeName, customerName, currentRole, onBac
                   </div>
                   {showTime && (
                     <p className="text-[10px] text-muted-foreground mt-1 px-1">
-                      {formatTime(m.created_at)}
-                      {isMine && <span className="ml-1">{m.read ? " ✓✓" : " ✓"}</span>}
+                      {isTemp ? "Sending…" : formatTime(m.created_at)}
+                      {isMine && !isTemp && <span className="ml-1">{m.read ? " ✓✓" : " ✓"}</span>}
                     </p>
                   )}
                 </div>

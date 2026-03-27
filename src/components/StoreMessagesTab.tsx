@@ -202,7 +202,7 @@ const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAuto
         </div>
       )}
 
-      {/* Chat overlay */}
+      {/* Chat screen — fills the tab */}
       {chatTarget && (
         <div className="fixed inset-0 z-50">
           <ChatScreen
@@ -211,7 +211,20 @@ const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAuto
             customerName={chatTarget.customerName}
             currentRole="store"
             onBack={() => {
+              const closed = chatTarget;
               setChatTarget(null);
+              // Optimistically keep the conversation visible while re-fetch runs
+              setConversations((prev) => {
+                if (prev.some((c) => c.reservationId === closed.reservationId)) return prev;
+                return [{
+                  reservationId: closed.reservationId,
+                  customerName: closed.customerName,
+                  lastMessage: "…",
+                  lastMessageAt: new Date().toISOString(),
+                  lastSenderRole: "store" as const,
+                  unreadCount: 0,
+                }, ...prev];
+              });
               fetchConversations();
             }}
           />

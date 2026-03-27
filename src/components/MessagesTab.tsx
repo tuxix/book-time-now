@@ -214,7 +214,7 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
         </div>
       )}
 
-      {/* Chat overlay */}
+      {/* Chat screen — fills the tab, no floating overlay */}
       {chatTarget && (
         <ChatScreen
           reservationId={chatTarget.reservationId}
@@ -222,7 +222,21 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
           customerName={chatTarget.customerName}
           currentRole="customer"
           onBack={() => {
+            const closed = chatTarget;
             setChatTarget(null);
+            // Optimistically ensure this conversation stays in the list
+            // while the async re-fetch runs in the background
+            setConversations((prev) => {
+              if (prev.some((c) => c.reservationId === closed.reservationId)) return prev;
+              return [{
+                reservationId: closed.reservationId,
+                storeName: closed.storeName,
+                lastMessage: "…",
+                lastMessageAt: new Date().toISOString(),
+                lastSenderRole: "customer" as const,
+                unreadCount: 0,
+              }, ...prev];
+            });
             fetchConversations();
           }}
         />
