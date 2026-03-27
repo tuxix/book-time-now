@@ -437,6 +437,26 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     try { localStorage.setItem("booka-map-dark", String(next)); } catch {}
   }, [mapDark]);
 
+  // ── Map zoom helpers ──────────────────────────────────────────────────────
+  const zoomToUserAndStore = useCallback((store: Store) => {
+    const L = window.L;
+    const map = mapRef.current;
+    if (!L || !map) return;
+    const storeLat = store.latitude ?? DEFAULT_CENTER[0] + stableOffset(store.id, 0);
+    const storeLng = store.longitude ?? DEFAULT_CENTER[1] + stableOffset(store.id, 1);
+    const points: [number, number][] = [[storeLat, storeLng]];
+    if (userLocation) points.push(userLocation);
+    const bounds = L.latLngBounds(points.map(([lat, lng]) => [lat, lng]));
+    map.fitBounds(bounds, { padding: [80, 80], maxZoom: 15, animate: true });
+  }, [userLocation]);
+
+  const resetMapZoom = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const center = userLocation ?? DEFAULT_CENTER;
+    map.setView(center, 11, { animate: true });
+  }, [userLocation]);
+
   // ── Navigation helpers ────────────────────────────────────────────────────
   const switchTab = (tab: Tab) => {
     setActiveTab(tab);
@@ -444,12 +464,38 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     setBookingStore(null);
     setFilterCat(null);
     setMapPinStore(null);
+    resetMapZoom();
   };
 
   const handleCategoryTap = (cat: { emoji: string; label: string }) => {
-    setFilterCat(cat.label);
     setMapPinStore(null);
-    setSheetExpanded(true);
+    setSheetExpanded(false);
+
+    const filtered = stores.filter((s) =>
+      (s.categories && s.categories.length > 0 ? s.categories : [s.category]).includes(cat.label)
+    );
+
+    setFilterCat(cat.label);
+
+    if (filtered.length === 0) return;
+
+    // Find closest store to user
+    const closest = userLocation
+      ? filtered.reduce((best, s) => {
+          const d1 = Math.hypot(
+            (s.latitude ?? DEFAULT_CENTER[0]) - userLocation[0],
+            (s.longitude ?? DEFAULT_CENTER[1]) - userLocation[1]
+          );
+          const d2 = Math.hypot(
+            (best.latitude ?? DEFAULT_CENTER[0]) - userLocation[0],
+            (best.longitude ?? DEFAULT_CENTER[1]) - userLocation[1]
+          );
+          return d1 < d2 ? s : best;
+        })
+      : filtered[0];
+
+    // Small delay to let markers refresh before fitting bounds
+    setTimeout(() => zoomToUserAndStore(closest), 80);
   };
 
   const tabs: { id: Tab; label: string; icon: typeof MapPin }[] = [
@@ -512,7 +558,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
         <div
           className="absolute left-1/2 booka-pin-popup"
           style={{
-            bottom: `calc(${sheetExpanded ? "57%" : "90px"} + 80px)`,
+            bottom: `calc(${filterCat ? "30%" : sheetExpanded ? "57%" : "90px"} + 80px)`,
             transform: "translateX(-50%)",
             zIndex: 450,
             maxWidth: 260,
@@ -535,13 +581,17 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
             {/* Info */}
             <div className="flex-1 min-w-0">
               <p className="font-bold text-slate-900 text-[13px] truncate leading-tight">{mapPinStore.name}</p>
-              <div className="flex items-center gap-1 mt-0.5">
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <Star size={10} className="text-amber-400 fill-amber-400" />
                 <span className="text-[11px] text-slate-500">
                   {mapPinStore.review_count > 0 ? mapPinStore.rating : "New"}
                 </span>
+                {(() => {
+                  const d = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, mapPinStore.latitude, mapPinStore.longitude);
+                  return d ? <span className="text-[11px] text-slate-400 flex items-center gap-0.5"><MapPin size={9} />{d}</span> : null;
+                })()}
                 {mapPinStore.is_open === false && (
-                  <span className="text-[9px] font-bold bg-red-500 text-white px-1 py-0.5 rounded-full ml-1">CLOSED</span>
+                  <span className="text-[9px] font-bold bg-red-500 text-white px-1 py-0.5 rounded-full">CLOSED</span>
                 )}
               </div>
             </div>
@@ -571,7 +621,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
           className="absolute inset-x-0 bg-white rounded-t-3xl overflow-hidden"
           style={{
             bottom: 56,
-            height: sheetExpanded ? "57%" : "90px",
+            height: filterCat ? "30%" : sheetExpanded ? "57%" : "90px",
             zIndex: 500,
             boxShadow: "0 -8px 40px rgba(0,0,0,0.25)",
             transition: "height 0.38s cubic-bezier(0.34, 1.56, 0.64, 1)",
@@ -579,31 +629,37 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
           onTouchStart={(e) => { sheetTouchStartY.current = e.touches[0].clientY; sheetTouchDeltaY.current = 0; }}
           onTouchMove={(e) => { sheetTouchDeltaY.current = e.touches[0].clientY - sheetTouchStartY.current; }}
           onTouchEnd={() => {
+            if (filterCat) return; // lock at 30% when category active
             if (sheetTouchDeltaY.current < -40) setSheetExpanded(true);
             if (sheetTouchDeltaY.current > 40) setSheetExpanded(false);
           }}
         >
-          {/* Drag handle */}
+          {/* Drag handle — only toggles when no category filter */}
           <div
             className="flex justify-center pt-3 pb-2 cursor-pointer"
-            onClick={() => setSheetExpanded((v) => !v)}
+            onClick={() => { if (!filterCat) setSheetExpanded((v) => !v); }}
           >
             <div className="w-10 h-1 rounded-full bg-slate-300" />
           </div>
 
-          {/* Where to? search bar */}
-          <div className="px-4 mb-3">
+          {/* Where to? / category search bar */}
+          <div className="px-4 mb-2">
             {filterCat ? (
-              <div className="flex items-center gap-2 px-4 py-3 rounded-full bg-[#1e2433] text-left">
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#1e2433] text-left">
                 <Search size={15} className="text-slate-400 shrink-0" />
                 <span className="flex-1 text-slate-200 text-sm font-medium">
                   {CATEGORIES.find((c) => c.label === filterCat)?.emoji} {filterCat}
                 </span>
                 <button
-                  onClick={() => { setFilterCat(null); setSheetExpanded(false); }}
-                  className="text-xs text-slate-400 font-semibold hover:text-white transition-colors"
+                  onClick={() => {
+                    setFilterCat(null);
+                    setSheetExpanded(false);
+                    setMapPinStore(null);
+                    resetMapZoom();
+                  }}
+                  className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center hover:bg-slate-500 active:scale-90 transition-all shrink-0"
                 >
-                  ✕
+                  <X size={11} className="text-white" />
                 </button>
               </div>
             ) : (
@@ -657,65 +713,65 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
             </div>
           )}
 
-          {/* Filtered store list when category filter active */}
-          {sheetExpanded && filterCat && (
-            <div className="px-4 pb-4 space-y-2 overflow-y-auto fade-in" style={{ maxHeight: "calc(57vh - 130px)" }}>
-              <p className="text-xs font-medium text-slate-400 mb-2">
-                {filteredForSheet.length} nearby
+          {/* Category results — always visible at 30% when filterCat active */}
+          {filterCat && (
+            <div className="flex flex-col" style={{ height: "calc(100% - 90px)", overflow: "hidden" }}>
+              <p className="text-xs font-medium text-slate-400 px-4 mb-1.5">
+                {filteredForSheet.length} {filteredForSheet.length === 1 ? "store" : "stores"} nearby
               </p>
-              {filteredForSheet.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-6">No {filterCat} stores yet</p>
-              ) : (
-                filteredForSheet.map((store) => {
-                  const dist = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, store.latitude, store.longitude);
-                  return (
-                    <div key={store.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60">
-                      <button
-                        className="flex-1 flex items-center gap-3 text-left"
-                        onClick={() => setSelectedStore(store)}
-                      >
-                        {store.avatar_url ? (
-                          <img src={store.avatar_url} alt={store.name}
-                            className="w-10 h-10 rounded-xl object-cover shrink-0" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-xl booka-gradient flex items-center justify-center text-white font-bold text-xs shrink-0">
-                            {store.name.slice(0, 2).toUpperCase()}
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="text-sm font-bold text-foreground truncate">{store.name}</p>
-                            {store.is_open === false && (
-                              <span className="text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full shrink-0">CLOSED</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                              <Star size={10} className="text-amber-400 fill-amber-400" />
-                              {store.review_count > 0 ? store.rating : "New"}
-                            </span>
-                            {dist && (
-                              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                                <MapPin size={9} /> {dist}
+              <div className="flex-1 overflow-y-auto px-4 pb-3 space-y-2 fade-in">
+                {filteredForSheet.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-4">No stores found in this category</p>
+                ) : (
+                  filteredForSheet.map((store) => {
+                    const dist = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, store.latitude, store.longitude);
+                    return (
+                      <div key={store.id} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-100">
+                        <button
+                          className="flex-1 flex items-center gap-2.5 text-left min-w-0"
+                          onClick={() => {
+                            setMapPinStore(store);
+                            zoomToUserAndStore(store);
+                          }}
+                        >
+                          {store.avatar_url ? (
+                            <img src={store.avatar_url} alt={store.name}
+                              className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl booka-gradient flex items-center justify-center text-white font-bold text-xs shrink-0">
+                              {store.name.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-slate-900 truncate leading-tight">{store.name}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs text-slate-500 flex items-center gap-0.5">
+                                <Star size={9} className="text-amber-400 fill-amber-400" />
+                                {store.review_count > 0 ? store.rating : "New"}
                               </span>
-                            )}
+                              {dist && (
+                                <span className="text-xs text-slate-400 flex items-center gap-0.5">
+                                  <MapPin size={9} /> {dist}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </button>
-                      <button
-                        onClick={() => toggleFav(store.id)}
-                        className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 shrink-0 transition-all"
-                      >
-                        <Heart
-                          size={15}
-                          className={favStoreIds.has(store.id) ? "text-red-500" : "text-slate-400"}
-                          fill={favStoreIds.has(store.id) ? "currentColor" : "none"}
-                        />
-                      </button>
-                    </div>
-                  );
-                })
-              )}
+                        </button>
+                        <button
+                          onClick={() => toggleFav(store.id)}
+                          className="p-1.5 rounded-lg hover:bg-slate-200 active:scale-95 shrink-0 transition-all"
+                        >
+                          <Heart
+                            size={15}
+                            className={favStoreIds.has(store.id) ? "text-red-500" : "text-slate-300"}
+                            fill={favStoreIds.has(store.id) ? "currentColor" : "none"}
+                          />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
         </div>
