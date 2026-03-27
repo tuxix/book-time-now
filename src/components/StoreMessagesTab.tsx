@@ -45,7 +45,7 @@ const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAuto
       .eq("store_id", storeId);
 
     if (!reservations || reservations.length === 0) {
-      setConversations([]);
+      setConversations((prev) => (prev.length > 0 ? prev : []));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -58,14 +58,21 @@ const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAuto
       customerNameMap[r.id] = r.customer_name || r.customer_label || "Customer";
     }
 
-    const { data: messages } = await supabase
+    const { data: messages, error: msgError } = await supabase
       .from("messages")
       .select("*")
       .in("reservation_id", resIds)
       .order("created_at", { ascending: false });
 
+    if (msgError) {
+      // Query blocked (likely RLS) — preserve any optimistic conversations
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     if (!messages || messages.length === 0) {
-      setConversations([]);
+      setConversations((prev) => (prev.length > 0 ? prev : []));
       setLoading(false);
       setRefreshing(false);
       return;

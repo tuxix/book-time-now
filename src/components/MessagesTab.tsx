@@ -54,7 +54,7 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
       .eq("user_id", user.id);
 
     if (!reservations || reservations.length === 0) {
-      setConversations([]);
+      setConversations((prev) => (prev.length > 0 ? prev : []));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -62,14 +62,22 @@ const MessagesTab = ({ onUnreadChange, autoOpen, onAutoOpenHandled }: MessagesTa
 
     const resIds = reservations.map((r) => r.id);
 
-    const { data: messages } = await supabase
+    const { data: messages, error: msgError } = await supabase
       .from("messages")
       .select("*")
       .in("reservation_id", resIds)
       .order("created_at", { ascending: false });
 
+    if (msgError) {
+      // Query blocked (likely RLS) — don't wipe any optimistic conversations
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     if (!messages || messages.length === 0) {
-      setConversations([]);
+      // Only show empty state if we don't have any locally-held conversations
+      setConversations((prev) => (prev.length > 0 ? prev : []));
       setLoading(false);
       setRefreshing(false);
       return;
