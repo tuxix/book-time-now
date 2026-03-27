@@ -358,6 +358,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // Chat / messaging — routes to Messages tab instead of floating overlay
   const [pendingChat, setPendingChat] = useState<{ reservationId: string; customerName: string } | null>(null);
+  const [storeChatTarget, setStoreChatTarget] = useState<{ reservationId: string; customerName: string } | null>(null);
+  const [storeMessagesRefreshTrigger, setStoreMessagesRefreshTrigger] = useState(0);
 
   // Reply to review
   const [replyTarget, setReplyTarget] = useState<string | null>(null);
@@ -1844,10 +1846,14 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       {tab === "messages" && store && (
         <StoreMessagesTab
           storeId={store.id}
-          storeName={store.name}
           onUnreadChange={setStoreUnreadMsgCount}
           autoOpen={pendingChat}
           onAutoOpenHandled={() => setPendingChat(null)}
+          onOpenChat={(target) => {
+            setStoreChatTarget(target);
+            setTab("messages");
+          }}
+          refreshTrigger={storeMessagesRefreshTrigger}
         />
       )}
 
@@ -2094,6 +2100,22 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Store chat screen — rendered at top level to avoid z-index issues ── */}
+      {storeChatTarget && store && (
+        <div className="fixed inset-0 z-[100]">
+          <ChatScreen
+            reservationId={storeChatTarget.reservationId}
+            storeName={store.name}
+            customerName={storeChatTarget.customerName}
+            currentRole="store"
+            onBack={() => {
+              setStoreChatTarget(null);
+              setStoreMessagesRefreshTrigger((n) => n + 1);
+            }}
+          />
+        </div>
+      )}
 
     </div>
   );

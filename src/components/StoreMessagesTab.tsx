@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { MessageSquare, RefreshCw, User } from "lucide-react";
 import { formatDistanceToNow, parseISO } from "date-fns";
-import ChatScreen from "@/components/ChatScreen";
 
 interface Conversation {
   reservationId: string;
@@ -15,25 +14,28 @@ interface Conversation {
 
 interface StoreMessagesTabProps {
   storeId: string;
-  storeName: string;
   onUnreadChange?: (n: number) => void;
   autoOpen?: { reservationId: string; customerName: string } | null;
   onAutoOpenHandled?: () => void;
+  onOpenChat: (target: { reservationId: string; customerName: string }) => void;
+  refreshTrigger?: number;
 }
 
-const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAutoOpenHandled }: StoreMessagesTabProps) => {
+const StoreMessagesTab = ({
+  storeId,
+  onUnreadChange,
+  autoOpen,
+  onAutoOpenHandled,
+  onOpenChat,
+  refreshTrigger,
+}: StoreMessagesTabProps) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [chatTarget, setChatTarget] = useState<{
-    reservationId: string;
-    customerName: string;
-  } | null>(null);
 
-  // Auto-open a specific conversation when navigated from a booking card
   useEffect(() => {
     if (autoOpen) {
-      setChatTarget({ reservationId: autoOpen.reservationId, customerName: autoOpen.customerName });
+      onOpenChat({ reservationId: autoOpen.reservationId, customerName: autoOpen.customerName });
       onAutoOpenHandled?.();
     }
   }, [autoOpen]);
@@ -65,7 +67,6 @@ const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAuto
       .order("created_at", { ascending: false });
 
     if (msgError) {
-      // Query blocked (likely RLS) — preserve any optimistic conversations
       setLoading(false);
       setRefreshing(false);
       return;
@@ -131,6 +132,12 @@ const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAuto
     return () => { supabase.removeChannel(channel); };
   }, [storeId]);
 
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      fetchConversations();
+    }
+  }, [refreshTrigger]);
+
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 py-20">
@@ -177,10 +184,9 @@ const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAuto
             <button
               key={c.reservationId}
               data-testid={`store-conversation-${c.reservationId}`}
-              onClick={() => setChatTarget({ reservationId: c.reservationId, customerName: c.customerName })}
+              onClick={() => onOpenChat({ reservationId: c.reservationId, customerName: c.customerName })}
               className="w-full flex items-center gap-3.5 px-5 py-4 hover:bg-secondary/50 active:bg-secondary transition-colors text-left"
             >
-              {/* Avatar */}
               <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0 relative">
                 <User size={22} className="text-primary" />
                 {c.unreadCount > 0 && (
@@ -190,7 +196,6 @@ const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAuto
                 )}
               </div>
 
-              {/* Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-0.5">
                   <p className={`text-sm truncate ${c.unreadCount > 0 ? "font-bold text-foreground" : "font-semibold text-foreground"}`}>
@@ -206,35 +211,6 @@ const StoreMessagesTab = ({ storeId, storeName, onUnreadChange, autoOpen, onAuto
               </div>
             </button>
           ))}
-        </div>
-      )}
-
-      {/* Chat screen — fills the tab */}
-      {chatTarget && (
-        <div className="fixed inset-0 z-50">
-          <ChatScreen
-            reservationId={chatTarget.reservationId}
-            storeName={storeName}
-            customerName={chatTarget.customerName}
-            currentRole="store"
-            onBack={() => {
-              const closed = chatTarget;
-              setChatTarget(null);
-              // Optimistically keep the conversation visible while re-fetch runs
-              setConversations((prev) => {
-                if (prev.some((c) => c.reservationId === closed.reservationId)) return prev;
-                return [{
-                  reservationId: closed.reservationId,
-                  customerName: closed.customerName,
-                  lastMessage: "…",
-                  lastMessageAt: new Date().toISOString(),
-                  lastSenderRole: "store" as const,
-                  unreadCount: 0,
-                }, ...prev];
-              });
-              fetchConversations();
-            }}
-          />
         </div>
       )}
     </div>
