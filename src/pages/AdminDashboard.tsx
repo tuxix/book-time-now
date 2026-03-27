@@ -397,19 +397,28 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       .select("id, reservation_id, sender_role, message, created_at")
       .order("created_at", { ascending: false })
       .limit(2000);
+
     if (msgs && msgs.length > 0) {
       const resIds = [...new Set(msgs.map((m: any) => m.reservation_id))];
-      const { data: reservations } = await supabase
-        .from("reservations")
-        .select("id, customer_id, store_id, stores(name), profiles!reservations_customer_id_fkey(full_name)")
-        .in("id", resIds);
-      const { data: reportedStores } = await supabase
-        .from("store_reports")
-        .select("store_id")
-        .eq("status", "pending");
-      const reportedStoreIds = new Set((reportedStores ?? []).map((r: any) => r.store_id));
+
+      const [resRes, reportedRes] = await Promise.all([
+        supabase.from("reservations").select("id, customer_id, store_id, stores(name)").in("id", resIds),
+        supabase.from("store_reports").select("store_id").eq("status", "pending"),
+      ]);
+
+      const reservations = resRes.data ?? [];
+      const reportedStoreIds = new Set((reportedRes.data ?? []).map((r: any) => r.store_id));
+
+      const customerIds = [...new Set(reservations.map((r: any) => r.customer_id).filter(Boolean))];
+      const { data: profilesData } = customerIds.length > 0
+        ? await supabase.from("profiles").select("id, full_name").in("id", customerIds)
+        : { data: [] };
+      const profileMap: Record<string, string> = {};
+      (profilesData ?? []).forEach((p: any) => { profileMap[p.id] = p.full_name ?? "Customer"; });
+
       const resMap: Record<string, any> = {};
-      (reservations ?? []).forEach((r: any) => { resMap[r.id] = r; });
+      reservations.forEach((r: any) => { resMap[r.id] = r; });
+
       const convMap: Record<string, ConversationRow> = {};
       msgs.forEach((m: any) => {
         const r = resMap[m.reservation_id];
@@ -418,7 +427,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         if (!convMap[key]) {
           convMap[key] = {
             key, customer_id: r.customer_id, store_id: r.store_id,
-            customer_name: r.profiles?.full_name ?? "Customer",
+            customer_name: profileMap[r.customer_id] ?? "Customer",
             store_name: r.stores?.name ?? "Store",
             last_message: m.message,
             last_message_at: m.created_at,
