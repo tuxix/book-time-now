@@ -17,6 +17,7 @@ interface TimeSlot {
   start_time: string;
   end_time: string;
   is_available: boolean;
+  capacity: number;
 }
 
 interface ServiceOptionItem {
@@ -54,6 +55,8 @@ interface ConfirmedDetails {
   ref: string;
   serviceName?: string;
   serviceTotal?: number;
+  spotNumber?: number;
+  totalCapacity?: number;
 }
 
 interface Props {
@@ -67,6 +70,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const { user } = useAuth();
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [takenSlotIds, setTakenSlotIds] = useState<Set<string>>(new Set());
+  const [slotBookingCounts, setSlotBookingCounts] = useState<Record<string, number>>({});
   const [existingBookings, setExistingBookings] = useState<{ start_time: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -136,18 +140,36 @@ const CustomerBooking = ({ store, onBack }: Props) => {
 
       const buffer = store.buffer_minutes ?? 0;
       const taken = new Set<string>();
+      const counts: Record<string, number> = {};
+
       availableSlots.forEach((slot) => {
         const slotStart = timeToMins(slot.start_time);
         const slotEnd = timeToMins(slot.end_time);
-        for (const b of bookings) {
-          const bookingStart = timeToMins(b.start_time);
-          const bookingEnd = timeToMins(b.end_time) + buffer;
-          if (slotStart < bookingEnd && slotEnd > bookingStart) {
-            taken.add(slot.id);
-            break;
+        const cap = slot.capacity ?? 1;
+
+        const exactCount = bookings.filter(
+          (b) => b.start_time.slice(0, 5) === slot.start_time.slice(0, 5) &&
+                 b.end_time.slice(0, 5) === slot.end_time.slice(0, 5)
+        ).length;
+        counts[slot.id] = exactCount;
+
+        if (exactCount >= cap) {
+          taken.add(slot.id);
+        } else {
+          for (const b of bookings) {
+            const bookingStart = timeToMins(b.start_time);
+            const bookingEnd = timeToMins(b.end_time) + buffer;
+            if (slotStart < bookingEnd && slotEnd > bookingStart &&
+                !(b.start_time.slice(0, 5) === slot.start_time.slice(0, 5) &&
+                  b.end_time.slice(0, 5) === slot.end_time.slice(0, 5))) {
+              taken.add(slot.id);
+              break;
+            }
           }
         }
       });
+
+      setSlotBookingCounts(counts);
       setTakenSlotIds(taken);
       setLoadingSlots(false);
     });
@@ -195,24 +217,26 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     if (!slot || !user) return;
     setBooking(true);
     try {
-      const { data: existing } = await supabase
+      const { count: existingCount } = await supabase
         .from("reservations")
-        .select("id")
+        .select("id", { count: "exact", head: true })
         .eq("store_id", store.id)
         .eq("reservation_date", selectedDateStr)
         .eq("start_time", slot.start_time)
         .eq("end_time", slot.end_time)
-        .neq("status", "cancelled")
-        .maybeSingle();
+        .neq("status", "cancelled");
 
-      if (existing) {
-        toast.error("That slot was just taken. Please choose another time.");
+      const cap = slot.capacity ?? 1;
+      if ((existingCount ?? 0) >= cap) {
+        toast.error("That slot is now full. Please choose another time.");
+        setSlotBookingCounts((prev) => ({ ...prev, [slot.id]: cap }));
         setTakenSlotIds((prev) => new Set([...prev, slot.id]));
         setSelectedSlot(null);
         setPaymentStep(false);
         setServiceStep(false);
         return;
       }
+      const spotNumber = (existingCount ?? 0) + 1;
 
       const totalCharged = selectedService ? serviceTotal : commitmentFee;
       const { data: inserted, error } = await supabase
@@ -312,6 +336,8 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         ref: (inserted?.id as string)?.split("-")[0]?.toUpperCase() ?? "—",
         serviceName: selectedService?.name,
         serviceTotal: selectedService ? serviceTotal : undefined,
+        spotNumber,
+        totalCapacity: slot.capacity ?? 1,
       });
     } catch (err: any) {
       toast.error(err.message || "Booking failed. Please try again.");
@@ -376,6 +402,11 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               <p className="text-sm font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
                 <Clock size={13} className="text-primary" /> {confirmed.startTime} – {confirmed.endTime}
               </p>
+              {confirmed.spotNumber != null && confirmed.totalCapacity != null && confirmed.totalCapacity > 1 && (
+                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                  <Users size={11} /> Spot {confirmed.spotNumber} of {confirmed.totalCapacity}
+                </p>
+              )}
             </div>
             <div className="pt-2 border-t border-border">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Booking Reference</p>
@@ -758,7 +789,11 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               {slots.map((slot) => {
                 const isTaken = takenSlotIds.has(slot.id);
                 const isSelected = selectedSlot === slot.id;
-                const waitCount = getWaitCount(slot);
+                const cap = slot.capacity ?? 1;
+                const bookingCount = slotBookingCounts[slot.id] ?? 0;
+                const remaining = cap - bookingCount;
+                const isLastSpot = !isTaken && remaining === 1 && cap > 1;
+                const hasMultipleSpots = !isTaken && cap > 1 && remaining > 1;
                 return (
                   <button
                     key={slot.id}
@@ -766,9 +801,11 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                     disabled={isTaken}
                     className={`py-3 px-4 rounded-xl text-sm font-medium flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-[0.97] ${
                       isTaken
-                        ? "bg-muted text-muted-foreground cursor-not-allowed line-through opacity-40"
+                        ? "bg-muted text-muted-foreground cursor-not-allowed opacity-40"
                         : isSelected
                         ? "booka-gradient text-white booka-shadow-blue"
+                        : isLastSpot
+                        ? "bg-amber-50 dark:bg-amber-900/20 border border-amber-400 text-foreground"
                         : "bg-card border border-border hover:border-primary/30 hover:bg-primary/5"
                     }`}
                   >
@@ -776,9 +813,17 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                       {isTaken ? <AlertCircle size={13} /> : <Clock size={13} />}
                       {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
                     </span>
-                    {!isTaken && waitCount > 0 && (
+                    {isTaken && (
+                      <span className="text-[10px]">Full</span>
+                    )}
+                    {!isTaken && isLastSpot && (
+                      <span className={`text-[10px] font-semibold ${isSelected ? "text-primary-foreground/90" : "text-amber-600 dark:text-amber-400"}`}>
+                        Last spot!
+                      </span>
+                    )}
+                    {!isTaken && hasMultipleSpots && (
                       <span className={`text-[10px] flex items-center gap-0.5 ${isSelected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
-                        <Users size={9} /> {waitCount} booking{waitCount > 1 ? "s" : ""} ahead
+                        <Users size={9} /> {remaining} spots left
                       </span>
                     )}
                   </button>

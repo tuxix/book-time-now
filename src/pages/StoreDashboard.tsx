@@ -50,6 +50,7 @@ interface TimeSlot {
   start_time: string;
   end_time: string;
   is_available: boolean;
+  capacity: number;
 }
 
 interface StoreReview {
@@ -69,6 +70,7 @@ interface StoreData {
   address: string;
   phone: string;
   category: string;
+  categories?: string[];
   rating: number;
   review_count: number;
   latitude: number | null;
@@ -242,20 +244,27 @@ const StoreSetupScreen = ({
   onComplete: (store: StoreData, slots: TimeSlot[]) => void;
 }) => {
   const [name, setName] = useState(initialName);
-  const [category, setCategory] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const toggleSetupCategory = (label: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label]
+    );
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !category.trim()) { toast.error("Store name and category are required."); return; }
+    if (!name.trim() || selectedCategories.length === 0) { toast.error("Store name and at least one category are required."); return; }
+    const primaryCategory = selectedCategories[0];
     setSaving(true);
     try {
       const { data, error } = await supabase
         .from("stores")
-        .update({ name: name.trim(), category, description: description.trim(), address: address.trim(), phone: phone.trim() })
+        .update({ name: name.trim(), category: primaryCategory, categories: selectedCategories, description: description.trim(), address: address.trim(), phone: phone.trim() })
         .eq("user_id", userId).select().single();
       if (error) throw error;
       if (address.trim()) {
@@ -266,7 +275,7 @@ const StoreSetupScreen = ({
       const slotRows: object[] = [];
       for (let day = 0; day <= 6; day++) {
         for (const [start, end] of DEFAULT_TIMES) {
-          slotRows.push({ store_id: data.id, day_of_week: day, start_time: start, end_time: end });
+          slotRows.push({ store_id: data.id, day_of_week: day, start_time: start, end_time: end, capacity: 1 });
         }
       }
       const { data: insertedSlots } = await supabase.from("store_time_slots").insert(slotRows).select();
@@ -292,21 +301,29 @@ const StoreSetupScreen = ({
         <form onSubmit={handleSave} className="space-y-4 slide-up">
           <Input data-testid="input-setup-name" placeholder="Store name *" value={name} onChange={(e) => setName(e.target.value)} className="rounded-xl" required />
           <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Category *</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Categories * <span className="font-normal normal-case">(select all that apply)</span>
+            </p>
             <div className="grid grid-cols-4 gap-2">
               {CATEGORIES.map((cat) => (
-                <button key={cat.label} type="button" onClick={() => setCategory(cat.label)}
-                  className={`flex flex-col items-center gap-1 p-2.5 rounded-xl transition-all active:scale-95 ${category === cat.label ? "bg-primary text-primary-foreground booka-shadow" : "bg-secondary"}`}>
+                <button key={cat.label} type="button" onClick={() => toggleSetupCategory(cat.label)}
+                  className={`flex flex-col items-center gap-1 p-2.5 rounded-xl transition-all active:scale-95 ${selectedCategories.includes(cat.label) ? "bg-primary text-primary-foreground booka-shadow" : "bg-secondary"}`}>
                   <span className="text-xl">{cat.emoji}</span>
                   <span className="text-[9px] font-bold text-center leading-tight">{cat.label}</span>
                 </button>
               ))}
             </div>
+            {selectedCategories.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Primary: <strong>{selectedCategories[0]}</strong>
+                {selectedCategories.length > 1 && ` · +${selectedCategories.length - 1} more`}
+              </p>
+            )}
           </div>
           <Textarea data-testid="input-setup-description" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} className="rounded-xl resize-none" rows={3} />
           <Input data-testid="input-setup-address" placeholder="Address (used to place you on the map)" value={address} onChange={(e) => setAddress(e.target.value)} className="rounded-xl" />
           <Input data-testid="input-setup-phone" placeholder="Phone number (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} className="rounded-xl" />
-          <Button type="submit" className="w-full h-12 rounded-xl font-semibold mt-2" disabled={saving || !name.trim() || !category}>
+          <Button type="submit" className="w-full h-12 rounded-xl font-semibold mt-2" disabled={saving || !name.trim() || selectedCategories.length === 0}>
             {saving ? "Saving…" : "Go to Dashboard"}
           </Button>
         </form>
@@ -346,10 +363,12 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [slotStart, setSlotStart] = useState("");
   const [slotEnd, setSlotEnd] = useState("");
   const [slotDays, setSlotDays] = useState<number[]>([]);
+  const [slotCapacity, setSlotCapacity] = useState(1);
   const [editGroupIds, setEditGroupIds] = useState<string[] | null>(null);
   const [editStart, setEditStart] = useState("");
   const [editEnd, setEditEnd] = useState("");
   const [editDays, setEditDays] = useState<number[]>([]);
+  const [editCapacity, setEditCapacity] = useState(1);
 
   // Profile edit
   const [editName, setEditName] = useState("");
@@ -357,6 +376,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [editAddr, setEditAddr] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [editCategories, setEditCategories] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Receipt
@@ -432,6 +452,9 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         setEditAddr(s.address || "");
         setEditPhone(s.phone || "");
         setEditCategory(s.category || "");
+        setEditCategories(
+          s.categories && s.categories.length > 0 ? s.categories : (s.category ? [s.category] : [])
+        );
         setIsOpen(s.is_open !== false);
         setAcceptingBookings(s.accepting_bookings !== false);
         setBufferMinutes(s.buffer_minutes ?? 15);
@@ -793,13 +816,14 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   // ── Slot helpers ────────────────────────────────────────────────────────
-  interface GroupedSlot { startTime: string; endTime: string; days: number[]; ids: string[]; }
+  interface GroupedSlot { startTime: string; endTime: string; days: number[]; ids: string[]; capacity: number; }
 
   const groupSlots = (raw: TimeSlot[]): GroupedSlot[] => {
     const map = new Map<string, GroupedSlot>();
     for (const s of raw) {
-      const key = `${s.start_time}|${s.end_time}`;
-      if (!map.has(key)) map.set(key, { startTime: s.start_time, endTime: s.end_time, days: [], ids: [] });
+      const cap = s.capacity ?? 1;
+      const key = `${s.start_time}|${s.end_time}|${cap}`;
+      if (!map.has(key)) map.set(key, { startTime: s.start_time, endTime: s.end_time, days: [], ids: [], capacity: cap });
       const g = map.get(key)!;
       g.days.push(s.day_of_week);
       g.ids.push(s.id);
@@ -829,11 +853,11 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const addSlot = async () => {
     if (!store || !slotStart || !slotEnd || slotDays.length === 0) return;
     if (slotStart >= slotEnd) { toast.error("End time must be after start time."); return; }
-    const rows = slotDays.map((day) => ({ store_id: store.id, day_of_week: day, start_time: slotStart, end_time: slotEnd }));
+    const rows = slotDays.map((day) => ({ store_id: store.id, day_of_week: day, start_time: slotStart, end_time: slotEnd, capacity: slotCapacity }));
     const { data, error } = await supabase.from("store_time_slots").insert(rows).select();
     if (error) { toast.error(`Failed to add slots: ${error.message}`); return; }
     setSlots((prev) => [...prev, ...(data as TimeSlot[])]);
-    setSlotDialog(false); setSlotStart(""); setSlotEnd(""); setSlotDays([]);
+    setSlotDialog(false); setSlotStart(""); setSlotEnd(""); setSlotDays([]); setSlotCapacity(1);
     toast.success(`${slotDays.length} slot${slotDays.length > 1 ? "s" : ""} added`);
   };
 
@@ -849,6 +873,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     setEditStart(group.startTime.slice(0, 5));
     setEditEnd(group.endTime.slice(0, 5));
     setEditDays([...group.days]);
+    setEditCapacity(group.capacity);
   };
 
   const saveEditGroup = async () => {
@@ -856,26 +881,30 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     if (editStart >= editEnd) { toast.error("End time must be after start time."); return; }
     const { error: delErr } = await supabase.from("store_time_slots").delete().in("id", editGroupIds);
     if (delErr) { toast.error("Failed to update slots."); return; }
-    const rows = editDays.map((day) => ({ store_id: store.id, day_of_week: day, start_time: editStart, end_time: editEnd }));
+    const rows = editDays.map((day) => ({ store_id: store.id, day_of_week: day, start_time: editStart, end_time: editEnd, capacity: editCapacity }));
     const { data, error } = await supabase.from("store_time_slots").insert(rows).select();
     if (error) { toast.error("Failed to save updated slots."); return; }
     setSlots((prev) => [...prev.filter((s) => !editGroupIds.includes(s.id)), ...(data as TimeSlot[])]);
-    setEditGroupIds(null); setEditDays([]);
+    setEditGroupIds(null); setEditDays([]); setEditCapacity(1);
     toast.success("Slots updated");
   };
 
   // ── Profile save ───────────────────────────────────────────────────────
   const saveProfile = async () => {
     if (!store || !editName.trim()) { toast.error("Store name is required."); return; }
+    if (editCategories.length === 0) { toast.error("Please select at least one category."); return; }
     setSaving(true);
+    const primaryCategory = editCategories[0];
     const updates = {
       name: editName.trim(), description: editDesc.trim(),
-      address: editAddr.trim(), phone: editPhone.trim(), category: editCategory,
+      address: editAddr.trim(), phone: editPhone.trim(),
+      category: primaryCategory, categories: editCategories,
     };
     const { error } = await supabase.from("stores").update(updates).eq("id", store.id);
     if (error) { toast.error(`Failed to save: ${error.message}`); setSaving(false); return; }
     toast.success("Profile updated");
     setStore({ ...store, ...updates });
+    setEditCategory(primaryCategory);
     if (editAddr.trim()) {
       geocodeAddress(editAddr.trim()).then((coords) => {
         if (coords) {
@@ -1334,10 +1363,15 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             ) : (
               <div className="space-y-2">
                 {grouped.map((g, i) => (
-                  <div key={`${g.startTime}|${g.endTime}`} data-testid={`card-slot-group-${i}`}
+                  <div key={`${g.startTime}|${g.endTime}|${g.capacity}`} data-testid={`card-slot-group-${i}`}
                     className="flex items-center gap-3 p-3.5 rounded-xl bg-card booka-shadow-sm">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground">{fmt12(g.startTime)} – {fmt12(g.endTime)}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground">{fmt12(g.startTime)} – {fmt12(g.endTime)}</p>
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-secondary text-muted-foreground">
+                          ×{g.capacity}
+                        </span>
+                      </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{formatDays(g.days)}</p>
                     </div>
                     <button onClick={() => openEditGroup(g)} className="p-1.5 rounded-lg hover:bg-secondary active:scale-95 transition-all">
@@ -1353,7 +1387,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             )}
 
             {/* Add slot dialog */}
-            <Dialog open={slotDialog} onOpenChange={(o) => { if (!o) { setSlotDialog(false); setSlotDays([]); } }}>
+            <Dialog open={slotDialog} onOpenChange={(o) => { if (!o) { setSlotDialog(false); setSlotDays([]); setSlotCapacity(1); } }}>
               <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
                 <DialogHeader><DialogTitle>Add Time Slot</DialogTitle></DialogHeader>
                 <div className="space-y-4">
@@ -1374,6 +1408,17 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                     </div>
                     <DayChips selected={slotDays} onToggle={(d) => toggleDay(setSlotDays, d)} />
                   </div>
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Capacity (simultaneous bookings)</p>
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => setSlotCapacity((c) => Math.max(1, c - 1))}
+                        className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">−</button>
+                      <span className="text-lg font-bold w-8 text-center">{slotCapacity}</span>
+                      <button type="button" onClick={() => setSlotCapacity((c) => c + 1)}
+                        className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">+</button>
+                      <span className="text-xs text-muted-foreground">{slotCapacity === 1 ? "1 person at a time" : `${slotCapacity} people at once`}</span>
+                    </div>
+                  </div>
                   <Button className="w-full rounded-xl" onClick={addSlot} disabled={!slotStart || !slotEnd || slotDays.length === 0}>
                     Save {slotDays.length > 0 ? `(${slotDays.length} day${slotDays.length > 1 ? "s" : ""})` : ""}
                   </Button>
@@ -1382,7 +1427,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             </Dialog>
 
             {/* Edit slot dialog */}
-            <Dialog open={editGroupIds !== null} onOpenChange={(o) => { if (!o) { setEditGroupIds(null); setEditDays([]); } }}>
+            <Dialog open={editGroupIds !== null} onOpenChange={(o) => { if (!o) { setEditGroupIds(null); setEditDays([]); setEditCapacity(1); } }}>
               <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
                 <DialogHeader><DialogTitle>Edit Time Slot</DialogTitle></DialogHeader>
                 <div className="space-y-4">
@@ -1402,6 +1447,17 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                       </button>
                     </div>
                     <DayChips selected={editDays} onToggle={(d) => { setEditDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]); }} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Capacity (simultaneous bookings)</p>
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => setEditCapacity((c) => Math.max(1, c - 1))}
+                        className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">−</button>
+                      <span className="text-lg font-bold w-8 text-center">{editCapacity}</span>
+                      <button type="button" onClick={() => setEditCapacity((c) => c + 1)}
+                        className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">+</button>
+                      <span className="text-xs text-muted-foreground">{editCapacity === 1 ? "1 person at a time" : `${editCapacity} people at once`}</span>
+                    </div>
                   </div>
                   <Button className="w-full rounded-xl" onClick={saveEditGroup} disabled={!editStart || !editEnd || editDays.length === 0}>
                     Update {editDays.length > 0 ? `(${editDays.length} day${editDays.length > 1 ? "s" : ""})` : ""}
@@ -1582,16 +1638,27 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
           {/* Category grid */}
           <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-2">Category</p>
+            <p className="text-xs font-semibold text-muted-foreground mb-2">
+              Categories <span className="font-normal normal-case">(select all that apply)</span>
+            </p>
             <div className="grid grid-cols-4 gap-2">
               {CATEGORIES.map((cat) => (
-                <button key={cat.label} type="button" onClick={() => setEditCategory(cat.label)}
-                  className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-95 ${editCategory === cat.label ? "bg-primary text-primary-foreground booka-shadow" : "bg-secondary"}`}>
+                <button key={cat.label} type="button"
+                  onClick={() => setEditCategories((prev) =>
+                    prev.includes(cat.label) ? prev.filter((c) => c !== cat.label) : [...prev, cat.label]
+                  )}
+                  className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-95 ${editCategories.includes(cat.label) ? "bg-primary text-primary-foreground booka-shadow" : "bg-secondary"}`}>
                   <span className="text-lg">{cat.emoji}</span>
                   <span className="text-[8px] font-bold text-center leading-tight">{cat.label}</span>
                 </button>
               ))}
             </div>
+            {editCategories.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Primary: <strong>{editCategories[0]}</strong>
+                {editCategories.length > 1 && ` · +${editCategories.length - 1} more`}
+              </p>
+            )}
           </div>
 
           <Textarea data-testid="input-profile-description" placeholder="Description" value={editDesc}

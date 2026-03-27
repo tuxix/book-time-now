@@ -13,7 +13,9 @@ interface Props {
 }
 
 const CategoryResults = ({ category, stores, userLocation, onBack, onSelect, favStoreIds, onToggleFav }: Props) => {
-  const raw = stores.filter((s) => s.category === category.label);
+  const raw = stores.filter((s) =>
+    (s.categories && s.categories.length > 0 ? s.categories : [s.category]).includes(category.label)
+  );
   const filtered = [
     ...raw.filter((s) => s.is_open !== false),
     ...raw.filter((s) => s.is_open === false),

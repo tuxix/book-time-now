@@ -18,6 +18,7 @@ export interface Store {
   address: string;
   phone: string;
   category: string;
+  categories?: string[];
   rating: number;
   review_count: number;
   latitude: number | null;
@@ -201,7 +202,13 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
           <Avatar />
           <div className="flex-1 min-w-0">
             <h2 className="text-xl font-bold text-foreground leading-tight">{store.name}</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">{emoji} {store.category}</p>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {(store.categories && store.categories.length > 0 ? store.categories : [store.category]).map((cat) => (
+                <span key={cat} className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-medium">
+                  {getCategoryEmoji(cat)} {cat}
+                </span>
+              ))}
+            </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {!store.is_open && (
                 <span className="text-xs font-bold bg-red-500 text-white px-2 py-0.5 rounded-full">CLOSED</span>

@@ -33,7 +33,7 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
   useEffect(() => {
     supabase
       .from("stores")
-      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, cancellation_hours, announcement, avatar_url")
+      .select("id, name, description, address, phone, category, categories, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, cancellation_hours, announcement, avatar_url")
       .then(({ data }) => { if (data) setAllStores(data as Store[]); });
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
@@ -41,7 +41,8 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
   const results = query.trim()
     ? allStores.filter((s) => {
         const q = query.toLowerCase();
-        return s.name.toLowerCase().includes(q) || (s.category || "").toLowerCase().includes(q);
+        const allCats = (s.categories && s.categories.length > 0 ? s.categories : [s.category ?? ""]);
+        return s.name.toLowerCase().includes(q) || allCats.some((c) => c.toLowerCase().includes(q));
       })
     : allStores;
 
@@ -89,7 +90,10 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
               )}
             </div>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              <span className="text-xs text-muted-foreground">{getCategoryEmoji(store.category)} {store.category}</span>
+              <span className="text-xs text-muted-foreground">
+                {(store.categories && store.categories.length > 0 ? store.categories : [store.category])
+                  .map((c) => `${getCategoryEmoji(c)} ${c}`).join(" · ")}
+              </span>
               <div className="flex items-center gap-0.5">
                 <Star size={10} className="text-amber-400 fill-amber-400" />
                 <span className="text-xs text-muted-foreground">{store.review_count > 0 ? store.rating : "New"}</span>

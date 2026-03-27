@@ -299,7 +299,7 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
   useEffect(() => {
     supabase
       .from("stores")
-      .select("id, name, description, address, phone, category, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, cancellation_hours, announcement, avatar_url")
+      .select("id, name, description, address, phone, category, categories, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, cancellation_hours, announcement, avatar_url")
       .then(({ data, error }) => {
         console.log("[Booka] stores response:", { data, error });
         if (data) setStores(data as Store[]);
@@ -341,14 +341,17 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     Object.values(markersRef.current).forEach((m) => { try { map.removeLayer(m); } catch {} });
     markersRef.current = {};
 
-    const displayed = filterCat ? stores.filter((s) => s.category === filterCat) : stores;
+    const displayed = filterCat
+      ? stores.filter((s) => (s.categories && s.categories.length > 0 ? s.categories : [s.category]).includes(filterCat))
+      : stores;
 
     displayed.forEach((store) => {
       const lat = store.latitude ?? DEFAULT_CENTER[0] + stableOffset(store.id, 0);
       const lng = store.longitude ?? DEFAULT_CENTER[1] + stableOffset(store.id, 1);
       const active = store.id === mapPinStore?.id;
       const closed = store.is_open === false;
-      const emoji = getCategoryEmoji(store.category);
+      const primaryCat = (store.categories && store.categories.length > 0) ? store.categories[0] : store.category;
+      const emoji = getCategoryEmoji(primaryCat);
       const initials = store.name.slice(0, 2).toUpperCase();
       const html = `
         <div class="bwp${active ? " bwp--active" : ""}${closed ? " bwp--closed" : ""}">
@@ -459,7 +462,9 @@ const CustomerHome = ({ onSwitchToDashboard }: Props) => {
     { id: "profile",  label: "Profile",  icon: User },
   ];
 
-  const filteredForSheet = stores.filter((s) => s.category === filterCat);
+  const filteredForSheet = stores.filter((s) =>
+    filterCat ? (s.categories && s.categories.length > 0 ? s.categories : [s.category]).includes(filterCat) : true
+  );
 
   return (
     <div
