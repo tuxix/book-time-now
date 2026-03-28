@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  ArrowLeft, Star, MapPin, Phone, Clock, MessageSquare, Heart, Flag, ChevronLeft, ChevronRight,
+  ArrowLeft, Star, MapPin, Phone, Clock, MessageSquare, Heart, Flag, ChevronLeft, ChevronRight, X as XIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +48,14 @@ interface TimeSlot {
   end_time: string;
 }
 
+interface StorePhoto {
+  id: string;
+  image_url: string;
+  caption: string | null;
+  is_cover: boolean;
+  display_order: number;
+}
+
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const REPORT_REASONS = ["Inappropriate content", "Fake listing", "Wrong information", "Other"];
 
@@ -73,6 +81,13 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
   const [carouselIdx, setCarouselIdx] = useState(0);
   const [carouselPaused, setCarouselPaused] = useState(false);
 
+  // Store photos carousel
+  const [storePhotos, setStorePhotos] = useState<StorePhoto[]>([]);
+  const [photosLoading, setPhotosLoading] = useState(true);
+  const [photoIdx, setPhotoIdx] = useState(0);
+  const [photoFullscreen, setPhotoFullscreen] = useState<string | null>(null);
+  const photoTouchStartX = useRef<number | null>(null);
+
   const fetchReviews = async () => {
     const { data } = await supabase
       .from("reviews")
@@ -91,6 +106,18 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
 
   useEffect(() => {
     fetchReviews();
+    supabase
+      .from("store_photos")
+      .select("id, image_url, caption, is_cover, display_order")
+      .eq("store_id", store.id)
+      .order("display_order")
+      .then(({ data }) => {
+        if (data) {
+          const sorted = [...data].sort((a, b) => (b.is_cover ? 1 : 0) - (a.is_cover ? 1 : 0) || a.display_order - b.display_order);
+          setStorePhotos(sorted as StorePhoto[]);
+        }
+        setPhotosLoading(false);
+      });
     supabase
       .from("store_time_slots")
       .select("id, day_of_week, start_time, end_time")
@@ -190,6 +217,62 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
 
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto">
+
+      {/* ── Photo carousel ── */}
+      {!photosLoading && (
+        storePhotos.length === 0 ? (
+          <div className="w-full h-44 bg-secondary flex flex-col items-center justify-center gap-2">
+            <div className="w-14 h-14 rounded-2xl booka-gradient flex items-center justify-center text-primary-foreground font-bold text-2xl">
+              {store.name.slice(0, 2).toUpperCase()}
+            </div>
+            <p className="text-xs text-muted-foreground">No photos yet</p>
+          </div>
+        ) : (
+          <div className="relative w-full overflow-hidden select-none"
+            style={{ height: 220 }}
+            onTouchStart={(e) => { photoTouchStartX.current = e.touches[0].clientX; }}
+            onTouchEnd={(e) => {
+              if (photoTouchStartX.current === null) return;
+              const dx = e.changedTouches[0].clientX - photoTouchStartX.current;
+              if (dx < -40) setPhotoIdx((p) => Math.min(p + 1, storePhotos.length - 1));
+              else if (dx > 40) setPhotoIdx((p) => Math.max(p - 1, 0));
+              photoTouchStartX.current = null;
+            }}
+          >
+            {/* Slides */}
+            <div className="flex h-full transition-transform duration-300 ease-in-out" style={{ transform: `translateX(-${photoIdx * 100}%)`, width: `${storePhotos.length * 100}%` }}>
+              {storePhotos.map((photo) => (
+                <button key={photo.id} onClick={() => setPhotoFullscreen(photo.image_url)} className="shrink-0 block" style={{ width: `${100 / storePhotos.length}%` }}>
+                  <img src={photo.image_url} alt={photo.caption ?? "Store photo"} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+            {/* Prev/Next arrows */}
+            {storePhotos.length > 1 && <>
+              <button onClick={() => setPhotoIdx((p) => Math.max(p - 1, 0))} disabled={photoIdx === 0} className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/40 text-white flex items-center justify-center disabled:opacity-20 active:scale-90 transition-all">
+                <ChevronLeft size={16} />
+              </button>
+              <button onClick={() => setPhotoIdx((p) => Math.min(p + 1, storePhotos.length - 1))} disabled={photoIdx === storePhotos.length - 1} className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/40 text-white flex items-center justify-center disabled:opacity-20 active:scale-90 transition-all">
+                <ChevronRight size={16} />
+              </button>
+            </>}
+            {/* Caption */}
+            {storePhotos[photoIdx]?.caption && (
+              <div className="absolute bottom-0 left-0 right-0 px-4 py-2 bg-gradient-to-t from-black/60 to-transparent">
+                <p className="text-white text-xs font-medium truncate">{storePhotos[photoIdx].caption}</p>
+              </div>
+            )}
+            {/* Dots */}
+            {storePhotos.length > 1 && (
+              <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
+                {storePhotos.map((_, i) => (
+                  <button key={i} onClick={() => setPhotoIdx(i)} className={`rounded-full transition-all ${i === photoIdx ? "w-4 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/50"}`} />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      )}
 
       {/* Announcement banner */}
       {!!store.announcement && (
@@ -430,6 +513,16 @@ const StoreProfile = ({ store, userLocation, onBack, onBook, isFav, onToggleFav 
           </p>
         )}
       </div>
+
+      {/* Fullscreen photo */}
+      {photoFullscreen && (
+        <div className="fixed inset-0 z-[500] bg-black flex items-center justify-center" onClick={() => setPhotoFullscreen(null)}>
+          <button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white active:scale-90 transition-all z-10">
+            <XIcon size={20} />
+          </button>
+          <img src={photoFullscreen} alt="Full view" className="max-w-full max-h-full object-contain" />
+        </div>
+      )}
 
       {/* Report dialog */}
       <Dialog open={reportOpen} onOpenChange={(o) => { if (!o) setReportOpen(false); }}>

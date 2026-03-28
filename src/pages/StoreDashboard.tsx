@@ -6,6 +6,7 @@ import {
   Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, ArrowRight, Pencil, RefreshCw, CalendarDays,
   TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User, Sun, Moon, Bell, X as XIcon,
+  Image, ImagePlus, CheckCircle2,
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import ChatScreen from "@/components/ChatScreen";
@@ -113,6 +114,18 @@ interface StoreService {
   is_active: boolean;
   service_option_groups: ServiceOptionGroup[];
 }
+
+interface StorePhoto {
+  id: string;
+  store_id: string;
+  image_url: string;
+  caption: string | null;
+  is_cover: boolean;
+  display_order: number;
+  created_at: string;
+}
+
+const PHOTO_LIMITS: Record<string, number> = { free: 5, pro: 20, premium: Infinity };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const TODAY = format(new Date(), "yyyy-MM-dd");
@@ -338,7 +351,7 @@ const StoreSetupScreen = ({
 const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar" | "services" | "reviews" | "messages">("reservations");
+  const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar" | "services" | "reviews" | "messages" | "photos">("reservations");
   const [storeUnreadMsgCount, setStoreUnreadMsgCount] = useState(0);
   const [storeAnnouncement, setStoreAnnouncement] = useState<{ id: string; title: string; message: string } | null>(null);
   const [store, setStore] = useState<StoreData | null>(null);
@@ -407,6 +420,17 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   // No Show confirmation
   const [noShowDialog, setNoShowDialog] = useState<string | null>(null);
   const [confirmingNoShow, setConfirmingNoShow] = useState(false);
+
+  // Photos tab
+  const [photos, setPhotos] = useState<StorePhoto[]>([]);
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoCaption, setPhotoCaption] = useState("");
+  const [photoUploadDialog, setPhotoUploadDialog] = useState(false);
+  const [photoFullscreen, setPhotoFullscreen] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
+  const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
 
   // Ticks every minute so countdown labels + no-show button auto-update
   const [nowTick, setNowTick] = useState(() => new Date());
@@ -583,6 +607,92 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   useEffect(() => { if (tab === "services" && store) fetchServices(); }, [tab, store]);
+
+  // ── Photos CRUD ──────────────────────────────────────────────────────────
+  const fetchPhotos = async () => {
+    if (!store) return;
+    setPhotosLoading(true);
+    const { data } = await supabase
+      .from("store_photos")
+      .select("*")
+      .eq("store_id", store.id)
+      .order("display_order");
+    if (data) setPhotos(data as StorePhoto[]);
+    setPhotosLoading(false);
+  };
+
+  useEffect(() => { if (tab === "photos" && store) fetchPhotos(); }, [tab, store]);
+
+  const selectPhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPendingPhotoFile(file);
+    setPendingPhotoPreview(URL.createObjectURL(file));
+    setPhotoUploadDialog(true);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  };
+
+  const uploadPhoto = async () => {
+    if (!store || !pendingPhotoFile || !user) return;
+    const tier = (store as any).subscription_tier ?? "pro";
+    const limit = PHOTO_LIMITS[tier] ?? 5;
+    if (photos.length >= limit) {
+      toast.error(`Photo limit reached (${limit} on ${tier} tier)`);
+      return;
+    }
+    setUploadingPhoto(true);
+    const ext = pendingPhotoFile.name.split(".").pop() ?? "jpg";
+    const path = `${store.id}/${Date.now()}.${ext}`;
+    const { error: storageErr } = await supabase.storage.from("store-photos").upload(path, pendingPhotoFile, { upsert: true });
+    if (storageErr) { toast.error("Upload failed"); setUploadingPhoto(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from("store-photos").getPublicUrl(path);
+    const isCover = photos.length === 0;
+    const { error: dbErr } = await supabase.from("store_photos").insert({
+      store_id: store.id,
+      image_url: publicUrl,
+      caption: photoCaption.trim() || null,
+      is_cover: isCover,
+      display_order: photos.length,
+    });
+    setUploadingPhoto(false);
+    if (dbErr) { toast.error("Could not save photo"); return; }
+    toast.success("Photo uploaded!");
+    setPhotoUploadDialog(false);
+    setPhotoCaption("");
+    setPendingPhotoFile(null);
+    setPendingPhotoPreview(null);
+    fetchPhotos();
+  };
+
+  const deletePhoto = async (photo: StorePhoto) => {
+    const pathPart = photo.image_url.split("/store-photos/")[1];
+    if (pathPart) await supabase.storage.from("store-photos").remove([pathPart]);
+    await supabase.from("store_photos").delete().eq("id", photo.id);
+    const remaining = photos.filter((p) => p.id !== photo.id);
+    if (photo.is_cover && remaining.length > 0) {
+      await supabase.from("store_photos").update({ is_cover: true }).eq("id", remaining[0].id);
+    }
+    toast.success("Photo deleted");
+    fetchPhotos();
+  };
+
+  const setCoverPhoto = async (photo: StorePhoto) => {
+    await supabase.from("store_photos").update({ is_cover: false }).eq("store_id", store!.id);
+    await supabase.from("store_photos").update({ is_cover: true }).eq("id", photo.id);
+    fetchPhotos();
+  };
+
+  const movePhoto = async (photo: StorePhoto, direction: "up" | "down") => {
+    const idx = photos.findIndex((p) => p.id === photo.id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= photos.length) return;
+    const swap = photos[swapIdx];
+    await Promise.all([
+      supabase.from("store_photos").update({ display_order: swap.display_order }).eq("id", photo.id),
+      supabase.from("store_photos").update({ display_order: photo.display_order }).eq("id", swap.id),
+    ]);
+    fetchPhotos();
+  };
 
   // ── Service CRUD ─────────────────────────────────────────────────────────
   const addService = async () => {
@@ -1265,6 +1375,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     { id: "reservations" as const, label: "Bookings", icon: Calendar },
     { id: "slots" as const, label: "Slots", icon: Clock },
     { id: "services" as const, label: "Menu", icon: Package },
+    { id: "photos" as const, label: "Photos", icon: Image },
     { id: "messages" as const, label: "Messages", icon: MessageSquare },
     { id: "reviews" as const, label: "Reviews", icon: Star },
     { id: "profile" as const, label: "Profile", icon: Settings },
@@ -1906,7 +2017,119 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         </div>
       )}
 
-      {/* ── Messages tab ──────────────────────────────────────────────────── */}
+      {/* ── Photos tab ────────────────────────────────────────────────────── */}
+      {tab === "photos" && store && (
+        <div className="flex-1 px-5 pt-4 pb-4">
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="font-bold text-foreground text-base">Store Photos</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{photos.length} photo{photos.length !== 1 ? "s" : ""} · Cover photo appears first</p>
+            </div>
+            <button
+              data-testid="button-add-photo"
+              onClick={() => photoInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold active:scale-95 transition-all"
+            >
+              <ImagePlus size={14} /> Add Photo
+            </button>
+          </div>
+
+          {/* Hidden file input */}
+          <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={selectPhotoFile} />
+
+          {photosLoading ? (
+            <div className="grid grid-cols-2 gap-3">
+              {[0,1,2,3].map((i) => <div key={i} className="aspect-square rounded-2xl booka-shimmer" />)}
+            </div>
+          ) : photos.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center">
+                <Image size={28} className="text-muted-foreground" />
+              </div>
+              <p className="font-semibold text-foreground text-sm">No photos yet</p>
+              <p className="text-xs text-muted-foreground text-center">Add photos to showcase your work and attract more customers</p>
+              <button onClick={() => photoInputRef.current?.click()} className="mt-2 px-4 py-2 rounded-xl border border-dashed border-primary text-primary text-xs font-semibold active:scale-95 transition-all">
+                Upload your first photo
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {photos.map((photo, idx) => (
+                <div key={photo.id} data-testid={`photo-card-${photo.id}`} className="relative rounded-2xl overflow-hidden border border-border bg-card">
+                  <button onClick={() => setPhotoFullscreen(photo.image_url)} className="block w-full">
+                    <img src={photo.image_url} alt={photo.caption ?? "Store photo"} className="w-full aspect-square object-cover" />
+                  </button>
+                  {photo.is_cover && (
+                    <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
+                      <CheckCircle2 size={10} /> Cover
+                    </div>
+                  )}
+                  {photo.caption && (
+                    <p className="px-2 py-1.5 text-[11px] text-muted-foreground leading-snug line-clamp-2">{photo.caption}</p>
+                  )}
+                  <div className="flex items-center gap-1 px-2 pb-2">
+                    {!photo.is_cover && (
+                      <button onClick={() => setCoverPhoto(photo)} className="flex-1 h-7 rounded-lg text-[10px] font-semibold border border-primary/40 text-primary active:scale-95 transition-all">
+                        Set Cover
+                      </button>
+                    )}
+                    {idx > 0 && (
+                      <button onClick={() => movePhoto(photo, "up")} className="w-7 h-7 rounded-lg border border-border flex items-center justify-center active:scale-95 transition-all">
+                        <ChevronUp size={12} />
+                      </button>
+                    )}
+                    {idx < photos.length - 1 && (
+                      <button onClick={() => movePhoto(photo, "down")} className="w-7 h-7 rounded-lg border border-border flex items-center justify-center active:scale-95 transition-all">
+                        <ChevronDown size={12} />
+                      </button>
+                    )}
+                    <button onClick={() => { if (confirm("Delete this photo?")) deletePhoto(photo); }} className="w-7 h-7 rounded-lg border border-red-200 text-red-500 flex items-center justify-center active:scale-95 transition-all">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Photo upload dialog ──────────────────────────────────────────── */}
+      {photoUploadDialog && pendingPhotoPreview && (
+        <div className="fixed inset-0 z-[300] flex items-end justify-center" onClick={() => { if (!uploadingPhoto) { setPhotoUploadDialog(false); setPendingPhotoFile(null); setPendingPhotoPreview(null); setPhotoCaption(""); } }}>
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative bg-card rounded-t-3xl p-5 w-full max-w-lg space-y-4" onClick={(e) => e.stopPropagation()}>
+            <p className="font-bold text-foreground text-base">Add Photo</p>
+            <img src={pendingPhotoPreview} alt="Preview" className="w-full aspect-video object-cover rounded-2xl" />
+            <input
+              value={photoCaption}
+              onChange={(e) => setPhotoCaption(e.target.value)}
+              placeholder="Caption (optional)"
+              className="w-full px-4 py-3 rounded-xl border border-border bg-background text-sm outline-none focus:border-primary"
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setPhotoUploadDialog(false); setPendingPhotoFile(null); setPendingPhotoPreview(null); setPhotoCaption(""); }} className="flex-1 rounded-xl" disabled={uploadingPhoto}>
+                Cancel
+              </Button>
+              <Button onClick={uploadPhoto} disabled={uploadingPhoto} className="flex-1 rounded-xl">
+                {uploadingPhoto ? <><RefreshCw size={14} className="animate-spin mr-1.5" /> Uploading…</> : "Upload"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Photo fullscreen view ────────────────────────────────────────── */}
+      {photoFullscreen && (
+        <div className="fixed inset-0 z-[400] bg-black flex items-center justify-center" onClick={() => setPhotoFullscreen(null)}>
+          <button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white active:scale-90 transition-all z-10">
+            <XIcon size={20} />
+          </button>
+          <img src={photoFullscreen} alt="Full view" className="max-w-full max-h-full object-contain" />
+        </div>
+      )}
+
       {tab === "messages" && store && (
         <StoreMessagesTab
           storeId={store.id}
@@ -1923,12 +2146,12 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
       {/* ── Bottom nav ────────────────────────────────────────────────────── */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border">
-        <div className="max-w-lg mx-auto flex items-center justify-around py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <div className="max-w-lg mx-auto flex items-center overflow-x-auto scrollbar-none py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] gap-1 px-2">
           {navTabs.map((t) => {
             const badge = t.id === "messages" && storeUnreadMsgCount > 0 ? storeUnreadMsgCount : 0;
             return (
               <button key={t.id} data-testid={`tab-${t.id}`} onClick={() => setTab(t.id)}
-                className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-all duration-200 active:scale-95">
+                className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all duration-200 active:scale-95 shrink-0">
                 <div className="relative">
                   <t.icon
                     size={22}

@@ -1,17 +1,18 @@
 export const CATEGORIES = [
-  { emoji: "✂️",  label: "Barber" },
+  { emoji: "✂️",  label: "Barber and Beard" },
   { emoji: "💇",  label: "Hair Salon" },
-  { emoji: "🐕",  label: "Dog Grooming" },
   { emoji: "💅",  label: "Nail Tech" },
+  { emoji: "🐕",  label: "Dog Grooming" },
   { emoji: "👁️", label: "Lash Tech" },
-  { emoji: "🧖",  label: "Spa & Wellness" },
-  { emoji: "🧔",  label: "Beard Grooming" },
+  { emoji: "🧖",  label: "Spa and Wellness" },
   { emoji: "💆",  label: "Massage" },
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];
 
 export function getCategoryEmoji(label: string): string {
+  if (label === "Barber" || label === "Beard Grooming") return "✂️";
+  if (label === "Spa & Wellness") return "🧖";
   return CATEGORIES.find((c) => c.label === label)?.emoji ?? "💼";
 }
 
@@ -46,3 +47,13 @@ export function timeAgo(dateStr: string): string {
   if (weeks < 4) return `${weeks} week${weeks !== 1 ? "s" : ""} ago`;
   return `${Math.floor(days / 30)} month${Math.floor(days / 30) !== 1 ? "s" : ""} ago`;
 }
+
+export const DAILY_LIMITS: Record<string, number> = {
+  "Barber and Beard": 10,
+  "Hair Salon": 5,
+  "Nail Tech": 5,
+  "Dog Grooming": 5,
+  "Lash Tech": 5,
+  "Spa and Wellness": 8,
+  "Massage": 8,
+};

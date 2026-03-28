@@ -173,6 +173,14 @@ const ChatScreen = ({ reservationId, storeName, customerName, currentRole, onBac
         </div>
       </div>
 
+      {/* Permanent anti-bypass warning */}
+      <div className="shrink-0 mx-3 mt-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 flex items-start gap-2">
+        <span className="text-sm shrink-0 mt-0.5">⚠️</span>
+        <p className="text-[11px] text-amber-800 dark:text-amber-200 leading-snug font-medium">
+          For your protection, all payments must go through Booka. Never pay or accept payment outside this platform.
+        </p>
+      </div>
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
         {loading ? (

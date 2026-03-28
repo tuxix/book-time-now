@@ -15,6 +15,7 @@ import CustomerBooking from "@/components/CustomerBooking";
 import CustomerReservations from "@/components/CustomerReservations";
 import MessagesTab from "@/components/MessagesTab";
 import EditProfileScreen from "@/components/EditProfileScreen";
+import SettingsScreen from "@/components/SettingsScreen";
 import { toast } from "sonner";
 import {
   getPermission, requestPermission, showNotification,
@@ -38,6 +39,7 @@ interface ProfileTabProps {
   onSwitchToDashboard?: () => void;
   onSwitchToAdmin?: () => void;
   onEditProfile: () => void;
+  onOpenSettings: () => void;
   stores: Store[];
   favStoreIds: Set<string>;
   onToggleFav: (id: string) => void;
@@ -48,7 +50,7 @@ interface ProfileTabProps {
 }
 
 const ProfileTab = ({
-  onSwitchToDashboard, onSwitchToAdmin, onEditProfile, stores, favStoreIds,
+  onSwitchToDashboard, onSwitchToAdmin, onEditProfile, onOpenSettings, stores, favStoreIds,
   onToggleFav, userLocation, onViewStore, profileAvatarUrl,
 }: ProfileTabProps) => {
   const { user, profile, signOut } = useAuth();
@@ -253,10 +255,13 @@ const ProfileTab = ({
         )}
 
         {/* Settings / Help */}
-        {[{ icon: Settings, label: "Settings" }, { icon: HelpCircle, label: "Help & Support" }].map((item, idx) => (
+        {[
+          { icon: Settings, label: "Settings", action: onOpenSettings },
+          { icon: HelpCircle, label: "Help & Support", action: () => toast.info("Help centre coming soon!") },
+        ].map((item, idx) => (
           <button
             key={item.label}
-            onClick={() => toast.info("Coming soon!")}
+            onClick={item.action}
             className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card booka-shadow-sm text-left transition-all active:scale-[0.98] menu-item-animate"
             style={{ animationDelay: `${idx * 40}ms` }}
           >
@@ -366,6 +371,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
   const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("explore");
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const [announcement, setAnnouncement] = useState<{ id: string; title: string; message: string } | null>(null);
@@ -1111,6 +1117,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
           onSwitchToDashboard={onSwitchToDashboard}
           onSwitchToAdmin={onSwitchToAdmin}
           onEditProfile={() => setShowEditProfile(true)}
+          onOpenSettings={() => setShowSettings(true)}
           stores={stores}
           favStoreIds={favStoreIds}
           onToggleFav={toggleFav}
@@ -1128,6 +1135,14 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
           onSaved={(name, phone, url) => {
             setProfileAvatarUrl(url);
           }}
+        />
+      )}
+
+      {/* ── Settings overlay ─────────────────────────────────────────────────── */}
+      {showSettings && (
+        <SettingsScreen
+          onBack={() => setShowSettings(false)}
+          onEditProfile={() => { setShowSettings(false); setShowEditProfile(true); }}
         />
       )}
 
