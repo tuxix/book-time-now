@@ -1,0 +1,365 @@
+Here's the complete confirmed list of everything we're about to build:
+
+---
+
+**PART 1 — IMMEDIATE FIXES**
+
+*Category Updates*
+- Fuse Beard Grooming into Barber category — rename to ✂️ Barber and Beard
+- Updated category list everywhere in the app:
+  - ✂️ Barber and Beard
+  - 💇 Hair Salon
+  - 💅 Nail Tech
+  - 🐕 Dog Grooming
+  - 👁️ Lash Tech
+  - 🧖 Spa and Wellness
+  - 💆 Massage
+
+*Database Fixes*
+- Add base_service_price column to stores table — minimum price for stores with no menu for 25% commitment fee calculation
+- Add primary_category column to stores table — locked for 30 days after signup
+- Add subscription_tier column to stores table — free, pro, premium — default free
+- Add daily_bookings_count column to track daily limits
+- Add employee system table — employees linked to store with their own slots
+
+*Booking Logic Fixes*
+- Enforce 1 customer per slot per hour across all categories
+- Enforce daily booking limits per category per employee:
+  - Barber and Beard — 10 per day
+  - Hair Salon — 5 per day
+  - Nail Tech — 5 per day
+  - Dog Grooming — 5 per day
+  - Lash Tech — 5 per day
+  - Spa and Wellness — 8 per day
+  - Massage — 8 per day
+- Daily limit resets at midnight automatically
+- Soft warning at 80% of daily limit — for example 8 of 10 bookings reached
+- Hard block at limit with upgrade prompt
+
+*Store Setup Fixes*
+- Add base service price field to store setup form
+- Primary category selected at signup is locked for 30 days
+- Secondary categories only affect search and map visibility
+- Calendar closed dates — give store owner choice to keep existing bookings or cancel them when marking a date closed
+- Auto approval for new stores with 48 hour admin review window
+- Grandfather all existing stores into Pro tier for free permanently
+
+*Anti Bypass Fixes*
+- Permanent non dismissable warning banner in every chat conversation
+- Automated message scanner flagging:
+  - Phone numbers
+  - Payment app names — Cashtapp, Lynk, Moneygram, Western Union, PayPal
+  - Keywords — cash, outside, direct, personal, whatsapp me, call me
+- Flagged conversations appear in admin Messages tab with warning icon
+- Three strike system:
+  - Strike 1 — warning notification to store
+  - Strike 2 — 7 day temporary suspension
+  - Strike 3 — permanent suspension
+- Ranking penalty for stores with bypass flags
+
+---
+
+**PART 2 — STORE PHOTO CAROUSEL**
+
+*Database*
+- Create store_photos table — store_id, image_url, caption, is_cover, display_order, created_at
+- Create store-photos Supabase storage bucket
+- RLS policies — store owners can upload and manage their own photos, anyone authenticated can view
+
+*Store Dashboard — Photos Tab*
+- New Photos tab in store dashboard navigation
+- Upload multiple photos from camera roll
+- Optional caption per photo
+- Set one photo as cover photo
+- Reorder photos by dragging
+- Delete photos
+- Photo limit based on tier:
+  - Free — 5 photos maximum
+  - Pro — 20 photos maximum
+  - Premium — unlimited photos
+
+*Customer Side — Store Profile Page*
+- Full width swipeable photo carousel at the very top of store profile page
+- Dots indicator showing position
+- Cover photo appears first
+- Tapping a photo opens full screen view with pinch to zoom
+- If no photos show clean placeholder with store initials and No photos yet message
+- Cover photo replaces initials on map pins and store cards
+
+---
+
+**PART 3 — SUBSCRIPTION TIER SYSTEM**
+
+*Free Tier — J$0*
+- 1 primary category — 0 secondary
+- 1 employee account
+- Daily booking limits per category as above
+- 1 customer per slot
+- 3 services on menu — flat pricing only — no option groups
+- 3 active posts — 24 hour expiry — profile only
+- 5 store photos maximum
+- Initials avatar — no photo upload
+- Initials only map pin — no emoji
+- Standard search ranking
+- No announcement banner
+- No verified badge
+- No analytics
+- No messaging
+- No review replies
+- No rescheduling
+- 24 hour cancellation policy only
+- Default time slots only
+- Single location only
+
+*Pro Tier — J$2,500/month*
+- 1 primary category — 2 secondary categories
+- Up to 3 employee accounts each with own slots
+- Daily booking limits per employee per category
+- Unlimited services — option groups and modifiers enabled
+- Custom pricing per service
+- 50 active posts — 7 day expiry — visible in explore feed
+- Likes and comments on posts
+- 20 store photos maximum
+- Store photo or logo upload
+- Category emoji on map pin
+- Priority search ranking — above free stores
+- Announcement banner — plain text
+- Blue verified badge
+- Basic analytics — bookings, revenue, busiest day, popular slot
+- Customer messaging enabled
+- Review replies enabled
+- Custom time slots — full control
+- Custom cancellation policy
+- 1 free reschedule per customer per month
+- Buffer time between bookings
+- Single location only
+
+*Category Specific Pro Features:*
+- Barber and Beard — live queue system, walk in remote queue, estimated wait time, up to 3 barbers each with own slots
+- Hair Salon — stylist selection, long service options up to 8 hours, duration aware booking
+- Dog Grooming — breed selector, coat type selector, complexity surcharge, matting flag, before and after photos
+- Nail Tech — duration aware slots, nail art options, nail tech selection
+- Spa and Wellness — session length options, couples booking, service packages
+- Lash Tech — duration aware slots, patch test reminder, lash style gallery
+- Massage — therapist selection, session length options, couples massage
+
+*Premium Tier — J$5,000/month*
+- 1 primary category — unlimited secondary categories
+- Unlimited employee accounts each with own slots
+- Unlimited bookings
+- Unlimited services — full customization
+- Package deals and bundles
+- Gift cards
+- Membership subscriptions
+- Unlimited posts — never expire
+- Pin 1 post permanently to top of profile
+- Posts featured at top of explore feed
+- Sponsored map pin placement
+- Post analytics — views, likes, saves
+- Unlimited store photos — never expire
+- Custom branded map pin
+- Featured top placement — above Pro and Free everywhere
+- Custom colored announcement banner with emoji
+- Gold crown verified badge
+- Custom branded receipts — no Booka branding
+- Full advanced analytics
+- Priority messaging with read receipts
+- Unlimited review replies
+- Up to 5 staff accounts
+- Up to 3 locations
+- Unlimited reschedules
+- Fully custom cancellation policy
+- Export all data as CSV
+- Early access to new features
+- Dedicated support channel
+- Dispute resolution priority
+
+*Category Specific Premium Features:*
+- Barber and Beard — unlimited barbers, VIP queue skip, queue TV mode, loyalty stamp card, advanced queue analytics, beard growth photo tracking
+- Hair Salon — unlimited stylists, stylist performance analytics, color appointment system, consultation booking, mood board, loyalty rewards
+- Dog Grooming — pet profile system with full history, vet observation notes, automatic matting surcharge calculator, before and after gallery per pet
+- Nail Tech — unlimited nail techs, nail inspo board, custom nail art pricing, loyalty rewards
+- Spa and Wellness — unlimited rooms and therapists, membership system, wellness journey tracking, health intake forms, gift card system
+- Lash Tech — lash fill reminder system, client lash profile per customer, lash artist portfolio
+- Massage — client health profile, therapist matching, membership subscriptions, corporate accounts
+
+---
+
+**PART 4 — SETTINGS SCREEN**
+
+*Account:*
+- Edit Profile — name, phone, profile photo
+- Change Email
+- Change Password
+- Linked Accounts — Google OAuth status
+- Delete Account — with confirmation warning
+
+*Notifications:*
+- Booking confirmations on or off
+- Status updates on or off
+- Messages on or off
+- Reminders 1 hour before appointments
+- Promotional updates on or off
+
+*Appearance:*
+- Dark and light map toggle — moved from explore screen into settings
+- App theme — light or dark mode for whole app
+
+*Location:*
+- Location permission status with button to open device settings
+- Default location setting
+
+*Privacy:*
+- Profile visibility
+- Privacy policy link
+- Terms of service link
+
+*Support:*
+- Help and FAQ
+- Report a bug
+- Rate the app
+
+*About:*
+- App version number
+- Whats new changelog
+- Social media links
+- Contact us
+
+---
+
+**PART 5 — DISPUTE SYSTEM**
+
+- Create disputes table — reservation_id, customer_id, store_id, reason, evidence_url, status, admin_notes, created_at
+- Customer opens dispute from completed or cancelled booking card
+- Dispute reasons — service not as described, no show by store, overcharged, other
+- Customer can upload photo evidence
+- Store owner notified and can respond
+- Admin reviews in admin dashboard
+- Admin resolves in favour of customer — triggers refund
+- Admin resolves in favour of store — closes dispute
+- Pro stores — standard response time
+- Premium stores — priority response time
+
+---
+
+**PART 6 — RESCHEDULING SYSTEM**
+
+- Reschedule button on booking card — only if status is Scheduled and outside cancellation window
+- Opens booking screen for same store with new date and slot picker
+- Old slot released — new slot booked
+- Store owner notified of reschedule
+- Free tier — no rescheduling
+- Pro tier — 1 free reschedule per booking
+- Premium tier — unlimited reschedules
+
+---
+
+**SQL NEEDED — give all as code blocks before any code changes:**
+
+```sql
+-- Store photo carousel
+CREATE TABLE IF NOT EXISTS public.store_photos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+  image_url text NOT NULL,
+  caption text,
+  is_cover boolean NOT NULL DEFAULT false,
+  display_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.store_photos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view store photos"
+ON public.store_photos FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Store owners can manage photos"
+ON public.store_photos FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = store_photos.store_id AND user_id = auth.uid())
+)
+WITH CHECK (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = store_photos.store_id AND user_id = auth.uid())
+);
+
+-- Subscription tier
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS subscription_tier text NOT NULL DEFAULT 'free' CHECK (subscription_tier IN ('free', 'pro', 'premium'));
+
+-- Base service price
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS base_service_price numeric(10,2) NOT NULL DEFAULT 0;
+
+-- Primary category lock
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS primary_category text;
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS category_locked_until timestamptz;
+
+-- Daily booking count
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS daily_bookings_date date;
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS daily_bookings_count integer NOT NULL DEFAULT 0;
+
+-- Employees table
+CREATE TABLE IF NOT EXISTS public.employees (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  role text NOT NULL DEFAULT 'staff',
+  avatar_url text,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view employees"
+ON public.employees FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Store owners can manage employees"
+ON public.employees FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = employees.store_id AND user_id = auth.uid())
+)
+WITH CHECK (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = employees.store_id AND user_id = auth.uid())
+);
+
+-- Disputes table
+CREATE TABLE IF NOT EXISTS public.disputes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reservation_id uuid NOT NULL REFERENCES public.reservations(id) ON DELETE CASCADE,
+  customer_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+  reason text NOT NULL,
+  evidence_url text,
+  status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'under_review', 'resolved_customer', 'resolved_store', 'closed')),
+  admin_notes text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.disputes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Customers can create disputes"
+ON public.disputes FOR INSERT TO authenticated
+WITH CHECK (auth.uid() = customer_id);
+
+CREATE POLICY "Customers can view own disputes"
+ON public.disputes FOR SELECT TO authenticated
+USING (auth.uid() = customer_id);
+
+CREATE POLICY "Store owners can view their disputes"
+ON public.disputes FOR SELECT TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = disputes.store_id AND user_id = auth.uid())
+);
+
+CREATE POLICY "Admins can manage all disputes"
+ON public.disputes FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+);
+
+-- Grandfather existing stores into Pro
+UPDATE public.stores SET subscription_tier = 'pro' WHERE created_at < now();
+```
+
+---
+
+That is everything confirmed and ready to go. Shall I write it all as one big Replit prompt now?
