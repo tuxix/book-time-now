@@ -126,7 +126,6 @@ interface StorePhoto {
   created_at: string;
 }
 
-const PHOTO_LIMITS: Record<string, number> = { free: 5, pro: 20, premium: Infinity };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const TODAY = format(new Date(), "yyyy-MM-dd");
@@ -466,6 +465,13 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const touchStartY = useRef(0);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Tier-derived limits (always computed from live store state) ──────────
+  const storeTier: "free" | "pro" | "premium" = store?.subscription_tier ?? "free";
+  const tierCatLimit   = storeTier === "premium" ? Infinity : storeTier === "pro" ? 3 : 1;
+  const tierSvcLimit   = storeTier === "free" ? 3 : Infinity;
+  const tierPhotoLimit = storeTier === "premium" ? Infinity : storeTier === "pro" ? 20 : 5;
+  const tierCapLimit   = storeTier === "free" ? 1 : Infinity;
+
   // ── Load store ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
@@ -638,10 +644,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const uploadPhoto = async () => {
     if (!store || !pendingPhotoFile || !user) return;
-    const tier = store.subscription_tier ?? "pro";
-    const limit = PHOTO_LIMITS[tier] ?? 5;
-    if (photos.length >= limit) {
-      toast.error(`Photo limit reached (${limit} on ${tier} tier)`);
+    if (photos.length >= tierPhotoLimit) {
+      toast.error(`Photo limit reached (${tierPhotoLimit === Infinity ? "∞" : tierPhotoLimit} on ${storeTier} plan)`);
       return;
     }
     setUploadingPhoto(true);
@@ -1056,6 +1060,15 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const saveProfile = async () => {
     if (!store || !editName.trim()) { toast.error("Store name is required."); return; }
     if (editCategories.length === 0) { toast.error("Please select at least one category."); return; }
+    // Hard tier enforcement at save time — catches any UI bypass
+    if (editCategories.length > tierCatLimit) {
+      const excess = editCategories.length - tierCatLimit;
+      toast.error(
+        `Your ${storeTier} plan allows ${tierCatLimit === Infinity ? "unlimited" : tierCatLimit} categor${tierCatLimit === 1 ? "y" : "ies"}. Please remove ${excess} more.`
+      );
+      setShowSubscription(true);
+      return;
+    }
     setSaving(true);
     const primaryCategory = editCategories[0];
     const updates = {
@@ -1624,7 +1637,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <p className="text-xs font-semibold text-muted-foreground">Capacity (simultaneous bookings)</p>
-                      {(store?.subscription_tier ?? "free") === "free" && (
+                      {storeTier === "free" && (
                         <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">Free: max 1</span>
                       )}
                     </div>
@@ -1633,7 +1646,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                         className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">−</button>
                       <span className="text-lg font-bold w-8 text-center">{slotCapacity}</span>
                       <button type="button" onClick={() => {
-                        if ((store?.subscription_tier ?? "free") === "free") {
+                        if (slotCapacity >= tierCapLimit) {
                           toast.error("Free plan is limited to 1 person per slot. Upgrade to Pro to increase capacity.");
                           setSlotDialog(false);
                           setShowSubscription(true);
@@ -1641,7 +1654,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                         }
                         setSlotCapacity((c) => c + 1);
                       }}
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg active:scale-95 ${(store?.subscription_tier ?? "free") === "free" ? "bg-secondary opacity-40" : "bg-secondary"}`}>+</button>
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg active:scale-95 ${storeTier === "free" ? "bg-secondary opacity-40" : "bg-secondary"}`}>+</button>
                       <span className="text-xs text-muted-foreground">{slotCapacity === 1 ? "1 person at a time" : `${slotCapacity} people at once`}</span>
                     </div>
                   </div>
@@ -1677,7 +1690,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <p className="text-xs font-semibold text-muted-foreground">Capacity (simultaneous bookings)</p>
-                      {(store?.subscription_tier ?? "free") === "free" && (
+                      {storeTier === "free" && (
                         <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">Free: max 1</span>
                       )}
                     </div>
@@ -1686,7 +1699,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                         className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">−</button>
                       <span className="text-lg font-bold w-8 text-center">{editCapacity}</span>
                       <button type="button" onClick={() => {
-                        if ((store?.subscription_tier ?? "free") === "free") {
+                        if (editCapacity >= tierCapLimit) {
                           toast.error("Free plan is limited to 1 person per slot. Upgrade to Pro to increase capacity.");
                           setEditGroupIds(null);
                           setShowSubscription(true);
@@ -1694,7 +1707,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                         }
                         setEditCapacity((c) => c + 1);
                       }}
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg active:scale-95 ${(store?.subscription_tier ?? "free") === "free" ? "bg-secondary opacity-40" : "bg-secondary"}`}>+</button>
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg active:scale-95 ${storeTier === "free" ? "bg-secondary opacity-40" : "bg-secondary"}`}>+</button>
                       <span className="text-xs text-muted-foreground">{editCapacity === 1 ? "1 person at a time" : `${editCapacity} people at once`}</span>
                     </div>
                   </div>
@@ -1722,9 +1735,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Service Menu</h2>
             <Button data-testid="button-add-service" size="sm" className="rounded-xl gap-1 text-xs h-8"
               onClick={() => {
-                const tier = store?.subscription_tier ?? "pro";
-                const svcLimit = tier === "free" ? 3 : Infinity;
-                if (storeServices.filter(s => s.is_active).length >= svcLimit) {
+                if (storeServices.filter(s => s.is_active).length >= tierSvcLimit) {
                   toast.error("Free plan is limited to 3 services. Upgrade to Pro for unlimited.");
                   setShowSubscription(true);
                   return;
@@ -1888,64 +1899,56 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
           {/* Category grid */}
           <div>
-            {(() => {
-              const tier = store?.subscription_tier ?? "free";
-              const catLimit = tier === "premium" ? Infinity : tier === "pro" ? 3 : 1;
-              const limitLabel = tier === "free" ? "1 category on Free plan" : tier === "pro" ? "Up to 3 categories on Pro" : "Unlimited categories";
-              return (
-                <>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-muted-foreground">
-                      Categories
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowSubscription(true)}
-                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                        tier === "free" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" : "bg-secondary text-muted-foreground"
-                      }`}
-                    >
-                      {limitLabel}
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {CATEGORIES.map((cat) => {
-                      const isSelected = editCategories.includes(cat.label);
-                      const atLimit = !isSelected && editCategories.length >= catLimit;
-                      return (
-                        <button key={cat.label} type="button"
-                          onClick={() => {
-                            if (isSelected) {
-                              setEditCategories((prev) => prev.filter((c) => c !== cat.label));
-                              return;
-                            }
-                            if (atLimit) {
-                              toast.error(
-                                tier === "free"
-                                  ? "Free plan allows 1 category. Upgrade to Pro for up to 3."
-                                  : "Pro plan allows 3 categories. Upgrade to Premium for unlimited."
-                              );
-                              setShowSubscription(true);
-                              return;
-                            }
-                            setEditCategories((prev) => [...prev, cat.label]);
-                          }}
-                          className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-95 ${
-                            isSelected
-                              ? "bg-primary text-primary-foreground booka-shadow"
-                              : atLimit
-                              ? "bg-secondary opacity-40"
-                              : "bg-secondary"
-                          }`}>
-                          <span className="text-lg">{cat.emoji}</span>
-                          <span className="text-[8px] font-bold text-center leading-tight">{cat.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              );
-            })()}
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-muted-foreground">Categories</p>
+              <button
+                type="button"
+                onClick={() => setShowSubscription(true)}
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                  storeTier === "free" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {storeTier === "free" ? "1 category on Free" : storeTier === "pro" ? "Up to 3 on Pro" : "Unlimited"}
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {CATEGORIES.map((cat) => {
+                const isSelected = editCategories.includes(cat.label);
+                const wouldExceed = !isSelected && editCategories.length >= tierCatLimit;
+                return (
+                  <button key={cat.label} type="button"
+                    onClick={() => {
+                      if (isSelected) {
+                        setEditCategories((prev) => prev.filter((c) => c !== cat.label));
+                        return;
+                      }
+                      // Re-read current editCategories length from latest state
+                      setEditCategories((prev) => {
+                        if (prev.length >= tierCatLimit) {
+                          toast.error(
+                            storeTier === "free"
+                              ? "Free plan allows 1 category. Upgrade to Pro for up to 3."
+                              : "Pro plan allows 3 categories. Upgrade to Premium for unlimited."
+                          );
+                          setTimeout(() => setShowSubscription(true), 50);
+                          return prev; // no change
+                        }
+                        return [...prev, cat.label];
+                      });
+                    }}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-95 ${
+                      isSelected
+                        ? "bg-primary text-primary-foreground booka-shadow"
+                        : wouldExceed
+                        ? "bg-secondary opacity-35 cursor-not-allowed"
+                        : "bg-secondary"
+                    }`}>
+                    <span className="text-lg">{cat.emoji}</span>
+                    <span className="text-[8px] font-bold text-center leading-tight">{cat.label}</span>
+                  </button>
+                );
+              })}
+            </div>
             {editCategories.length > 0 && (
               <p className="text-xs text-muted-foreground mt-1.5">
                 Primary: <strong>{editCategories[0]}</strong>
@@ -2123,8 +2126,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             <div>
               <h2 className="font-bold text-foreground text-base">Store Photos</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {photos.length} / {store.subscription_tier === "premium" ? "∞" : PHOTO_LIMITS[store.subscription_tier ?? "pro"]} photos
-                {store.subscription_tier === "free" && " · Upgrade for more"}
+                {photos.length} / {storeTier === "premium" ? "∞" : tierPhotoLimit} photos
+                {storeTier === "free" && " · Upgrade for more"}
               </p>
             </div>
             <button
