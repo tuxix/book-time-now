@@ -6,7 +6,7 @@ import {
   Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, ArrowRight, Pencil, RefreshCw, CalendarDays,
   TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User, Sun, Moon, Bell, X as XIcon,
-  Image, ImagePlus, CheckCircle2,
+  Image, ImagePlus, CheckCircle2, Crown, Zap,
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import ChatScreen from "@/components/ChatScreen";
@@ -84,6 +84,7 @@ interface StoreData {
   cancellation_hours?: number;
   announcement?: string;
   avatar_url?: string;
+  subscription_tier?: "free" | "pro" | "premium";
 }
 
 interface ServiceOptionItem {
@@ -421,6 +422,9 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [noShowDialog, setNoShowDialog] = useState<string | null>(null);
   const [confirmingNoShow, setConfirmingNoShow] = useState(false);
 
+  // Subscription page
+  const [showSubscription, setShowSubscription] = useState(false);
+
   // Photos tab
   const [photos, setPhotos] = useState<StorePhoto[]>([]);
   const [photosLoading, setPhotosLoading] = useState(false);
@@ -634,7 +638,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const uploadPhoto = async () => {
     if (!store || !pendingPhotoFile || !user) return;
-    const tier = (store as any).subscription_tier ?? "pro";
+    const tier = store.subscription_tier ?? "pro";
     const limit = PHOTO_LIMITS[tier] ?? 5;
     if (photos.length >= limit) {
       toast.error(`Photo limit reached (${limit} on ${tier} tier)`);
@@ -1388,7 +1392,23 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs text-white/70 font-medium">Business Dashboard</p>
-            <h1 className="text-lg font-bold text-white">{store?.name || "My Store"}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold text-white">{store?.name || "My Store"}</h1>
+              {store && (
+                <button
+                  onClick={() => setShowSubscription(true)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide active:scale-95 transition-all ${
+                    store.subscription_tier === "premium"
+                      ? "bg-amber-400 text-amber-900"
+                      : store.subscription_tier === "pro"
+                      ? "bg-blue-400 text-blue-900"
+                      : "bg-white/20 text-white"
+                  }`}
+                >
+                  {store.subscription_tier === "premium" ? "👑 Premium" : store.subscription_tier === "pro" ? "⚡ Pro" : "Free"}
+                </button>
+              )}
+            </div>
             <p className="text-xs text-white/60 mt-0.5">{format(new Date(), "EEEE, MMM d")}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -1675,7 +1695,16 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Service Menu</h2>
             <Button data-testid="button-add-service" size="sm" className="rounded-xl gap-1 text-xs h-8"
-              onClick={() => { setNewSvcName(""); setNewSvcDesc(""); setNewSvcPrice("0"); setServiceDialog(true); }}>
+              onClick={() => {
+                const tier = store?.subscription_tier ?? "pro";
+                const svcLimit = tier === "free" ? 3 : Infinity;
+                if (storeServices.filter(s => s.is_active).length >= svcLimit) {
+                  toast.error("Free plan is limited to 3 services. Upgrade to Pro for unlimited.");
+                  setShowSubscription(true);
+                  return;
+                }
+                setNewSvcName(""); setNewSvcDesc(""); setNewSvcPrice("0"); setServiceDialog(true);
+              }}>
               <Plus size={13} /> Add Service
             </Button>
           </div>
@@ -2024,7 +2053,10 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="font-bold text-foreground text-base">Store Photos</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">{photos.length} photo{photos.length !== 1 ? "s" : ""} · Cover photo appears first</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {photos.length} / {store.subscription_tier === "premium" ? "∞" : PHOTO_LIMITS[store.subscription_tier ?? "pro"]} photos
+                {store.subscription_tier === "free" && " · Upgrade for more"}
+              </p>
             </div>
             <button
               data-testid="button-add-photo"
@@ -2173,6 +2205,184 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           })}
         </div>
       </nav>
+
+      {/* ── Subscription / Plans page ─────────────────────────────────────── */}
+      {showSubscription && (
+        <div className="fixed inset-0 z-[350] flex flex-col bg-background overflow-y-auto">
+          {/* Header */}
+          <div className="shrink-0 sticky top-0 bg-card/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-2 z-10">
+            <button onClick={() => setShowSubscription(false)} className="p-2 -ml-2 rounded-xl hover:bg-secondary active:scale-95 transition-all">
+              <ArrowLeft size={20} />
+            </button>
+            <div className="flex-1">
+              <h1 className="font-bold text-foreground">My Plan</h1>
+              <p className="text-xs text-muted-foreground">
+                Current plan: <span className="font-semibold capitalize">{store?.subscription_tier ?? "free"}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="px-4 py-5 space-y-4">
+
+            {/* Current plan banner */}
+            <div className={`rounded-2xl p-4 ${
+              store?.subscription_tier === "premium"
+                ? "bg-amber-50 dark:bg-amber-900/20 border border-amber-300"
+                : store?.subscription_tier === "pro"
+                ? "bg-blue-50 dark:bg-blue-900/20 border border-blue-300"
+                : "bg-secondary border border-border"
+            }`}>
+              <div className="flex items-center gap-3">
+                {store?.subscription_tier === "premium" ? (
+                  <Crown size={28} className="text-amber-500 shrink-0" />
+                ) : store?.subscription_tier === "pro" ? (
+                  <Zap size={28} className="text-blue-500 shrink-0" />
+                ) : (
+                  <Store size={28} className="text-muted-foreground shrink-0" />
+                )}
+                <div>
+                  <p className="font-bold text-foreground text-base capitalize">{store?.subscription_tier ?? "free"} Plan</p>
+                  <p className="text-xs text-muted-foreground">
+                    {store?.subscription_tier === "premium"
+                      ? "J$5,000/month · All features unlocked"
+                      : store?.subscription_tier === "pro"
+                      ? "J$2,500/month · Most features unlocked"
+                      : "J$0/month · Limited features"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Plan cards */}
+            {[
+              {
+                tier: "free" as const,
+                name: "Free",
+                price: "J$0",
+                icon: Store,
+                iconColor: "text-slate-500",
+                bg: "bg-secondary",
+                border: "border-border",
+                features: [
+                  "1 category",
+                  "3 services (flat pricing only)",
+                  "5 store photos",
+                  "Daily booking limits enforced",
+                  "1 employee account",
+                  "Initials avatar (no logo)",
+                  "Standard search ranking",
+                  "No messaging, no analytics",
+                  "24-hour cancellation policy only",
+                ],
+                limits: true,
+              },
+              {
+                tier: "pro" as const,
+                name: "Pro",
+                price: "J$2,500/mo",
+                icon: Zap,
+                iconColor: "text-blue-500",
+                bg: "bg-blue-50 dark:bg-blue-900/20",
+                border: "border-blue-300 dark:border-blue-700",
+                features: [
+                  "1 primary + 2 secondary categories",
+                  "Unlimited services with option groups",
+                  "20 store photos",
+                  "Up to 3 employee accounts",
+                  "Store photo / logo upload",
+                  "Category emoji on map pin",
+                  "Priority search ranking",
+                  "Blue verified badge",
+                  "Customer messaging enabled",
+                  "Basic analytics",
+                  "Review replies",
+                  "Custom time slots & cancellation policy",
+                  "1 free reschedule per customer/month",
+                  "Announcement banner",
+                ],
+                limits: false,
+              },
+              {
+                tier: "premium" as const,
+                name: "Premium",
+                price: "J$5,000/mo",
+                icon: Crown,
+                iconColor: "text-amber-500",
+                bg: "bg-amber-50 dark:bg-amber-900/20",
+                border: "border-amber-300 dark:border-amber-700",
+                features: [
+                  "Unlimited secondary categories",
+                  "Unlimited services & customization",
+                  "Unlimited photos",
+                  "Unlimited employee accounts",
+                  "Package deals & bundles",
+                  "Gift cards & memberships",
+                  "Unlimited posts (never expire)",
+                  "Sponsored map pin placement",
+                  "Gold crown verified badge",
+                  "Full advanced analytics",
+                  "Priority messaging with read receipts",
+                  "Up to 3 locations",
+                  "Unlimited reschedules",
+                  "Custom branded receipts",
+                  "Export all data as CSV",
+                  "Priority support",
+                ],
+                limits: false,
+              },
+            ].map((plan) => {
+              const isCurrent = (store?.subscription_tier ?? "free") === plan.tier;
+              const PlanIcon = plan.icon;
+              return (
+                <div key={plan.tier} className={`rounded-2xl border p-4 ${plan.bg} ${plan.border} ${isCurrent ? "ring-2 ring-primary" : ""}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <PlanIcon size={20} className={plan.iconColor} />
+                      <span className="font-bold text-foreground">{plan.name}</span>
+                      {isCurrent && (
+                        <span className="text-[10px] font-bold bg-primary text-primary-foreground px-2 py-0.5 rounded-full">CURRENT</span>
+                      )}
+                    </div>
+                    <span className="font-bold text-foreground text-sm">{plan.price}</span>
+                  </div>
+                  <ul className="space-y-1.5 mb-4">
+                    {plan.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-xs text-foreground">
+                        <CheckCircle2 size={12} className={`${plan.iconColor} mt-0.5 shrink-0`} />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  {!isCurrent && (
+                    <button
+                      onClick={() => {
+                        const msg = encodeURIComponent(
+                          `Hi! I'd like to upgrade my Booka store "${store?.name}" to the ${plan.name} plan (${plan.price}). My store ID is ${store?.id}.`
+                        );
+                        window.open(`https://wa.me/18761234567?text=${msg}`, "_blank");
+                      }}
+                      className={`w-full py-2.5 rounded-xl font-semibold text-sm text-white active:scale-[0.98] transition-all ${
+                        plan.tier === "premium"
+                          ? "bg-amber-500 hover:bg-amber-600"
+                          : "bg-blue-500 hover:bg-blue-600"
+                      }`}
+                    >
+                      Upgrade to {plan.name}
+                    </button>
+                  )}
+                  {isCurrent && plan.tier === "free" && (
+                    <p className="text-center text-xs text-muted-foreground pt-1">Tap a plan above to upgrade via WhatsApp</p>
+                  )}
+                </div>
+              );
+            })}
+
+            <p className="text-center text-xs text-muted-foreground pb-4">
+              To upgrade, tap the plan and we'll connect you via WhatsApp. Payment processing coming soon.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Add Service dialog ────────────────────────────────────────────── */}
       <Dialog open={serviceDialog} onOpenChange={(o) => { if (!o) setServiceDialog(false); }}>
