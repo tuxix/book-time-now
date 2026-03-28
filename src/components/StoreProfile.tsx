@@ -29,6 +29,7 @@ export interface Store {
   cancellation_hours?: number;
   announcement?: string;
   avatar_url?: string;
+  subscription_tier?: "free" | "pro" | "premium";
 }
 
 interface Review {

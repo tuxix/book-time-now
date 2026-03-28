@@ -10,6 +10,7 @@ import { format, addDays } from "date-fns";
 import { toast } from "sonner";
 import { type Store } from "@/components/StoreProfile";
 import CustomerCalendar from "@/components/CustomerCalendar";
+import { DAILY_LIMITS } from "@/lib/categories";
 
 interface TimeSlot {
   id: string;
@@ -237,6 +238,23 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         return;
       }
       const spotNumber = (existingCount ?? 0) + 1;
+
+      // ── Daily booking limit check for free-tier stores ──────────────────────
+      if ((store.subscription_tier ?? "free") === "free") {
+        const primaryCategory = (store.categories?.[0]) ?? store.category;
+        const dailyLimit = DAILY_LIMITS[primaryCategory] ?? 5;
+        const { count: dailyCount } = await supabase
+          .from("reservations")
+          .select("id", { count: "exact", head: true })
+          .eq("store_id", store.id)
+          .eq("reservation_date", selectedDateStr)
+          .neq("status", "cancelled");
+        if ((dailyCount ?? 0) >= dailyLimit) {
+          toast.error(`${store.name} is fully booked for that day. Try a different date.`);
+          setBooking(false);
+          return;
+        }
+      }
 
       const totalCharged = selectedService ? serviceTotal : commitmentFee;
       const { data: inserted, error } = await supabase

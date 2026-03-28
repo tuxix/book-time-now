@@ -1622,13 +1622,26 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                     <DayChips selected={slotDays} onToggle={(d) => toggleDay(setSlotDays, d)} />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Capacity (simultaneous bookings)</p>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-xs font-semibold text-muted-foreground">Capacity (simultaneous bookings)</p>
+                      {(store?.subscription_tier ?? "free") === "free" && (
+                        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">Free: max 1</span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-3">
                       <button type="button" onClick={() => setSlotCapacity((c) => Math.max(1, c - 1))}
                         className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">−</button>
                       <span className="text-lg font-bold w-8 text-center">{slotCapacity}</span>
-                      <button type="button" onClick={() => setSlotCapacity((c) => c + 1)}
-                        className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">+</button>
+                      <button type="button" onClick={() => {
+                        if ((store?.subscription_tier ?? "free") === "free") {
+                          toast.error("Free plan is limited to 1 person per slot. Upgrade to Pro to increase capacity.");
+                          setSlotDialog(false);
+                          setShowSubscription(true);
+                          return;
+                        }
+                        setSlotCapacity((c) => c + 1);
+                      }}
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg active:scale-95 ${(store?.subscription_tier ?? "free") === "free" ? "bg-secondary opacity-40" : "bg-secondary"}`}>+</button>
                       <span className="text-xs text-muted-foreground">{slotCapacity === 1 ? "1 person at a time" : `${slotCapacity} people at once`}</span>
                     </div>
                   </div>
@@ -1662,13 +1675,26 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                     <DayChips selected={editDays} onToggle={(d) => { setEditDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]); }} />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Capacity (simultaneous bookings)</p>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-xs font-semibold text-muted-foreground">Capacity (simultaneous bookings)</p>
+                      {(store?.subscription_tier ?? "free") === "free" && (
+                        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">Free: max 1</span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-3">
                       <button type="button" onClick={() => setEditCapacity((c) => Math.max(1, c - 1))}
                         className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">−</button>
                       <span className="text-lg font-bold w-8 text-center">{editCapacity}</span>
-                      <button type="button" onClick={() => setEditCapacity((c) => c + 1)}
-                        className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">+</button>
+                      <button type="button" onClick={() => {
+                        if ((store?.subscription_tier ?? "free") === "free") {
+                          toast.error("Free plan is limited to 1 person per slot. Upgrade to Pro to increase capacity.");
+                          setEditGroupIds(null);
+                          setShowSubscription(true);
+                          return;
+                        }
+                        setEditCapacity((c) => c + 1);
+                      }}
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg active:scale-95 ${(store?.subscription_tier ?? "free") === "free" ? "bg-secondary opacity-40" : "bg-secondary"}`}>+</button>
                       <span className="text-xs text-muted-foreground">{editCapacity === 1 ? "1 person at a time" : `${editCapacity} people at once`}</span>
                     </div>
                   </div>
@@ -1862,21 +1888,64 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
           {/* Category grid */}
           <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-2">
-              Categories <span className="font-normal normal-case">(select all that apply)</span>
-            </p>
-            <div className="grid grid-cols-4 gap-2">
-              {CATEGORIES.map((cat) => (
-                <button key={cat.label} type="button"
-                  onClick={() => setEditCategories((prev) =>
-                    prev.includes(cat.label) ? prev.filter((c) => c !== cat.label) : [...prev, cat.label]
-                  )}
-                  className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-95 ${editCategories.includes(cat.label) ? "bg-primary text-primary-foreground booka-shadow" : "bg-secondary"}`}>
-                  <span className="text-lg">{cat.emoji}</span>
-                  <span className="text-[8px] font-bold text-center leading-tight">{cat.label}</span>
-                </button>
-              ))}
-            </div>
+            {(() => {
+              const tier = store?.subscription_tier ?? "free";
+              const catLimit = tier === "premium" ? Infinity : tier === "pro" ? 3 : 1;
+              const limitLabel = tier === "free" ? "1 category on Free plan" : tier === "pro" ? "Up to 3 categories on Pro" : "Unlimited categories";
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Categories
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowSubscription(true)}
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        tier === "free" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" : "bg-secondary text-muted-foreground"
+                      }`}
+                    >
+                      {limitLabel}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {CATEGORIES.map((cat) => {
+                      const isSelected = editCategories.includes(cat.label);
+                      const atLimit = !isSelected && editCategories.length >= catLimit;
+                      return (
+                        <button key={cat.label} type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setEditCategories((prev) => prev.filter((c) => c !== cat.label));
+                              return;
+                            }
+                            if (atLimit) {
+                              toast.error(
+                                tier === "free"
+                                  ? "Free plan allows 1 category. Upgrade to Pro for up to 3."
+                                  : "Pro plan allows 3 categories. Upgrade to Premium for unlimited."
+                              );
+                              setShowSubscription(true);
+                              return;
+                            }
+                            setEditCategories((prev) => [...prev, cat.label]);
+                          }}
+                          className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-95 ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground booka-shadow"
+                              : atLimit
+                              ? "bg-secondary opacity-40"
+                              : "bg-secondary"
+                          }`}>
+                          <span className="text-lg">{cat.emoji}</span>
+                          <span className="text-[8px] font-bold text-center leading-tight">{cat.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
             {editCategories.length > 0 && (
               <p className="text-xs text-muted-foreground mt-1.5">
                 Primary: <strong>{editCategories[0]}</strong>
