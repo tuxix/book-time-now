@@ -20,7 +20,7 @@ import {
 type AdminTab = "overview" | "stores" | "customers" | "reports" | "bookings" | "revenue" | "announcements" | "messages";
 
 interface StoreRow {
-  id: string; name: string; category: string; address?: string; phone?: string;
+  id: string; user_id: string; name: string; category: string; address?: string; phone?: string;
   rating: number; review_count: number; is_suspended: boolean; is_approved: boolean;
   created_at: string; booking_count: number; active_slots: number;
   last_booking_date: string | null; total_revenue: number;
@@ -95,6 +95,9 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [storeSearch, setStoreSearch] = useState("");
   const [storesLoading, setStoresLoading] = useState(false);
   const [contactTarget, setContactTarget] = useState<{ name: string; phone: string } | null>(null);
+  const [msgTarget, setMsgTarget] = useState<{ recipientId: string; name: string } | null>(null);
+  const [msgText, setMsgText] = useState("");
+  const [sendingMsg, setSendingMsg] = useState(false);
 
   // Customers
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
@@ -227,7 +230,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setStoresLoading(true);
     const { data } = await supabase
       .from("stores")
-      .select("id, name, category, address, phone, rating, review_count, is_suspended, is_approved, created_at")
+      .select("id, user_id, name, category, address, phone, rating, review_count, is_suspended, is_approved, created_at")
       .order("created_at", { ascending: false });
     if (data) {
       const ids = data.map((s: any) => s.id);
@@ -519,6 +522,21 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     fetchStats();
   };
 
+  const sendAdminMessage = async () => {
+    if (!msgText.trim() || !msgTarget || !user) return;
+    setSendingMsg(true);
+    const { error } = await supabase.from("admin_messages").insert({
+      recipient_id: msgTarget.recipientId,
+      sender_id: user.id,
+      message: msgText.trim(),
+    });
+    if (error) { toast.error("Failed to send message"); setSendingMsg(false); return; }
+    toast.success(`Message sent to ${msgTarget.name}`);
+    setMsgTarget(null);
+    setMsgText("");
+    setSendingMsg(false);
+  };
+
   const deleteAnnouncement = async (id: string) => {
     const { error } = await supabase.from("announcements").delete().eq("id", id);
     if (error) { toast.error("Failed to delete"); return; }
@@ -716,6 +734,11 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                     <Phone size={12} /> Contact
                   </button>
                 )}
+                {s.user_id && (
+                  <button onClick={() => { setMsgTarget({ recipientId: s.user_id, name: s.name }); setMsgText(""); }} className="flex-1 h-8 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border border-violet-200 text-violet-600 hover:bg-violet-50 transition-all active:scale-95">
+                    <MessageSquare size={12} /> Message
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -773,6 +796,9 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                     <Phone size={11} /> Contact
                   </button>
                 )}
+                <button onClick={() => { setMsgTarget({ recipientId: c.id, name: c.full_name ?? "Customer" }); setMsgText(""); }} className="flex-1 h-8 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border border-violet-200 text-violet-600 hover:bg-violet-50 transition-all active:scale-95">
+                  <MessageSquare size={11} /> Message
+                </button>
               </div>
             </div>
           );
@@ -1115,6 +1141,41 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       <div className="flex-1 overflow-y-auto">
         {renderContent()}
       </div>
+
+      {/* Message dialog */}
+      {msgTarget && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center px-6" onClick={() => !sendingMsg && setMsgTarget(null)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-bold text-slate-900 text-base">Send Message</p>
+                <p className="text-sm text-slate-500 mt-0.5">To: {msgTarget.name}</p>
+              </div>
+              <button onClick={() => setMsgTarget(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100">
+                <X size={16} />
+              </button>
+            </div>
+            <Textarea
+              placeholder="Type your message…"
+              value={msgText}
+              onChange={(e) => setMsgText(e.target.value)}
+              className="rounded-xl resize-none text-sm"
+              rows={4}
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setMsgTarget(null)} className="flex-1 rounded-xl" disabled={sendingMsg}>
+                Cancel
+              </Button>
+              <Button onClick={sendAdminMessage} disabled={sendingMsg || !msgText.trim()} className="flex-1 rounded-xl">
+                {sendingMsg ? <Loader2 size={14} className="animate-spin mr-1.5" /> : <Send size={14} className="mr-1.5" />}
+                Send
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Contact dialog — Store */}
       {contactTarget && (
