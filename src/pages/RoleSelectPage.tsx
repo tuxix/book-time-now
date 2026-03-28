@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -105,6 +106,14 @@ const RoleSelectPage = () => {
             {loading ? "Setting up..." : "Continue"}
           </Button>
         </form>
+
+        <button
+          type="button"
+          onClick={() => supabase.auth.signOut()}
+          className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto mt-2"
+        >
+          <LogOut size={12} /> Sign out
+        </button>
       </div>
     </div>
   );

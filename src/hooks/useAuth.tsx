@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, sess) => {
+      (event, sess) => {
         if (!mounted) return;
 
         setSession(sess);
@@ -60,6 +60,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           (async () => {
             const prof = await fetchProfile(uid);
             if (!mounted) return;
+
+            // On page load / token refresh: if we have a session but no profile
+            // row, the account was deleted externally — sign out to un-stick the user.
+            // For a brand-new SIGNED_IN event, allow RoleSelectPage to create the profile.
+            if (!prof && event !== "SIGNED_IN" && event !== "USER_UPDATED") {
+              await supabase.auth.signOut();
+              if (!mounted) return;
+              setUser(null);
+              setSession(null);
+              setProfile(null);
+              setLoading(false);
+              return;
+            }
+
             setProfile(prof);
             setLoading(false);
           })();
