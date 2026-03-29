@@ -289,7 +289,7 @@ const StoreSetupScreen = ({
           if (coords) supabase.from("stores").update({ latitude: coords.lat, longitude: coords.lng }).eq("user_id", userId);
         });
       }
-      const slotRows: object[] = [];
+      const slotRows: { store_id: string; day_of_week: number; start_time: string; end_time: string; capacity: number }[] = [];
       for (let day = 0; day <= 6; day++) {
         for (const [start, end] of DEFAULT_TIMES) {
           slotRows.push({ store_id: data.id, day_of_week: day, start_time: start, end_time: end, capacity: 1 });
@@ -544,13 +544,13 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       const profileMap = new Map((profilesData ?? []).map((p) => [p.id, p]));
       setReservations(
         reservationData.map((r, i) => {
-          const profile = profileMap.get(r.customer_id);
+          const profile = profileMap.get(r.customer_id as string);
           return {
             ...r,
             customer_label: profile?.full_name || `Customer #${i + 1}`,
             customer_name: profile?.full_name ?? undefined,
             customer_phone: profile?.phone ?? undefined,
-          };
+          } as unknown as Reservation;
         })
       );
     }

@@ -14,12 +14,78 @@ export type Database = {
   }
   public: {
     Tables: {
+      announcements: {
+        Row: {
+          audience: string
+          created_at: string
+          id: string
+          message: string
+          sent_by: string | null
+          title: string
+        }
+        Insert: {
+          audience?: string
+          created_at?: string
+          id?: string
+          message: string
+          sent_by?: string | null
+          title: string
+        }
+        Update: {
+          audience?: string
+          created_at?: string
+          id?: string
+          message?: string
+          sent_by?: string | null
+          title?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          read: boolean | null
+          reservation_id: string
+          sender_id: string
+          sender_role: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          read?: boolean | null
+          reservation_id: string
+          sender_id: string
+          sender_role: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          read?: boolean | null
+          reservation_id?: string
+          sender_id?: string
+          sender_role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
           full_name: string
           id: string
+          is_admin: boolean | null
           phone: string | null
           role: string
           user_id: string
@@ -29,6 +95,7 @@ export type Database = {
           created_at?: string
           full_name?: string
           id?: string
+          is_admin?: boolean | null
           phone?: string | null
           role: string
           user_id: string
@@ -38,45 +105,108 @@ export type Database = {
           created_at?: string
           full_name?: string
           id?: string
+          is_admin?: boolean | null
           phone?: string | null
           role?: string
           user_id?: string
         }
         Relationships: []
       }
+      reservation_services: {
+        Row: {
+          base_price: number | null
+          created_at: string
+          id: string
+          reservation_id: string
+          selected_options: Json | null
+          service_id: string | null
+          service_name: string
+          total_price: number | null
+        }
+        Insert: {
+          base_price?: number | null
+          created_at?: string
+          id?: string
+          reservation_id: string
+          selected_options?: Json | null
+          service_id?: string | null
+          service_name: string
+          total_price?: number | null
+        }
+        Update: {
+          base_price?: number | null
+          created_at?: string
+          id?: string
+          reservation_id?: string
+          selected_options?: Json | null
+          service_id?: string | null
+          service_name?: string
+          total_price?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_services_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reservations: {
         Row: {
+          cancelled_by: string | null
+          checkin_code: string | null
+          commitment_fee_amount: number | null
           created_at: string
           customer_id: string
           end_time: string
           fee: number | null
           id: string
+          payment_status: string | null
+          refund_amount: number | null
           reservation_date: string
+          retained_amount: number | null
           start_time: string
           status: string
           store_id: string
+          total_amount: number | null
         }
         Insert: {
+          cancelled_by?: string | null
+          checkin_code?: string | null
+          commitment_fee_amount?: number | null
           created_at?: string
           customer_id: string
           end_time: string
           fee?: number | null
           id?: string
+          payment_status?: string | null
+          refund_amount?: number | null
           reservation_date: string
+          retained_amount?: number | null
           start_time: string
           status?: string
           store_id: string
+          total_amount?: number | null
         }
         Update: {
+          cancelled_by?: string | null
+          checkin_code?: string | null
+          commitment_fee_amount?: number | null
           created_at?: string
           customer_id?: string
           end_time?: string
           fee?: number | null
           id?: string
+          payment_status?: string | null
+          refund_amount?: number | null
           reservation_date?: string
+          retained_amount?: number | null
           start_time?: string
           status?: string
           store_id?: string
+          total_amount?: number | null
         }
         Relationships: [
           {
@@ -97,6 +227,8 @@ export type Database = {
           rating: number
           reservation_id: string
           store_id: string
+          store_reply: string | null
+          store_reply_at: string | null
         }
         Insert: {
           comment?: string | null
@@ -106,6 +238,8 @@ export type Database = {
           rating: number
           reservation_id: string
           store_id: string
+          store_reply?: string | null
+          store_reply_at?: string | null
         }
         Update: {
           comment?: string | null
@@ -115,6 +249,8 @@ export type Database = {
           rating?: number
           reservation_id?: string
           store_id?: string
+          store_reply?: string | null
+          store_reply_at?: string | null
         }
         Relationships: [
           {
@@ -133,8 +269,155 @@ export type Database = {
           },
         ]
       }
+      service_option_groups: {
+        Row: {
+          id: string
+          label: string
+          required: boolean | null
+          selection_type: string
+          service_id: string
+          sort_order: number | null
+        }
+        Insert: {
+          id?: string
+          label: string
+          required?: boolean | null
+          selection_type?: string
+          service_id: string
+          sort_order?: number | null
+        }
+        Update: {
+          id?: string
+          label?: string
+          required?: boolean | null
+          selection_type?: string
+          service_id?: string
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_option_groups_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "store_services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_option_items: {
+        Row: {
+          group_id: string
+          id: string
+          label: string
+          price_modifier: number | null
+          sort_order: number | null
+        }
+        Insert: {
+          group_id: string
+          id?: string
+          label: string
+          price_modifier?: number | null
+          sort_order?: number | null
+        }
+        Update: {
+          group_id?: string
+          id?: string
+          label?: string
+          price_modifier?: number | null
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_option_items_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "service_option_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_photos: {
+        Row: {
+          caption: string | null
+          created_at: string
+          display_order: number | null
+          id: string
+          image_url: string
+          is_cover: boolean | null
+          store_id: string
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          image_url: string
+          is_cover?: boolean | null
+          store_id: string
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          image_url?: string
+          is_cover?: boolean | null
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_photos_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_services: {
+        Row: {
+          base_price: number
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number | null
+          store_id: string
+        }
+        Insert: {
+          base_price?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number | null
+          store_id: string
+        }
+        Update: {
+          base_price?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number | null
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_services_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_time_slots: {
         Row: {
+          capacity: number | null
           day_of_week: number
           end_time: string
           id: string
@@ -143,6 +426,7 @@ export type Database = {
           store_id: string
         }
         Insert: {
+          capacity?: number | null
           day_of_week: number
           end_time: string
           id?: string
@@ -151,6 +435,7 @@ export type Database = {
           store_id: string
         }
         Update: {
+          capacity?: number | null
           day_of_week?: number
           end_time?: string
           id?: string
@@ -170,42 +455,87 @@ export type Database = {
       }
       stores: {
         Row: {
+          accepting_bookings: boolean | null
           address: string | null
+          announcement: string | null
+          avatar_url: string | null
+          base_service_price: number | null
+          buffer_minutes: number | null
+          cancellation_hours: number | null
+          categories: string[] | null
           category: string | null
+          category_locked_until: string | null
           created_at: string
+          daily_bookings_count: number | null
+          daily_bookings_date: string | null
           description: string | null
           id: string
           image: string | null
+          is_open: boolean | null
+          latitude: number | null
+          longitude: number | null
           name: string
           phone: string | null
+          primary_category: string | null
           rating: number | null
           review_count: number | null
+          subscription_tier: string | null
           user_id: string
         }
         Insert: {
+          accepting_bookings?: boolean | null
           address?: string | null
+          announcement?: string | null
+          avatar_url?: string | null
+          base_service_price?: number | null
+          buffer_minutes?: number | null
+          cancellation_hours?: number | null
+          categories?: string[] | null
           category?: string | null
+          category_locked_until?: string | null
           created_at?: string
+          daily_bookings_count?: number | null
+          daily_bookings_date?: string | null
           description?: string | null
           id?: string
           image?: string | null
+          is_open?: boolean | null
+          latitude?: number | null
+          longitude?: number | null
           name: string
           phone?: string | null
+          primary_category?: string | null
           rating?: number | null
           review_count?: number | null
+          subscription_tier?: string | null
           user_id: string
         }
         Update: {
+          accepting_bookings?: boolean | null
           address?: string | null
+          announcement?: string | null
+          avatar_url?: string | null
+          base_service_price?: number | null
+          buffer_minutes?: number | null
+          cancellation_hours?: number | null
+          categories?: string[] | null
           category?: string | null
+          category_locked_until?: string | null
           created_at?: string
+          daily_bookings_count?: number | null
+          daily_bookings_date?: string | null
           description?: string | null
           id?: string
           image?: string | null
+          is_open?: boolean | null
+          latitude?: number | null
+          longitude?: number | null
           name?: string
           phone?: string | null
+          primary_category?: string | null
           rating?: number | null
           review_count?: number | null
+          subscription_tier?: string | null
           user_id?: string
         }
         Relationships: []
