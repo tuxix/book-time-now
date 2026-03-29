@@ -96,8 +96,16 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const selectedDateStr = calendarDate ?? format(dates[selectedDate], "yyyy-MM-dd");
 
   const timeToMins = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
+    const [h, m] = t.slice(0, 5).split(":").map(Number);
     return h * 60 + m;
+  };
+
+  // 12-hour display format (e.g. "9:00 AM", "1:30 PM")
+  const fmt12 = (t: string) => {
+    const [h, m] = t.slice(0, 5).split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    const hour = h % 12 || 12;
+    return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
   };
 
   const getWaitCount = (slot: TimeSlot) => {
@@ -126,13 +134,16 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     const isFreeStore = (store.subscription_tier ?? "free") === "free";
     const dailyLimit = isFreeStore ? (DAILY_LIMITS[store.category ?? ""] ?? 0) : 0;
 
+    console.log("[CustomerBooking] Fetching slots — store_id:", store.id, "day_of_week:", dayOfWeek, "date:", selectedDateStr);
+
     Promise.all([
       supabase
         .from("store_time_slots")
         .select("*")
         .eq("store_id", store.id)
         .eq("day_of_week", dayOfWeek)
-        .eq("is_available", true),
+        .eq("is_available", true)
+        .order("start_time", { ascending: true }),
       supabase
         .from("reservations")
         .select("start_time, end_time")
@@ -140,7 +151,12 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         .eq("reservation_date", selectedDateStr)
         .neq("status", "cancelled"),
     ]).then(([slotsRes, reservationsRes]) => {
-      const availableSlots = (slotsRes.data ?? []) as TimeSlot[];
+      console.log("[CustomerBooking] Raw slots from DB:", slotsRes.data);
+      console.log("[CustomerBooking] Existing bookings:", reservationsRes.data);
+
+      // Sort by start_time ascending as a hard guarantee
+      const availableSlots = ((slotsRes.data ?? []) as TimeSlot[])
+        .sort((a, b) => a.start_time.slice(0, 5).localeCompare(b.start_time.slice(0, 5)));
       const bookings = (reservationsRes.data ?? []) as { start_time: string; end_time: string }[];
       setSlots(availableSlots);
       setExistingBookings(bookings);
@@ -626,7 +642,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               <div>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Date & Time</p>
                 <p className="text-sm font-semibold text-foreground mt-0.5">
-                  {format(activeDateObj, "MMMM d, yyyy")} · {selectedSlotObj.start_time.slice(0, 5)} – {selectedSlotObj.end_time.slice(0, 5)}
+                  {format(activeDateObj, "MMMM d, yyyy")} · {fmt12(selectedSlotObj.start_time)} – {fmt12(selectedSlotObj.end_time)}
                 </p>
               </div>
 
@@ -856,7 +872,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                   >
                     <span className="flex items-center gap-1.5">
                       {isTaken ? <AlertCircle size={13} /> : <Clock size={13} />}
-                      {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
+                      {fmt12(slot.start_time)} – {fmt12(slot.end_time)}
                     </span>
                     {isTaken && (
                       <span className="text-[10px]">Full</span>
