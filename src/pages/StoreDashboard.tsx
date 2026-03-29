@@ -6,7 +6,7 @@ import {
   Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, ArrowRight, Pencil, RefreshCw, CalendarDays,
   TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User, Sun, Moon, Bell, X as XIcon,
-  Image, ImagePlus, CheckCircle2, Crown, Zap,
+  Image, ImagePlus, CheckCircle2, Crown, Zap, Lock, AlertCircle,
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import ChatScreen from "@/components/ChatScreen";
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { format, startOfWeek, startOfMonth } from "date-fns";
-import { CATEGORIES } from "@/lib/categories";
+import { CATEGORIES, DAILY_LIMITS } from "@/lib/categories";
 import { timeAgo } from "@/lib/categories";
 
 interface Reservation {
@@ -85,6 +85,8 @@ interface StoreData {
   announcement?: string;
   avatar_url?: string;
   subscription_tier?: "free" | "pro" | "premium";
+  category_locked_until?: string | null;
+  primary_category?: string | null;
 }
 
 interface ServiceOptionItem {
@@ -472,6 +474,15 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const tierPhotoLimit = storeTier === "premium" ? Infinity : storeTier === "pro" ? 20 : 5;
   const tierCapLimit   = storeTier === "free" ? 1 : Infinity;
 
+  // ── Category lock ─────────────────────────────────────────────────────────
+  const lockUntil = store?.category_locked_until ? new Date(store.category_locked_until) : null;
+  const isCategoryLocked = !!(lockUntil && lockUntil > new Date() && store?.category?.trim());
+  const daysUntilUnlock  = lockUntil ? Math.ceil((lockUntil.getTime() - Date.now()) / 86400000) : 0;
+  const lockDateStr      = lockUntil ? format(lockUntil, "MMM d, yyyy") : "";
+
+  // ── Today's booking count (free-tier warning banner) ──────────────────────
+  const [todayBookingCount, setTodayBookingCount] = useState(0);
+
   // ── Load store ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
@@ -549,6 +560,19 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   useEffect(() => { fetchData(); }, [store, needsSetup]);
+
+  // ── Fetch today's booking count (for free-tier daily limit banner) ────────
+  useEffect(() => {
+    if (!store?.id || storeTier !== "free") return;
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    supabase
+      .from("reservations")
+      .select("id", { count: "exact", head: true })
+      .eq("store_id", store.id)
+      .eq("reservation_date", todayStr)
+      .neq("status", "cancelled")
+      .then(({ count }) => setTodayBookingCount(count ?? 0));
+  }, [store?.id, storeTier]);
 
   // ── Realtime subscription: pick up customer check-ins and status changes ─
   useEffect(() => {
@@ -1069,17 +1093,29 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       setShowSubscription(true);
       return;
     }
-    setSaving(true);
     const primaryCategory = editCategories[0];
-    const updates = {
+    const isPrimaryChanging = primaryCategory !== (store.category ?? "");
+    // Hard guard: block primary category change if locked
+    if (isPrimaryChanging && store.category?.trim() && isCategoryLocked) {
+      toast.error(`Primary category locked until ${lockDateStr}. Unlocks in ${daysUntilUnlock} day${daysUntilUnlock !== 1 ? "s" : ""}.`);
+      return;
+    }
+    setSaving(true);
+    const newLockUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const setPrimaryLock = isPrimaryChanging || !store.category?.trim();
+    const updates: Record<string, unknown> = {
       name: editName.trim(), description: editDesc.trim(),
       address: editAddr.trim(), phone: editPhone.trim(),
       category: primaryCategory, categories: editCategories,
+      ...(setPrimaryLock && {
+        primary_category: primaryCategory,
+        category_locked_until: newLockUntil,
+      }),
     };
     const { error } = await supabase.from("stores").update(updates).eq("id", store.id);
     if (error) { toast.error(`Failed to save: ${error.message}`); setSaving(false); return; }
     toast.success("Profile updated");
-    setStore({ ...store, ...updates });
+    setStore({ ...store, ...updates } as StoreData);
     setEditCategory(primaryCategory);
     if (editAddr.trim()) {
       geocodeAddress(editAddr.trim()).then((coords) => {
@@ -1464,6 +1500,45 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           </button>
         </div>
       )}
+
+      {/* ── Daily booking limit banners (free tier) ──────────────────────── */}
+      {storeTier === "free" && (() => {
+        const dailyLimit = DAILY_LIMITS[store?.category ?? ""] ?? 0;
+        if (!dailyLimit) return null;
+        const pct = dailyLimit > 0 ? todayBookingCount / dailyLimit : 0;
+        if (pct >= 1) {
+          return (
+            <div className="flex items-start gap-2 px-4 py-2.5 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
+              <AlertCircle size={13} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-red-800 dark:text-red-300 text-[11px] font-bold leading-tight">
+                  Daily limit reached — {dailyLimit} bookings today
+                </p>
+                <p className="text-red-700 dark:text-red-400 text-[10px] mt-0.5">
+                  All slots are now hidden from customers.{" "}
+                  <button onClick={() => setShowSubscription(true)} className="underline font-semibold">Upgrade to Pro</button> for unlimited daily bookings.
+                </p>
+              </div>
+            </div>
+          );
+        }
+        if (pct >= 0.8) {
+          return (
+            <div className="flex items-start gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-700">
+              <AlertCircle size={13} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-amber-800 dark:text-amber-300 text-[11px] font-bold leading-tight">
+                  You have used {todayBookingCount} of {dailyLimit} bookings today
+                </p>
+                <p className="text-amber-700 dark:text-amber-400 text-[10px] mt-0.5">
+                  <button onClick={() => setShowSubscription(true)} className="underline font-semibold">Upgrade to Pro</button> for unlimited daily bookings.
+                </p>
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* ── Toggles ──────────────────────────────────────────────────────── */}
       <div className="px-5 py-3 border-b border-border bg-card space-y-2">
@@ -1914,11 +1989,17 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             <div className="grid grid-cols-4 gap-2">
               {CATEGORIES.map((cat) => {
                 const isSelected = editCategories.includes(cat.label);
+                const isPrimary = isSelected && cat.label === (store?.category ?? "") && !!store?.category;
                 const wouldExceed = !isSelected && editCategories.length >= tierCatLimit;
                 return (
                   <button key={cat.label} type="button"
                     onClick={() => {
                       if (isSelected) {
+                        // Block deselection of the locked primary category
+                        if (isPrimary && isCategoryLocked) {
+                          toast.error(`Primary category locked until ${lockDateStr}. Unlocks in ${daysUntilUnlock} day${daysUntilUnlock !== 1 ? "s" : ""}.`);
+                          return;
+                        }
                         setEditCategories((prev) => prev.filter((c) => c !== cat.label));
                         return;
                       }
@@ -1936,21 +2017,44 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                         return [...prev, cat.label];
                       });
                     }}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-95 ${
+                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-95 relative ${
                       isSelected
                         ? "bg-primary text-primary-foreground booka-shadow"
                         : wouldExceed
                         ? "bg-secondary opacity-35 cursor-not-allowed"
                         : "bg-secondary"
                     }`}>
+                    {isPrimary && isCategoryLocked && (
+                      <span className="absolute top-1 right-1"><Lock size={8} className="text-amber-300" /></span>
+                    )}
                     <span className="text-lg">{cat.emoji}</span>
                     <span className="text-[8px] font-bold text-center leading-tight">{cat.label}</span>
                   </button>
                 );
               })}
             </div>
+            {/* Lock status / first-save note */}
+            {isCategoryLocked && (
+              <div className="flex items-start gap-2 mt-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
+                <Lock size={13} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                    Primary category locked until {lockDateStr}
+                  </p>
+                  <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+                    Unlocks in {daysUntilUnlock} day{daysUntilUnlock !== 1 ? "s" : ""}. Secondary categories can still be changed.
+                  </p>
+                </div>
+              </div>
+            )}
+            {!isCategoryLocked && !store?.category?.trim() && editCategories.length > 0 && (
+              <p className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
+                <Lock size={10} className="shrink-0" />
+                Your primary category will be locked for 7 days after saving.
+              </p>
+            )}
             {editCategories.length > 0 && (
-              <p className="text-xs text-muted-foreground mt-1.5">
+              <p className="text-xs text-muted-foreground mt-1">
                 Primary: <strong>{editCategories[0]}</strong>
                 {editCategories.length > 1 && ` · +${editCategories.length - 1} more`}
               </p>

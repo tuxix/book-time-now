@@ -73,6 +73,8 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const [takenSlotIds, setTakenSlotIds] = useState<Set<string>>(new Set());
   const [slotBookingCounts, setSlotBookingCounts] = useState<Record<string, number>>({});
   const [existingBookings, setExistingBookings] = useState<{ start_time: string }[]>([]);
+  const [dailyLimitReached, setDailyLimitReached] = useState(false);
+  const [dailyBookingCount, setDailyBookingCount] = useState(0);
   const [selectedDate, setSelectedDate] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
@@ -119,6 +121,10 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     setSelectedSlot(null);
     setPaymentStep(false);
     setServiceStep(false);
+    setDailyLimitReached(false);
+
+    const isFreeStore = (store.subscription_tier ?? "free") === "free";
+    const dailyLimit = isFreeStore ? (DAILY_LIMITS[store.category ?? ""] ?? 0) : 0;
 
     Promise.all([
       supabase
@@ -138,6 +144,19 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       const bookings = (reservationsRes.data ?? []) as { start_time: string; end_time: string }[];
       setSlots(availableSlots);
       setExistingBookings(bookings);
+
+      // ── Daily limit check (free tier) ──────────────────────────────────
+      if (isFreeStore && dailyLimit > 0) {
+        const dayCount = bookings.length;
+        setDailyBookingCount(dayCount);
+        if (dayCount >= dailyLimit) {
+          setDailyLimitReached(true);
+          setTakenSlotIds(new Set(availableSlots.map((s) => s.id)));
+          setSlotBookingCounts({});
+          setLoadingSlots(false);
+          return;
+        }
+      }
 
       const buffer = store.buffer_minutes ?? 0;
       const taken = new Set<string>();
@@ -796,6 +815,14 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         {/* Time slots */}
         <div>
           <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Choose a Time</h2>
+          {dailyLimitReached && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 mb-3">
+              <AlertCircle size={14} className="text-red-600 dark:text-red-400 shrink-0" />
+              <p className="text-[11px] font-semibold text-red-700 dark:text-red-300">
+                This store is fully booked for {selectedDateStr === format(new Date(), "yyyy-MM-dd") ? "today" : format(new Date(selectedDateStr + "T00:00:00"), "MMM d")}
+              </p>
+            </div>
+          )}
           {loadingSlots ? (
             <div className="grid grid-cols-2 gap-2">
               {[1, 2, 3, 4].map((i) => <div key={i} className="h-16 rounded-xl booka-shimmer" />)}
