@@ -17,7 +17,7 @@ A mobile-first booking app built with React + Vite + Supabase.
 - `src/hooks/useAuth.tsx` — Supabase auth context
 - `src/lib/categories.ts` — CATEGORIES array, distanceKm, timeAgo, getCategoryEmoji utilities
 - `src/pages/CustomerHome.tsx` — full-screen Leaflet map + bottom sheet + 4-tab nav (Explore/Search/Bookings/Profile)
-- `src/pages/StoreDashboard.tsx` — dark-header dashboard; Bookings/Slots/Calendar/Profile tabs; two toggles (open/closed + accepting bookings)
+- `src/pages/StoreDashboard.tsx` — dark-header dashboard; hamburger drawer nav; Bookings/Slots/Hours/Services/Photos/Reviews/Messages/Calendar tabs; two toggles (open/closed + accepting bookings); onboarding checklist banner; service edit dialog; category-change migration flow
 - `src/components/StoreProfile.tsx` — Supabase-connected profile with live reviews (realtime) and available hours
 - `src/components/CategoryResults.tsx` — filtered store list for a selected category
 - `src/components/SearchScreen.tsx` — full-text store search with localStorage recent history
@@ -51,8 +51,19 @@ All tables live in Supabase (managed via Supabase dashboard):
 - `store_closed_dates` — per-date closures; `reason='Open'` = holiday override (store working on holiday)
 - `customer_favourites` — UNIQUE(customer_id, store_id); customers save favourite stores
 - `store_reports` — customer reports on stores (`store_id`, `customer_id`, `reason`, `created_at`)
+- `platform_settings` — key/value platform config (commission_rate, feature flags, maintenance_mode, etc.)
+- `promotional_periods` — admin-defined promotional date ranges
+- `admin_store_notes` — admin internal notes on stores
+- `flagged_messages` — messages flagged by word blacklist
+- `word_blacklist` — blocked words/phrases for content moderation
+- `store_strikes` — strikes issued to stores
+- `scheduled_notifications` — broadcast notifications sent by admin
+- `disputes` — booking dispute records with status/resolution
+- `store_hours` — operating hours per day-of-week for each store
 
-**Supabase Storage**: `store-avatars` bucket (must be created as public in Supabase Dashboard > Storage).
+**New store columns**: `is_booka_recommended`, `trust_score`, `admin_override_open`, `onboarding_completed`, `onboarding_checklist`, `is_verified`
+
+**Supabase Storage**: `store-avatars`, `customer-avatars`, `store-photos`, `bug-report-screenshots` buckets (all public).
 
 Row Level Security (RLS) is enabled on all tables.
 

@@ -6,7 +6,7 @@ import {
   Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, ArrowRight, Pencil, RefreshCw, CalendarDays,
   TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User, Sun, Moon, Bell, X as XIcon,
-  Image, ImagePlus, CheckCircle2, Crown, Zap, Lock, AlertCircle,
+  Image, ImagePlus, CheckCircle2, Crown, Zap, Lock, AlertCircle, Menu as MenuIcon,
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import ChatScreen from "@/components/ChatScreen";
@@ -87,6 +87,7 @@ interface StoreData {
   subscription_tier?: "free" | "pro" | "premium";
   category_locked_until?: string | null;
   primary_category?: string | null;
+  onboarding_completed?: boolean;
 }
 
 interface ServiceOptionItem {
@@ -516,6 +517,22 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [newItemPrice, setNewItemPrice] = useState("0");
   const [savingItem, setSavingItem] = useState(false);
 
+  // Edit service dialog
+  const [editSvcDialog, setEditSvcDialog] = useState(false);
+  const [editSvcTarget, setEditSvcTarget] = useState<StoreService | null>(null);
+  const [editSvcName, setEditSvcName] = useState("");
+  const [editSvcDesc, setEditSvcDesc] = useState("");
+  const [editSvcPrice, setEditSvcPrice] = useState("0");
+  const [editSvcDuration, setEditSvcDuration] = useState("");
+  const [editSvcActive, setEditSvcActive] = useState(true);
+  const [savingEditSvc, setSavingEditSvc] = useState(false);
+
+  // Category-change confirmation dialog
+  const [pendingCategoryChange, setPendingCategoryChange] = useState(false);
+
+  // Hamburger drawer
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -868,6 +885,63 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     setStoreServices((prev) => prev.map((s) => s.id === svc.id ? { ...s, is_active: !s.is_active } : s));
   };
 
+  const openEditSvc = (svc: StoreService) => {
+    setEditSvcTarget(svc);
+    setEditSvcName(svc.name);
+    setEditSvcDesc(svc.description ?? "");
+    setEditSvcPrice(String(svc.base_price));
+    setEditSvcDuration(String(svc.duration_minutes ?? ""));
+    setEditSvcActive(svc.is_active);
+    setEditSvcDialog(true);
+  };
+
+  const saveEditService = async () => {
+    if (!editSvcTarget || !editSvcName.trim()) return;
+    setSavingEditSvc(true);
+    const updates = {
+      name: editSvcName.trim(),
+      description: editSvcDesc.trim() || null,
+      base_price: parseFloat(editSvcPrice) || 0,
+      duration_minutes: editSvcDuration ? parseInt(editSvcDuration) : null,
+      is_active: editSvcActive,
+    };
+    const { error } = await supabase.from("store_services").update(updates).eq("id", editSvcTarget.id);
+    setSavingEditSvc(false);
+    if (error) { toast.error("Could not save changes."); return; }
+    setStoreServices((prev) => prev.map((s) => s.id === editSvcTarget.id ? { ...s, ...updates } : s));
+    setEditSvcDialog(false);
+    setEditSvcTarget(null);
+    toast.success("Service updated!");
+  };
+
+  const applyDefaultServicesForCategory = async (storeId: string, newCategory: string, currentServices: StoreService[], tier: "free" | "pro" | "premium") => {
+    const defaults = DEFAULT_SERVICES[newCategory] ?? [];
+    if (defaults.length === 0) return;
+    const defaultNames = new Set(defaults.map((d) => d.name.toLowerCase()));
+    // Keep custom services (those that DON'T match any default name for any category)
+    const allDefaultNames = new Set(
+      Object.values(DEFAULT_SERVICES).flat().map((d) => d.name.toLowerCase())
+    );
+    const customServices = currentServices.filter((s) => !allDefaultNames.has(s.name.toLowerCase()));
+    // Delete all current default-matched services
+    const toDelete = currentServices.filter((s) => allDefaultNames.has(s.name.toLowerCase()));
+    for (const s of toDelete) {
+      await supabase.from("store_services").delete().eq("id", s.id);
+    }
+    // Insert new defaults
+    const svcLimit = tier === "free" ? 3 : Infinity;
+    const baseOrder = customServices.length;
+    const rows = defaults.map((d, i) => ({
+      store_id: storeId,
+      name: d.name,
+      base_price: d.price,
+      duration_minutes: d.duration,
+      sort_order: baseOrder + i,
+      is_active: tier === "free" ? i < svcLimit : true,
+    }));
+    await supabase.from("store_services").insert(rows);
+  };
+
   const addGroup = async (serviceId: string) => {
     if (!newGrpLabel.trim()) return;
     setSavingGroup(true);
@@ -1195,7 +1269,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   // ── Profile save ───────────────────────────────────────────────────────
-  const saveProfile = async () => {
+  const saveProfile = async (confirmed = false) => {
     if (!store || !editName.trim()) { toast.error("Store name is required."); return; }
     if (editCategories.length === 0) { toast.error("Please select at least one category."); return; }
     // Hard tier enforcement at save time — catches any UI bypass
@@ -1212,6 +1286,11 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     // Hard guard: block primary category change if locked
     if (isPrimaryChanging && store.category?.trim() && isCategoryLocked) {
       toast.error(`Primary category locked until ${lockDateStr}. Unlocks in ${daysUntilUnlock} day${daysUntilUnlock !== 1 ? "s" : ""}.`);
+      return;
+    }
+    // Show confirmation before changing primary category
+    if (isPrimaryChanging && store.category?.trim() && !confirmed) {
+      setPendingCategoryChange(true);
       return;
     }
     setSaving(true);
@@ -1231,6 +1310,10 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     toast.success("Profile updated");
     setStore({ ...store, ...updates } as StoreData);
     setEditCategory(primaryCategory);
+    if (isPrimaryChanging && store.id) {
+      await applyDefaultServicesForCategory(store.id, primaryCategory, storeServices, storeTier);
+      await fetchServices();
+    }
     if (editAddr.trim()) {
       geocodeAddress(editAddr.trim()).then((coords) => {
         if (coords) {
@@ -1538,18 +1621,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     </div>
   );
 
-  const navTabs = [
-    { id: "reservations" as const, label: "Bookings", icon: Calendar },
-    { id: "hours" as const, label: "Hours", icon: Clock },
-    { id: "services" as const, label: "Menu", icon: Package },
-    { id: "photos" as const, label: "Photos", icon: Image },
-    { id: "messages" as const, label: "Messages", icon: MessageSquare },
-    { id: "reviews" as const, label: "Reviews", icon: Star },
-    { id: "profile" as const, label: "Profile", icon: Settings },
-  ];
-
   return (
-    <div className="max-w-lg mx-auto min-h-screen bg-background pb-20 flex flex-col">
+    <div className="max-w-lg mx-auto min-h-screen bg-background pb-6 flex flex-col">
       {/* ── Dark blue header ─────────────────────────────────────────────── */}
       <div className="sticky top-0 z-30 px-5 py-4" style={{ background: "linear-gradient(135deg, hsl(220 85% 16%) 0%, hsl(213 82% 28%) 100%)" }}>
         <div className="flex items-center justify-between">
@@ -1584,11 +1657,12 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <button
-              data-testid="button-back-to-app"
-              onClick={onBack}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 text-white text-xs font-semibold active:scale-95 transition-all"
+              data-testid="button-open-menu"
+              onClick={() => setDrawerOpen(true)}
+              className="p-2 rounded-xl bg-white/15 text-white active:scale-95 transition-all"
+              aria-label="Open menu"
             >
-              <ArrowLeft size={14} /> Back to App
+              <MenuIcon size={18} />
             </button>
           </div>
         </div>
@@ -1675,6 +1749,48 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           {acceptingBookings ? "Accepting New Bookings" : "Bookings Paused"}
         </button>
       </div>
+
+      {/* ── Onboarding Checklist ─────────────────────────────────────────── */}
+      {tab === "reservations" && store && !store.onboarding_completed && (() => {
+        const checks = [
+          { label: "Upload a store photo", done: photos.length > 0, action: () => setTab("photos") },
+          { label: "Add your first service", done: storeServices.length > 0, action: () => setTab("services") },
+          { label: "Create booking slots", done: slots.length > 0, action: () => setTab("slots") },
+          { label: "Write a store description", done: (store.description?.trim()?.length ?? 0) > 10, action: () => setTab("profile") },
+          { label: "Set operating hours", done: storeServices.length > 0 && slots.length > 0, action: () => setTab("hours") },
+        ];
+        const doneCount = checks.filter(c => c.done).length;
+        const allDone = doneCount === checks.length;
+        if (allDone) {
+          supabase.from("stores").update({ onboarding_completed: true } as any).eq("id", store.id).then(() => {
+            setStore(prev => prev ? { ...prev, onboarding_completed: true } : prev);
+          });
+          return null;
+        }
+        return (
+          <div className="mx-4 mt-3 mb-1 rounded-2xl border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-bold text-blue-800 dark:text-blue-200">🚀 Getting Started</p>
+              <span className="text-xs font-semibold text-blue-600 dark:text-blue-300">{doneCount}/{checks.length}</span>
+            </div>
+            <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-1.5 mb-3 overflow-hidden">
+              <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${(doneCount/checks.length)*100}%` }}/>
+            </div>
+            <div className="space-y-1.5">
+              {checks.map((c, i) => (
+                <button key={i} onClick={c.action} disabled={c.done}
+                  className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-all active:scale-[0.98] ${c.done ? "opacity-50 cursor-default" : "hover:bg-blue-100 dark:hover:bg-blue-800/40 active:bg-blue-200"}`}>
+                  <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${c.done ? "border-blue-500 bg-blue-500" : "border-blue-300"}`}>
+                    {c.done && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <span className={`text-xs font-medium ${c.done ? "text-blue-500 line-through" : "text-blue-800 dark:text-blue-200"}`}>{c.label}</span>
+                  {!c.done && <svg className="w-3 h-3 text-blue-400 ml-auto shrink-0" fill="none" viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Reservations tab ─────────────────────────────────────────────── */}
       {tab === "reservations" && (
@@ -1904,6 +2020,9 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${svc.is_active ? "bg-green-100 text-green-700" : "bg-secondary text-muted-foreground"}`}
                       >
                         {svc.is_active ? "Active" : "Off"}
+                      </button>
+                      <button onClick={() => openEditSvc(svc)} className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground transition-all">
+                        <Pencil size={14} />
                       </button>
                       <button onClick={() => deleteService(svc.id)} className="p-1.5 rounded-xl hover:bg-red-50 text-red-400 transition-all">
                         <Trash2 size={14} />
@@ -2417,35 +2536,85 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         />
       )}
 
-      {/* ── Bottom nav ────────────────────────────────────────────────────── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border">
-        <div className="max-w-lg mx-auto flex items-center overflow-x-auto scrollbar-none py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] gap-1 px-2">
-          {navTabs.map((t) => {
-            const badge = t.id === "messages" && storeUnreadMsgCount > 0 ? storeUnreadMsgCount : 0;
+      {/* ── Hamburger Drawer ──────────────────────────────────────────────── */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-[350]" onClick={() => setDrawerOpen(false)}>
+          <div className="absolute inset-0 bg-black/50" />
+        </div>
+      )}
+      <div
+        className={`fixed top-0 right-0 h-full z-[360] w-72 bg-card shadow-2xl flex flex-col transition-transform duration-300 ${drawerOpen ? "translate-x-0" : "translate-x-full"}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Drawer header */}
+        <div className="px-5 pt-12 pb-4 border-b border-border" style={{ background: "linear-gradient(135deg, hsl(220 85% 16%) 0%, hsl(213 82% 28%) 100%)" }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-white font-bold text-lg">
+              {store?.name?.slice(0, 1).toUpperCase() ?? "S"}
+            </div>
+            <button onClick={() => setDrawerOpen(false)} className="p-2 rounded-xl bg-white/15 text-white active:scale-95">
+              <XIcon size={16} />
+            </button>
+          </div>
+          <p className="text-white font-bold text-base leading-tight">{store?.name ?? "My Store"}</p>
+          <button onClick={() => { setShowSubscription(true); setDrawerOpen(false); }}
+            className={`mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${store?.subscription_tier === "premium" ? "bg-amber-400 text-amber-900" : store?.subscription_tier === "pro" ? "bg-blue-400 text-blue-900" : "bg-white/20 text-white"}`}>
+            {store?.subscription_tier === "premium" ? "👑 Premium" : store?.subscription_tier === "pro" ? "⚡ Pro" : "Free"}
+          </button>
+        </div>
+
+        {/* Drawer nav items */}
+        <div className="flex-1 overflow-y-auto py-2">
+          {[
+            { id: "reservations" as const, label: "Bookings", icon: Calendar },
+            { id: "hours" as const, label: "Hours", icon: Clock },
+            { id: "services" as const, label: "Menu", icon: Package },
+            { id: "photos" as const, label: "Photos", icon: Image },
+            { id: "messages" as const, label: "Messages", icon: MessageSquare, badge: storeUnreadMsgCount },
+            { id: "reviews" as const, label: "Reviews", icon: Star },
+            { id: "profile" as const, label: "Profile", icon: Settings },
+            { id: "calendar" as const, label: "Calendar", icon: CalendarDays },
+          ].map((item) => {
+            const isActive = tab === item.id;
             return (
-              <button key={t.id} data-testid={`tab-${t.id}`} onClick={() => setTab(t.id)}
-                className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all duration-200 active:scale-95 shrink-0">
+              <button
+                key={item.id}
+                data-testid={`tab-${item.id}`}
+                onClick={() => { setTab(item.id); setDrawerOpen(false); }}
+                className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-all active:scale-[0.98] ${isActive ? "bg-primary/10 text-primary" : "text-foreground hover:bg-secondary"}`}
+              >
                 <div className="relative">
-                  <t.icon
-                    size={22}
-                    strokeWidth={tab === t.id ? 2.5 : 1.8}
-                    color={tab === t.id ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))"}
-                  />
-                  {badge > 0 && (
+                  <item.icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
+                  {(item as any).badge > 0 && (
                     <span className="absolute -top-1.5 -right-2 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                      {badge > 9 ? "9+" : badge}
+                      {(item as any).badge > 9 ? "9+" : (item as any).badge}
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] font-medium"
-                  style={{ color: tab === t.id ? "hsl(var(--booka-blue))" : "hsl(var(--booka-text-secondary))" }}>
-                  {t.label}
-                </span>
+                <span className={`text-sm font-medium ${isActive ? "font-semibold" : ""}`}>{item.label}</span>
               </button>
             );
           })}
         </div>
-      </nav>
+
+        {/* Drawer footer */}
+        <div className="border-t border-border py-2">
+          <button
+            onClick={() => { setDrawerOpen(false); onBack(); }}
+            className="w-full flex items-center gap-3 px-5 py-3.5 text-foreground hover:bg-secondary transition-all"
+          >
+            <ArrowLeft size={20} strokeWidth={1.8} />
+            <span className="text-sm font-medium">Back to App</span>
+          </button>
+          <button
+            onClick={() => { setDrawerOpen(false); signOut(); }}
+            className="w-full flex items-center gap-3 px-5 py-3.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+          >
+            <LogOut size={20} strokeWidth={1.8} />
+            <span className="text-sm font-semibold">Sign Out</span>
+          </button>
+        </div>
+      </div>
 
       {/* ── Subscription / Plans page ─────────────────────────────────────── */}
       {showSubscription && (
@@ -2621,6 +2790,55 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             <p className="text-center text-xs text-muted-foreground pb-4">
               To upgrade, tap the plan and we'll connect you via WhatsApp. Payment processing coming soon.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Service dialog ───────────────────────────────────────────── */}
+      <Dialog open={editSvcDialog} onOpenChange={(o) => { if (!o) { setEditSvcDialog(false); setEditSvcTarget(null); } }}>
+        <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>Edit Service</DialogTitle></DialogHeader>
+          <div className="space-y-3 pt-1">
+            <Input placeholder="Service name" value={editSvcName} onChange={(e) => setEditSvcName(e.target.value)} className="rounded-xl" autoFocus />
+            <Textarea placeholder="Description (optional)" value={editSvcDesc} onChange={(e) => setEditSvcDesc(e.target.value)} className="rounded-xl resize-none" rows={2} />
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Base Price (J$)</label>
+              <Input type="number" min="0" value={editSvcPrice} onChange={(e) => setEditSvcPrice(e.target.value)} className="rounded-xl mt-1" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Duration (minutes)</label>
+              <Input type="number" min="5" step="5" placeholder="e.g. 30" value={editSvcDuration} onChange={(e) => setEditSvcDuration(e.target.value)} className="rounded-xl mt-1" />
+            </div>
+            <div className="flex items-center justify-between rounded-xl border border-border p-3">
+              <span className="text-sm font-medium">Active</span>
+              <button
+                onClick={() => setEditSvcActive(!editSvcActive)}
+                className={`relative w-10 h-5.5 rounded-full transition-colors duration-200 ${editSvcActive ? "bg-green-500" : "bg-secondary border border-border"}`}
+                style={{ width: 42, height: 24 }}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200 ${editSvcActive ? "left-[18px]" : "left-0.5"}`} />
+              </button>
+            </div>
+            <Button className="w-full rounded-xl" onClick={saveEditService} disabled={savingEditSvc || !editSvcName.trim()}>
+              {savingEditSvc ? "Saving…" : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Category change confirmation dialog ───────────────────────────── */}
+      {pendingCategoryChange && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center px-6">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setPendingCategoryChange(false)} />
+          <div className="relative bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            <p className="font-bold text-foreground text-base">Change Primary Category?</p>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Changing your category to <span className="font-semibold text-foreground">{editCategories[0]}</span> will update your default services to match. Your custom services will be kept.
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setPendingCategoryChange(false)}>Cancel</Button>
+              <Button className="flex-1 rounded-xl" onClick={() => { setPendingCategoryChange(false); saveProfile(true); }}>Continue</Button>
+            </div>
           </div>
         </div>
       )}

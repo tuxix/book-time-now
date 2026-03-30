@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { CATEGORIES } from "@/lib/categories";
 import {
   LayoutDashboard, Store, Users, Flag, Calendar, LogOut,
   Search, TrendingUp, Star, Ban, CheckCircle2, X, Shield,
   DollarSign, Megaphone, MessageSquare, Phone, AlertCircle,
   Download, Send, ArrowLeft, Clock, UserCheck, Loader2,
-  Trash2, ChevronDown, ChevronUp,
+  Trash2, ChevronDown, ChevronUp, Settings2, CreditCard, Eye,
+  Bell as Bell2, Pencil, Plus, Image, RefreshCw,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,18 +19,40 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 
-type AdminTab = "overview" | "stores" | "customers" | "reports" | "disputes" | "bugs" | "bookings" | "revenue" | "announcements" | "messages";
+type AdminTab = "overview" | "stores" | "customers" | "reports" | "disputes" | "bugs" | "bookings" | "revenue" | "announcements" | "messages" | "platform" | "financial" | "moderation" | "communication";
 
 interface StoreRow {
   id: string; name: string; category: string; address?: string; phone?: string;
   rating: number; review_count: number; is_suspended: boolean; is_approved: boolean;
   created_at: string; booking_count: number; active_slots: number;
   last_booking_date: string | null; total_revenue: number;
+  subscription_tier?: string; is_booka_recommended?: boolean; is_verified?: boolean;
+  trust_score?: number;
 }
 interface CustomerRow {
   id: string; full_name: string | null; phone: string | null;
   is_suspended: boolean; created_at: string; booking_count: number;
   total_spent: number; no_show_count: number; last_booking_date: string | null;
+  email?: string; is_admin?: boolean;
+}
+interface PlatformSetting { id: string; key: string; value: string; updated_at: string; }
+interface WordBlacklistItem { id: string; word: string; created_at: string; }
+interface FlaggedMessageRow {
+  id: string; store_id: string; customer_id: string; flagged_keyword: string;
+  status: string; created_at: string; store_name?: string; customer_name?: string;
+  message_content?: string;
+}
+interface StoreReviewRow {
+  id: string; store_id: string; customer_id: string; rating: number;
+  comment: string; created_at: string; store_name?: string; reviewer_name?: string;
+}
+interface StorePhotoRow {
+  id: string; store_id: string; image_url: string; created_at: string; store_name?: string;
+}
+interface ScheduledNotifRow {
+  id: string; title: string; message: string; audience: string;
+  scheduled_for?: string; sent_at?: string; status: string;
+  sent_count?: number; created_at: string;
 }
 interface ReportRow {
   id: string; store_id: string; reported_by: string; reason: string;
@@ -95,6 +119,10 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     bookingsWeek: 0, bookingsMonth: 0, revenueMonth: 0, revenueAllTime: 0,
     pendingApproval: 0, unresolvedReports: 0,
     popularCategory: "—", mostActiveStore: "—",
+    suspendedStores: 0, suspendedCustomers: 0,
+    resolvedDisputes: 0, totalDisputes: 0,
+    categoryBreakdown: [] as { cat: string; count: number }[],
+    bookingsAllTime: 0,
   });
   const [statsLoading, setStatsLoading] = useState(true);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -153,6 +181,55 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [bugsLoading, setBugsLoading] = useState(false);
   const [overviewBugCount, setOverviewBugCount] = useState(0);
 
+  // Platform Management
+  const [platformSettings, setPlatformSettings] = useState<PlatformSetting[]>([]);
+  const [platformLoading, setPlatformLoading] = useState(false);
+  const [platformEdits, setPlatformEdits] = useState<Record<string, string>>({});
+  const [savingPlatform, setSavingPlatform] = useState(false);
+  const [newBlackWord, setNewBlackWord] = useState("");
+
+  // Content Moderation
+  const [storePhotos, setStorePhotos] = useState<StorePhotoRow[]>([]);
+  const [storeReviews, setStoreReviews] = useState<StoreReviewRow[]>([]);
+  const [flaggedMessages, setFlaggedMessages] = useState<FlaggedMessageRow[]>([]);
+  const [wordBlacklist, setWordBlacklist] = useState<WordBlacklistItem[]>([]);
+  const [moderationLoading, setModerationLoading] = useState(false);
+  const [moderationSubTab, setModerationSubTab] = useState<"photos" | "reviews" | "flagged" | "blacklist">("photos");
+
+  // Communication
+  const [scheduledNotifs, setScheduledNotifs] = useState<ScheduledNotifRow[]>([]);
+  const [communicationLoading, setCommunicationLoading] = useState(false);
+  const [notifTitle, setNotifTitle] = useState("");
+  const [notifMessage, setNotifMessage] = useState("");
+  const [notifAudience, setNotifAudience] = useState<"all" | "stores" | "customers">("all");
+  const [sendingNotif, setSendingNotif] = useState(false);
+
+  // Financial
+  const [financialLoading, setFinancialLoading] = useState(false);
+  const [financialSubTab, setFinancialSubTab] = useState<"subscriptions" | "refunds">("subscriptions");
+  const [proStores, setProStores] = useState<StoreRow[]>([]);
+  const [premiumStores, setPremiumStores] = useState<StoreRow[]>([]);
+  const [freeStores, setFreeStores] = useState<StoreRow[]>([]);
+
+  // Store admin actions
+  const [storeActionTarget, setStoreActionTarget] = useState<StoreRow | null>(null);
+  const [storeActionType, setStoreActionType] = useState<"category" | "tier" | "edit" | "delete" | "notes" | null>(null);
+  const [storeActionCategory, setStoreActionCategory] = useState("");
+  const [storeActionTier, setStoreActionTier] = useState("");
+  const [storeEditName, setStoreEditName] = useState("");
+  const [storeEditDesc, setStoreEditDesc] = useState("");
+  const [storeEditAddr, setStoreEditAddr] = useState("");
+  const [storeEditPhone, setStoreEditPhone] = useState("");
+  const [storeDeleteConfirm, setStoreDeleteConfirm] = useState("");
+  const [storeAdminNote, setStoreAdminNote] = useState("");
+  const [savingStoreAction, setSavingStoreAction] = useState(false);
+
+  // Customer admin actions
+  const [customerActionTarget, setCustomerActionTarget] = useState<CustomerRow | null>(null);
+  const [customerActionType, setCustomerActionType] = useState<"bookings" | "warning" | null>(null);
+  const [customerBookings, setCustomerBookings] = useState<BookingRow[]>([]);
+  const [customerBookingsLoading, setCustomerBookingsLoading] = useState(false);
+
   // Admin grant
   const [adminEmailInput, setAdminEmailInput] = useState("");
   const [grantingAdmin, setGrantingAdmin] = useState(false);
@@ -169,6 +246,10 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     else if (activeTab === "revenue") fetchRevenue();
     else if (activeTab === "announcements") fetchAnnouncements();
     else if (activeTab === "messages") fetchConversations();
+    else if (activeTab === "platform") fetchPlatformSettings();
+    else if (activeTab === "moderation") fetchModerationData();
+    else if (activeTab === "communication") fetchCommunicationData();
+    else if (activeTab === "financial") fetchFinancialData();
   }, [activeTab]);
 
   // ── Fetch stats ───────────────────────────────────────────────────────────
@@ -179,7 +260,8 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
 
     const [storesRes, custRes, todayRes, weekRes, monthRes, revMonthRes, revAllRes,
-           pendingRes, unresolvedRes, catRes] = await Promise.all([
+           pendingRes, unresolvedRes, catRes,
+           suspStoresRes, suspCustRes, allBkRes, disputeRes, storeCatRes] = await Promise.all([
       supabase.from("stores").select("id", { count: "exact" }),
       supabase.from("profiles").select("id", { count: "exact" }).eq("role", "customer"),
       supabase.from("reservations").select("id", { count: "exact" }).eq("reservation_date", today),
@@ -190,6 +272,11 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       supabase.from("stores").select("id", { count: "exact" }).eq("is_approved", false).eq("is_suspended", false),
       supabase.from("store_reports").select("id", { count: "exact" }).eq("status", "pending"),
       supabase.from("reservations").select("store_id, stores(name, category)").gte("reservation_date", monthStart),
+      supabase.from("stores").select("id", { count: "exact" }).eq("is_suspended", true),
+      supabase.from("profiles").select("id", { count: "exact" }).eq("role", "customer").eq("is_suspended", true),
+      supabase.from("reservations").select("id", { count: "exact" }),
+      supabase.from("disputes").select("id, status"),
+      supabase.from("stores").select("category"),
     ]);
 
     const revMonth = (revMonthRes.data ?? []).reduce((s: number, r: any) => s + (r.total_amount ?? 0), 0);
@@ -208,6 +295,12 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     const popCat = Object.entries(catCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
     const activeStore = Object.values(storeCount).sort((a, b) => b.count - a.count)[0]?.name ?? "—";
 
+    const storeCatCount: Record<string, number> = {};
+    (storeCatRes.data ?? []).forEach((s: any) => { storeCatCount[s.category] = (storeCatCount[s.category] ?? 0) + 1; });
+    const catBreakdown = Object.entries(storeCatCount).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([cat, count]) => ({ cat, count }));
+    const disputeList = (disputeRes.data ?? []) as any[];
+    const resolvedDisputes = disputeList.filter(d => d.status === "resolved").length;
+
     setStats({
       totalStores: storesRes.count ?? 0,
       totalCustomers: custRes.count ?? 0,
@@ -220,6 +313,12 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       unresolvedReports: unresolvedRes.count ?? 0,
       popularCategory: popCat,
       mostActiveStore: activeStore,
+      suspendedStores: suspStoresRes.count ?? 0,
+      suspendedCustomers: suspCustRes.count ?? 0,
+      resolvedDisputes,
+      totalDisputes: disputeList.length,
+      categoryBreakdown: catBreakdown,
+      bookingsAllTime: allBkRes.count ?? 0,
     });
     setStatsLoading(false);
   };
@@ -577,6 +676,222 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setBugsLoading(false);
   };
 
+  const fetchPlatformSettings = async () => {
+    setPlatformLoading(true);
+    const [settingsRes, blacklistRes] = await Promise.all([
+      supabase.from("platform_settings").select("*").order("key"),
+      supabase.from("word_blacklist").select("*").order("created_at", { ascending: false }),
+    ]);
+    if (settingsRes.data) {
+      setPlatformSettings(settingsRes.data as PlatformSetting[]);
+      const edits: Record<string, string> = {};
+      (settingsRes.data as PlatformSetting[]).forEach((s) => { edits[s.key] = s.value; });
+      setPlatformEdits(edits);
+    }
+    if (blacklistRes.data) setWordBlacklist(blacklistRes.data as WordBlacklistItem[]);
+    setPlatformLoading(false);
+  };
+
+  const savePlatformSetting = async (key: string) => {
+    const val = platformEdits[key];
+    if (val === undefined) return;
+    setSavingPlatform(true);
+    await supabase.from("platform_settings").update({ value: val, updated_at: new Date().toISOString() }).eq("key", key);
+    setSavingPlatform(false);
+    toast.success(`${key} updated`);
+  };
+
+  const addBlacklistWord = async () => {
+    if (!newBlackWord.trim()) return;
+    const word = newBlackWord.trim().toLowerCase();
+    const { data, error } = await supabase.from("word_blacklist").insert({ word }).select().single();
+    if (error) { toast.error("Could not add word"); return; }
+    setWordBlacklist((prev) => [data as WordBlacklistItem, ...prev]);
+    setNewBlackWord("");
+    toast.success("Word added to blacklist");
+  };
+
+  const removeBlacklistWord = async (id: string) => {
+    await supabase.from("word_blacklist").delete().eq("id", id);
+    setWordBlacklist((prev) => prev.filter((w) => w.id !== id));
+    toast.success("Word removed");
+  };
+
+  const fetchModerationData = async () => {
+    setModerationLoading(true);
+    const [photosRes, reviewsRes, flaggedRes, blacklistRes] = await Promise.all([
+      supabase.from("store_photos").select("id, store_id, image_url, created_at").order("created_at", { ascending: false }).limit(50),
+      supabase.from("reviews").select("id, store_id, customer_id, rating, comment, created_at").order("created_at", { ascending: false }).limit(50),
+      supabase.from("flagged_messages").select("*").order("created_at", { ascending: false }),
+      supabase.from("word_blacklist").select("*").order("created_at", { ascending: false }),
+    ]);
+    if (photosRes.data) {
+      const photos = photosRes.data as StorePhotoRow[];
+      const storeIds = [...new Set(photos.map((p) => p.store_id))];
+      const { data: storesData } = storeIds.length ? await supabase.from("stores").select("id, name").in("id", storeIds) : { data: [] };
+      const sm = new Map((storesData ?? []).map((s: any) => [s.id, s.name]));
+      setStorePhotos(photos.map((p) => ({ ...p, store_name: sm.get(p.store_id) ?? "Unknown" })));
+    }
+    if (reviewsRes.data) {
+      const reviews = reviewsRes.data as StoreReviewRow[];
+      const sIds = [...new Set(reviews.map((r) => r.store_id))];
+      const cIds = [...new Set(reviews.map((r) => r.customer_id))];
+      const [sRes, pRes] = await Promise.all([
+        sIds.length ? supabase.from("stores").select("id, name").in("id", sIds) : { data: [] },
+        cIds.length ? supabase.from("profiles").select("id, full_name").in("id", cIds) : { data: [] },
+      ]);
+      const sm2 = new Map((sRes.data ?? []).map((s: any) => [s.id, s.name]));
+      const pm = new Map((pRes.data ?? []).map((p: any) => [p.id, p.full_name]));
+      setStoreReviews(reviews.map((r) => ({ ...r, store_name: sm2.get(r.store_id) ?? "Unknown", reviewer_name: pm.get(r.customer_id) ?? "Unknown" })));
+    }
+    if (flaggedRes.data) setFlaggedMessages(flaggedRes.data as FlaggedMessageRow[]);
+    if (blacklistRes.data) setWordBlacklist(blacklistRes.data as WordBlacklistItem[]);
+    setModerationLoading(false);
+  };
+
+  const deleteReview = async (id: string) => {
+    await supabase.from("reviews").delete().eq("id", id);
+    setStoreReviews((prev) => prev.filter((r) => r.id !== id));
+    toast.success("Review deleted");
+  };
+
+  const deleteStorePhoto = async (photo: StorePhotoRow) => {
+    await supabase.from("store_photos").delete().eq("id", photo.id);
+    setStorePhotos((prev) => prev.filter((p) => p.id !== photo.id));
+    toast.success("Photo removed");
+  };
+
+  const updateFlaggedStatus = async (id: string, status: string) => {
+    await supabase.from("flagged_messages").update({ status }).eq("id", id);
+    setFlaggedMessages((prev) => prev.map((f) => f.id === id ? { ...f, status } : f));
+    toast.success(`Flagged message ${status}`);
+  };
+
+  const fetchCommunicationData = async () => {
+    setCommunicationLoading(true);
+    const { data } = await supabase.from("scheduled_notifications").select("*").order("created_at", { ascending: false });
+    if (data) setScheduledNotifs(data as ScheduledNotifRow[]);
+    setCommunicationLoading(false);
+  };
+
+  const sendNotification = async () => {
+    if (!notifTitle.trim() || !notifMessage.trim() || !user) return;
+    setSendingNotif(true);
+    const { data, error } = await supabase.from("scheduled_notifications").insert({
+      title: notifTitle.trim(), message: notifMessage.trim(),
+      audience: notifAudience, status: "sent", sent_at: new Date().toISOString(), created_by: user.id,
+    }).select().single();
+    setSendingNotif(false);
+    if (error) { toast.error("Could not send notification"); return; }
+    setScheduledNotifs((prev) => [data as ScheduledNotifRow, ...prev]);
+    setNotifTitle(""); setNotifMessage(""); setNotifAudience("all");
+    toast.success("Announcement sent!");
+  };
+
+  const cancelScheduledNotif = async (id: string) => {
+    await supabase.from("scheduled_notifications").update({ status: "cancelled" }).eq("id", id);
+    setScheduledNotifs((prev) => prev.map((n) => n.id === id ? { ...n, status: "cancelled" } : n));
+    toast.success("Notification cancelled");
+  };
+
+  const fetchFinancialData = async () => {
+    setFinancialLoading(true);
+    const { data } = await supabase.from("stores").select("id, name, category, subscription_tier, created_at, booking_count, total_revenue, last_booking_date, rating, review_count, is_suspended, is_approved, active_slots").order("name");
+    if (data) {
+      const all = data as StoreRow[];
+      setProStores(all.filter((s) => s.subscription_tier === "pro"));
+      setPremiumStores(all.filter((s) => s.subscription_tier === "premium"));
+      setFreeStores(all.filter((s) => !s.subscription_tier || s.subscription_tier === "free"));
+    }
+    setFinancialLoading(false);
+  };
+
+  // ── Store admin actions ────────────────────────────────────────────────────
+  const openStoreAction = (s: StoreRow, type: typeof storeActionType) => {
+    setStoreActionTarget(s);
+    setStoreActionType(type);
+    if (type === "category") setStoreActionCategory(s.category);
+    if (type === "tier") setStoreActionTier(s.subscription_tier ?? "free");
+    if (type === "edit") { setStoreEditName(s.name); setStoreEditDesc(""); setStoreEditAddr(s.address ?? ""); setStoreEditPhone(s.phone ?? ""); }
+    if (type === "notes") setStoreAdminNote("");
+    if (type === "delete") setStoreDeleteConfirm("");
+  };
+
+  const saveStoreAction = async () => {
+    if (!storeActionTarget) return;
+    setSavingStoreAction(true);
+    const id = storeActionTarget.id;
+    if (storeActionType === "category") {
+      await supabase.from("stores").update({ category: storeActionCategory, category_locked_until: null } as any).eq("id", id);
+      setStores((prev) => prev.map((s) => s.id === id ? { ...s, category: storeActionCategory } : s));
+      toast.success(`Category updated for ${storeActionTarget.name}`);
+    } else if (storeActionType === "tier") {
+      await supabase.from("stores").update({ subscription_tier: storeActionTier }).eq("id", id);
+      setStores((prev) => prev.map((s) => s.id === id ? { ...s, subscription_tier: storeActionTier } : s));
+      toast.success(`${storeActionTarget.name} updated to ${storeActionTier}`);
+    } else if (storeActionType === "edit") {
+      const updates: any = {};
+      if (storeEditName.trim()) updates.name = storeEditName.trim();
+      if (storeEditAddr.trim()) updates.address = storeEditAddr.trim();
+      if (storeEditPhone.trim()) updates.phone = storeEditPhone.trim();
+      await supabase.from("stores").update(updates).eq("id", id);
+      setStores((prev) => prev.map((s) => s.id === id ? { ...s, ...updates } : s));
+      toast.success("Store details updated");
+    } else if (storeActionType === "delete") {
+      if (storeDeleteConfirm !== "DELETE") { toast.error("Type DELETE to confirm"); setSavingStoreAction(false); return; }
+      await supabase.from("stores").delete().eq("id", id);
+      setStores((prev) => prev.filter((s) => s.id !== id));
+      toast.success("Store permanently deleted");
+    } else if (storeActionType === "notes") {
+      await supabase.from("admin_store_notes").insert({ store_id: id, admin_id: user!.id, note: storeAdminNote.trim() });
+      toast.success("Note saved");
+    }
+    setSavingStoreAction(false);
+    setStoreActionTarget(null);
+    setStoreActionType(null);
+  };
+
+  const toggleStoreRecommended = async (s: StoreRow) => {
+    const val = !s.is_booka_recommended;
+    await supabase.from("stores").update({ is_booka_recommended: val }).eq("id", s.id);
+    setStores((prev) => prev.map((st) => st.id === s.id ? { ...st, is_booka_recommended: val } : st));
+    toast.success(val ? `${s.name} featured as Booka Pick` : `Feature removed from ${s.name}`);
+  };
+
+  const toggleStoreVerified = async (s: StoreRow) => {
+    const val = !s.is_verified;
+    await supabase.from("stores").update({ is_verified: val }).eq("id", s.id);
+    setStores((prev) => prev.map((st) => st.id === s.id ? { ...st, is_verified: val } : st));
+    toast.success(val ? `Verified badge awarded to ${s.name}` : `Verified badge removed from ${s.name}`);
+  };
+
+  const resetCategoryLock = async (s: StoreRow) => {
+    await supabase.from("stores").update({ category_locked_until: null }).eq("id", s.id);
+    toast.success(`Category lock cleared for ${s.name}`);
+  };
+
+  const sendPasswordReset = async (email: string | undefined) => {
+    if (!email) { toast.error("No email on file"); return; }
+    await supabase.auth.resetPasswordForEmail(email);
+    toast.success("Password reset email sent");
+  };
+
+  const viewCustomerBookings = async (c: CustomerRow) => {
+    setCustomerActionTarget(c);
+    setCustomerActionType("bookings");
+    setCustomerBookingsLoading(true);
+    const { data } = await supabase.from("reservations")
+      .select("id, store_id, reservation_date, start_time, status, total_amount, commitment_fee_amount, payment_status, reservation_services(*)")
+      .eq("customer_id", c.id).order("reservation_date", { ascending: false }).limit(30);
+    if (data) {
+      const sIds = [...new Set((data as any[]).map((b) => b.store_id))];
+      const { data: sData } = sIds.length ? await supabase.from("stores").select("id, name").in("id", sIds) : { data: [] };
+      const sm = new Map((sData ?? []).map((s: any) => [s.id, s.name]));
+      setCustomerBookings((data as any[]).map((b) => ({ ...b, store_name: sm.get(b.store_id) ?? "Unknown", customer_name: c.full_name ?? "Unknown" })));
+    }
+    setCustomerBookingsLoading(false);
+  };
+
   const sendAnnouncement = async () => {
     if (!annTitle.trim() || !annMessage.trim()) { toast.error("Title and message required"); return; }
     if (!user) return;
@@ -697,6 +1012,38 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
 
           <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Platform Health</p>
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard label="Suspended Stores" value={String(stats.suspendedStores)} sub={`of ${stats.totalStores} total`} />
+              <StatCard label="Suspended Users" value={String(stats.suspendedCustomers)} sub={`of ${stats.totalCustomers} total`} />
+              <StatCard label="All-Time Bookings" value={String(stats.bookingsAllTime)} />
+              <StatCard label="Dispute Resolution" value={stats.totalDisputes > 0 ? `${Math.round((stats.resolvedDisputes / stats.totalDisputes) * 100)}%` : "—"} sub={`${stats.resolvedDisputes}/${stats.totalDisputes} resolved`} />
+            </div>
+          </div>
+
+          {stats.categoryBreakdown.length > 0 && (
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Stores by Category</p>
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                {stats.categoryBreakdown.map((c, i) => {
+                  const maxCount = stats.categoryBreakdown[0]?.count ?? 1;
+                  return (
+                    <div key={c.cat} className={`px-4 py-3 ${i > 0 ? "border-t border-slate-50" : ""}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-slate-700">{c.cat}</span>
+                        <span className="text-xs font-bold text-slate-900">{c.count}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${(c.count / maxCount) * 100}%` }}/>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div>
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Recent Activity</p>
             {activityLoading ? (
               <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 rounded-xl booka-shimmer" />)}</div>
@@ -778,18 +1125,42 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                   </div>
                 </div>
               </div>
-              <div className="flex gap-2 flex-wrap">
-                <button onClick={() => toggleStoreSuspend(s)} className={`flex-1 h-8 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition-all active:scale-95 ${s.is_suspended ? "border-green-200 text-green-700 hover:bg-green-50" : "border-red-200 text-red-600 hover:bg-red-50"}`}>
-                  <Ban size={12} />{s.is_suspended ? "Reinstate" : "Suspend"}
+              <div className="flex gap-1.5 flex-wrap">
+                <button onClick={() => toggleStoreSuspend(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_suspended ? "border-green-200 text-green-700 hover:bg-green-50" : "border-red-200 text-red-600 hover:bg-red-50"}`}>
+                  <Ban size={11} />{s.is_suspended ? "Reinstate" : "Suspend"}
                 </button>
-                <button onClick={() => toggleStoreApprove(s)} className={`flex-1 h-8 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition-all active:scale-95 ${s.is_approved ? "border-slate-200 text-slate-500 hover:bg-slate-50" : "border-green-200 text-green-700 hover:bg-green-50"}`}>
-                  <CheckCircle2 size={12} />{s.is_approved ? "Revoke Approval" : "Approve"}
+                <button onClick={() => toggleStoreApprove(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_approved ? "border-slate-200 text-slate-500 hover:bg-slate-50" : "border-green-200 text-green-700 hover:bg-green-50"}`}>
+                  <CheckCircle2 size={11} />{s.is_approved ? "Revoke" : "Approve"}
+                </button>
+                <button onClick={() => openStoreAction(s, "category")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-purple-200 text-purple-600 hover:bg-purple-50 transition-all active:scale-95">
+                  <Store size={11} /> Category
+                </button>
+                <button onClick={() => openStoreAction(s, "tier")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all active:scale-95">
+                  <CreditCard size={11} /> Tier
+                </button>
+                <button onClick={() => openStoreAction(s, "edit")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
+                  <Pencil size={11} /> Edit
+                </button>
+                <button onClick={() => toggleStoreRecommended(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_booka_recommended ? "border-amber-300 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+                  <Star size={11} /> {s.is_booka_recommended ? "Unfeature" : "Feature"}
+                </button>
+                <button onClick={() => toggleStoreVerified(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_verified ? "border-green-300 text-green-600 bg-green-50" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+                  <CheckCircle2 size={11} /> {s.is_verified ? "Unverify" : "Verify"}
+                </button>
+                <button onClick={() => resetCategoryLock(s)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all active:scale-95">
+                  <Clock size={11} /> Unlock
+                </button>
+                <button onClick={() => openStoreAction(s, "notes")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all active:scale-95">
+                  <Plus size={11} /> Note
                 </button>
                 {s.phone && (
-                  <button onClick={() => setContactTarget({ name: s.name, phone: s.phone! })} className="flex-1 h-8 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all active:scale-95">
-                    <Phone size={12} /> Contact
+                  <button onClick={() => setContactTarget({ name: s.name, phone: s.phone! })} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all active:scale-95">
+                    <Phone size={11} /> Call
                   </button>
                 )}
+                <button onClick={() => openStoreAction(s, "delete")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-red-300 text-red-600 hover:bg-red-50 transition-all active:scale-95">
+                  <Trash2 size={11} /> Delete
+                </button>
               </div>
             </div>
           );
@@ -838,13 +1209,19 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                   </div>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => toggleCustomerSuspend(c)} className={`flex-1 h-8 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition-all active:scale-95 ${c.is_suspended ? "border-green-200 text-green-700 hover:bg-green-50" : "border-red-200 text-red-600 hover:bg-red-50"}`}>
+              <div className="flex gap-1.5 flex-wrap">
+                <button onClick={() => toggleCustomerSuspend(c)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${c.is_suspended ? "border-green-200 text-green-700 hover:bg-green-50" : "border-red-200 text-red-600 hover:bg-red-50"}`}>
                   <Ban size={11} />{c.is_suspended ? "Reinstate" : "Suspend"}
                 </button>
+                <button onClick={() => viewCustomerBookings(c)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
+                  <Calendar size={11}/> Bookings
+                </button>
+                <button onClick={() => sendPasswordReset(c.email)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-amber-200 text-amber-600 hover:bg-amber-50 transition-all active:scale-95">
+                  <RefreshCw size={11}/> Pwd Reset
+                </button>
                 {c.phone && (
-                  <button onClick={() => setCustomerContactTarget({ name: c.full_name ?? "Customer", phone: c.phone! })} className="flex-1 h-8 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all active:scale-95">
-                    <Phone size={11} /> Contact
+                  <button onClick={() => setCustomerContactTarget({ name: c.full_name ?? "Customer", phone: c.phone! })} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all active:scale-95">
+                    <Phone size={11}/> Call
                   </button>
                 )}
               </div>
@@ -1215,6 +1592,279 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     </div>
   );
 
+  // ── Platform Management ────────────────────────────────────────────────────
+  const renderPlatform = () => {
+    const featureKeys = ["messaging_enabled","reviews_enabled","disputes_enabled","rescheduling_enabled","walkin_enabled","late_night_pricing_enabled","featured_stores_enabled"];
+    const numericKeys = ["commission_rate","min_commitment_fee"];
+    const maintenanceKey = "maintenance_mode";
+    const maintenanceMsgKey = "maintenance_message";
+    return (
+      <div className="p-4 space-y-4">
+        {platformLoading ? <div className="space-y-3">{[1,2,3].map(i=><div key={i} className="h-16 rounded-2xl booka-shimmer"/>)}</div> : <>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Commission & Fees</p>
+          {numericKeys.map((key) => (
+            <div key={key} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+              <p className="text-sm font-semibold text-slate-800 mb-2 capitalize">{key.replace(/_/g," ")}</p>
+              <div className="flex gap-2">
+                <Input type="number" value={platformEdits[key] ?? ""} onChange={e=>setPlatformEdits(p=>({...p,[key]:e.target.value}))} className="rounded-xl flex-1" />
+                <Button size="sm" className="rounded-xl" onClick={()=>savePlatformSetting(key)} disabled={savingPlatform}>Save</Button>
+              </div>
+            </div>
+          ))}
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Maintenance Mode</p>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Maintenance Mode</span>
+              <button onClick={()=>{const v=platformEdits[maintenanceKey]==="true"?"false":"true";setPlatformEdits(p=>({...p,[maintenanceKey]:v}));savePlatformSetting(maintenanceKey);}}
+                className={`relative rounded-full transition-colors duration-200`} style={{width:42,height:24,background:platformEdits[maintenanceKey]==="true"?"#ef4444":"#e2e8f0"}}>
+                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200 ${platformEdits[maintenanceKey]==="true"?"left-[18px]":"left-0.5"}`}/>
+              </button>
+            </div>
+            <Textarea value={platformEdits[maintenanceMsgKey]??""} onChange={e=>setPlatformEdits(p=>({...p,[maintenanceMsgKey]:e.target.value}))} rows={2} className="rounded-xl text-xs resize-none" placeholder="Maintenance message…"/>
+            <Button size="sm" className="rounded-xl w-full" onClick={()=>savePlatformSetting(maintenanceMsgKey)} disabled={savingPlatform}>Save Message</Button>
+          </div>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Feature Flags</p>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-50">
+            {featureKeys.map((key)=>(
+              <div key={key} className="flex items-center justify-between px-4 py-3">
+                <span className="text-sm font-medium capitalize">{key.replace(/_enabled/,"").replace(/_/g," ")}</span>
+                <button onClick={()=>{const v=platformEdits[key]==="true"?"false":"true";setPlatformEdits(p=>({...p,[key]:v}));savePlatformSetting(key);}}
+                  className="relative rounded-full transition-colors duration-200" style={{width:42,height:24,background:platformEdits[key]==="true"?"#3b82f6":"#e2e8f0"}}>
+                  <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200 ${platformEdits[key]==="true"?"left-[18px]":"left-0.5"}`}/>
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Word Blacklist</p>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+            <div className="flex gap-2">
+              <Input value={newBlackWord} onChange={e=>setNewBlackWord(e.target.value)} placeholder="Add word or phrase…" className="rounded-xl flex-1 text-sm" onKeyDown={e=>{if(e.key==="Enter")addBlacklistWord();}}/>
+              <Button size="sm" className="rounded-xl" onClick={addBlacklistWord}><Plus size={14}/></Button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {wordBlacklist.map(w=>(
+                <div key={w.id} className="flex items-center gap-1 bg-red-50 border border-red-200 rounded-full px-2.5 py-0.5">
+                  <span className="text-xs text-red-700">{w.word}</span>
+                  <button onClick={()=>removeBlacklistWord(w.id)} className="text-red-400 hover:text-red-600"><X size={11}/></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>}
+      </div>
+    );
+  };
+
+  // ── Financial Management ───────────────────────────────────────────────────
+  const renderFinancial = () => (
+    <div className="p-4 space-y-3">
+      <div className="flex gap-2 mb-3">
+        {(["subscriptions","refunds"] as const).map(t=>(
+          <button key={t} onClick={()=>setFinancialSubTab(t)} className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${financialSubTab===t?"bg-slate-800 text-white border-slate-800":"bg-white border-slate-200 text-slate-600"}`}>
+            {t==="subscriptions"?"Subscriptions":"Pending Refunds"}
+          </button>
+        ))}
+      </div>
+      {financialLoading ? <div className="h-40 rounded-2xl booka-shimmer"/> : financialSubTab==="subscriptions" ? (
+        <div className="space-y-4">
+          {[{label:"Premium",stores:premiumStores,color:"amber"},{label:"Pro",stores:proStores,color:"blue"},{label:"Free",stores:freeStores,color:"slate"}].map(({label,stores,color})=>(
+            <div key={label}>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">{label} ({stores.length})</p>
+              {stores.length===0?<p className="text-xs text-slate-400 text-center py-3">None</p>:stores.map(s=>(
+                <div key={s.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 mb-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{s.name}</p>
+                      <p className="text-xs text-slate-400">{s.category} · {s.booking_count} bookings · {fmtJ(s.total_revenue)}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${label==="Premium"?"bg-amber-100 text-amber-700":label==="Pro"?"bg-blue-100 text-blue-700":"bg-slate-100 text-slate-600"}`}>{label}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-16 text-slate-400">
+          <DollarSign size={36} className="mx-auto mb-3 opacity-30"/>
+          <p className="text-sm">Refund management — connect to Fygaro to process refunds</p>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Content Moderation ─────────────────────────────────────────────────────
+  const renderModeration = () => (
+    <div className="p-4 space-y-3">
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {(["photos","reviews","flagged","blacklist"] as const).map(t=>(
+          <button key={t} onClick={()=>setModerationSubTab(t)} className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${moderationSubTab===t?"bg-slate-800 text-white border-slate-800":"bg-white border-slate-200 text-slate-600"}`}>
+            {t==="photos"?"Photos":t==="reviews"?"Reviews":t==="flagged"?"Flagged":"Blacklist"}
+          </button>
+        ))}
+        <button onClick={fetchModerationData} className="shrink-0 p-1.5 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50"><RefreshCw size={13}/></button>
+      </div>
+      {moderationLoading ? <div className="space-y-2">{[1,2,3].map(i=><div key={i} className="h-20 rounded-2xl booka-shimmer"/>)}</div> :
+        moderationSubTab==="photos" ? (
+          storePhotos.length===0 ? <p className="text-sm text-slate-400 text-center py-8">No photos yet</p> :
+          <div className="grid grid-cols-2 gap-2">
+            {storePhotos.map(p=>(
+              <div key={p.id} className="relative rounded-xl overflow-hidden border border-slate-100">
+                <img src={p.image_url} alt="store" className="w-full h-32 object-cover"/>
+                <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 flex items-center justify-between">
+                  <span className="text-white text-[10px] truncate">{p.store_name}</span>
+                  <button onClick={()=>deleteStorePhoto(p)} className="text-red-300 hover:text-red-100"><Trash2 size={11}/></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : moderationSubTab==="reviews" ? (
+          storeReviews.length===0 ? <p className="text-sm text-slate-400 text-center py-8">No reviews yet</p> :
+          storeReviews.map(r=>(
+            <div key={r.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{r.store_name}</p>
+                  <p className="text-xs text-slate-400">{r.reviewer_name} · {"★".repeat(r.rating)}{"☆".repeat(5-r.rating)}</p>
+                </div>
+                <button onClick={()=>deleteReview(r.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={13}/></button>
+              </div>
+              <p className="text-xs text-slate-600">{r.comment}</p>
+            </div>
+          ))
+        ) : moderationSubTab==="flagged" ? (
+          flaggedMessages.length===0 ? <p className="text-sm text-slate-400 text-center py-8">No flagged messages</p> :
+          flaggedMessages.map(f=>(
+            <div key={f.id} className="bg-white rounded-2xl border border-amber-200 shadow-sm p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{f.store_name ?? "Unknown Store"}</p>
+                  <p className="text-xs text-slate-400">Keyword: <span className="font-bold text-red-500">{f.flagged_keyword}</span></p>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${f.status==="pending"?"bg-amber-100 text-amber-700":f.status==="dismissed"?"bg-slate-100 text-slate-500":"bg-green-100 text-green-700"}`}>{f.status}</span>
+              </div>
+              {f.message_content && <p className="text-xs text-slate-500 italic">"{f.message_content}"</p>}
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="flex-1 rounded-xl text-xs" onClick={()=>updateFlaggedStatus(f.id,"dismissed")}>Dismiss</Button>
+                <Button size="sm" className="flex-1 rounded-xl text-xs bg-red-600 hover:bg-red-700 text-white border-0" onClick={()=>updateFlaggedStatus(f.id,"actioned")}>Action</Button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+            <div className="flex gap-2">
+              <Input value={newBlackWord} onChange={e=>setNewBlackWord(e.target.value)} placeholder="Add word or phrase…" className="rounded-xl flex-1 text-sm" onKeyDown={e=>{if(e.key==="Enter")addBlacklistWord();}}/>
+              <Button size="sm" className="rounded-xl" onClick={addBlacklistWord}><Plus size={14}/></Button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {wordBlacklist.map(w=>(
+                <div key={w.id} className="flex items-center gap-1 bg-red-50 border border-red-200 rounded-full px-2.5 py-0.5">
+                  <span className="text-xs text-red-700">{w.word}</span>
+                  <button onClick={()=>removeBlacklistWord(w.id)} className="text-red-400 hover:text-red-600"><X size={11}/></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      }
+    </div>
+  );
+
+  // ── Communication ──────────────────────────────────────────────────────────
+  const renderCommunication = () => (
+    <div className="p-4 space-y-4">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Send Notification</p>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+        <Input value={notifTitle} onChange={e=>setNotifTitle(e.target.value)} placeholder="Title…" className="rounded-xl"/>
+        <Textarea value={notifMessage} onChange={e=>setNotifMessage(e.target.value)} placeholder="Message body…" rows={3} className="rounded-xl resize-none"/>
+        <div className="flex gap-1.5">
+          {(["all","stores","customers"] as const).map(a=>(
+            <button key={a} onClick={()=>setNotifAudience(a)} className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${notifAudience===a?"bg-slate-800 text-white border-slate-800":"bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+              {a==="all"?"All Users":a==="stores"?"Stores Only":"Customers Only"}
+            </button>
+          ))}
+        </div>
+        <Button className="w-full rounded-xl" onClick={sendNotification} disabled={sendingNotif||!notifTitle.trim()||!notifMessage.trim()}>
+          <Send size={14} className="mr-1.5"/>{sendingNotif?"Sending…":"Send Now"}
+        </Button>
+      </div>
+
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Sent History</p>
+      {communicationLoading ? <div className="h-24 rounded-2xl booka-shimmer"/> :
+        scheduledNotifs.length===0 ? <p className="text-sm text-slate-400 text-center py-4">No notifications sent yet</p> :
+        scheduledNotifs.map(n=>(
+          <div key={n.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{n.title}</p>
+                <p className="text-xs text-slate-400">{n.message.slice(0,80)}{n.message.length>80?"…":""}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{n.audience} · {n.sent_at ? format(new Date(n.sent_at),"MMM d, h:mm a") : format(new Date(n.created_at),"MMM d")}</p>
+              </div>
+              <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${n.status==="sent"?"bg-green-100 text-green-700":n.status==="cancelled"?"bg-red-100 text-red-700":"bg-amber-100 text-amber-700"}`}>{n.status}</span>
+            </div>
+            {n.status==="scheduled" && (
+              <Button size="sm" variant="outline" className="mt-2 rounded-xl text-xs w-full border-red-200 text-red-500" onClick={()=>cancelScheduledNotif(n.id)}>Cancel</Button>
+            )}
+          </div>
+        ))
+      }
+    </div>
+  );
+
+  // ── Store admin action dialogs ─────────────────────────────────────────────
+  const renderStoreActionDialog = () => {
+    if (!storeActionTarget || !storeActionType) return null;
+    const s = storeActionTarget;
+    const titleMap = { category:"Change Category", tier:"Change Tier", edit:"Edit Store", delete:"Delete Store", notes:"Add Admin Note" };
+    return (
+      <div className="fixed inset-0 z-[500] flex items-end justify-center" onClick={()=>{setStoreActionTarget(null);setStoreActionType(null);}}>
+        <div className="absolute inset-0 bg-black/60"/>
+        <div className="relative bg-white rounded-t-3xl w-full max-w-lg p-6 pb-10 shadow-2xl space-y-4" onClick={e=>e.stopPropagation()}>
+          <p className="font-bold text-slate-900 text-base">{titleMap[storeActionType]} — {s.name}</p>
+          {storeActionType==="category" && (
+            <div className="grid grid-cols-3 gap-2">
+              {CATEGORIES.map(c=>(
+                <button key={c.label} onClick={()=>setStoreActionCategory(c.label)}
+                  className={`p-2 rounded-xl border text-xs font-semibold transition-all ${storeActionCategory===c.label?"bg-blue-600 text-white border-blue-600":"border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+                  {c.emoji} {c.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {storeActionType==="tier" && (
+            <div className="flex gap-2">
+              {(["free","pro","premium"] as const).map(t=>(
+                <button key={t} onClick={()=>setStoreActionTier(t)} className={`flex-1 py-3 rounded-xl border text-sm font-semibold transition-all capitalize ${storeActionTier===t?"bg-slate-800 text-white border-slate-800":"border-slate-200 text-slate-600"}`}>{t}</button>
+              ))}
+            </div>
+          )}
+          {storeActionType==="edit" && (
+            <div className="space-y-2">
+              <Input value={storeEditName} onChange={e=>setStoreEditName(e.target.value)} placeholder="Store name" className="rounded-xl"/>
+              <Input value={storeEditAddr} onChange={e=>setStoreEditAddr(e.target.value)} placeholder="Address" className="rounded-xl"/>
+              <Input value={storeEditPhone} onChange={e=>setStoreEditPhone(e.target.value)} placeholder="Phone" className="rounded-xl"/>
+            </div>
+          )}
+          {storeActionType==="delete" && (
+            <div className="space-y-2">
+              <p className="text-sm text-red-600">This action is permanent and cannot be undone. Type DELETE to confirm.</p>
+              <Input value={storeDeleteConfirm} onChange={e=>setStoreDeleteConfirm(e.target.value)} placeholder="DELETE" className="rounded-xl"/>
+            </div>
+          )}
+          {storeActionType==="notes" && (
+            <Textarea value={storeAdminNote} onChange={e=>setStoreAdminNote(e.target.value)} rows={3} placeholder="Internal admin note…" className="rounded-xl resize-none"/>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={()=>{setStoreActionTarget(null);setStoreActionType(null);}}>Cancel</Button>
+            <Button className={`flex-1 rounded-xl ${storeActionType==="delete"?"bg-red-600 hover:bg-red-700 text-white border-0":""}`} onClick={saveStoreAction} disabled={savingStoreAction}>
+              {savingStoreAction?"Saving…":"Confirm"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     if (activeTab === "overview") return renderOverview();
     if (activeTab === "stores") return renderStores();
@@ -1224,6 +1874,10 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     if (activeTab === "bugs") return renderBugReports();
     if (activeTab === "bookings") return renderBookings();
     if (activeTab === "revenue") return renderRevenue();
+    if (activeTab === "platform") return renderPlatform();
+    if (activeTab === "financial") return renderFinancial();
+    if (activeTab === "moderation") return renderModeration();
+    if (activeTab === "communication") return renderCommunication();
     if (activeTab === "announcements") return renderAnnouncements();
     if (activeTab === "messages") return renderMessages();
     return null;
@@ -1235,10 +1889,14 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     { id: "customers", label: "Customers", icon: Users },
     { id: "reports", label: "Reports", icon: Flag },
     { id: "disputes", label: "Disputes", icon: Shield },
-    { id: "bugs", label: "Bug Reports", icon: AlertCircle },
+    { id: "bugs", label: "Bugs", icon: AlertCircle },
     { id: "bookings", label: "Bookings", icon: Calendar },
     { id: "revenue", label: "Revenue", icon: DollarSign },
-    { id: "announcements", label: "Announce", icon: Megaphone },
+    { id: "platform", label: "Platform", icon: Settings2 },
+    { id: "financial", label: "Financial", icon: CreditCard },
+    { id: "moderation", label: "Moderation", icon: Eye },
+    { id: "communication", label: "Comms", icon: Megaphone },
+    { id: "announcements", label: "Announce", icon: Bell2 },
     { id: "messages", label: "Messages", icon: MessageSquare },
   ];
 
@@ -1312,6 +1970,41 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             <a href={`https://wa.me/${customerContactTarget.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full h-10 rounded-xl bg-green-500 text-white text-sm font-semibold active:scale-95 transition-all">
               <Phone size={14} /> Message on WhatsApp
             </a>
+          </div>
+        </div>
+      )}
+      {/* Store admin action dialog */}
+      {renderStoreActionDialog()}
+
+      {/* Customer bookings dialog */}
+      {customerActionTarget && customerActionType === "bookings" && (
+        <div className="fixed inset-0 z-[500] flex items-end justify-center" onClick={() => { setCustomerActionTarget(null); setCustomerActionType(null); }}>
+          <div className="absolute inset-0 bg-black/60"/>
+          <div className="relative bg-white rounded-t-3xl w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+              <p className="font-bold text-slate-900 text-base">Bookings — {customerActionTarget.full_name ?? "Customer"}</p>
+              <button onClick={() => { setCustomerActionTarget(null); setCustomerActionType(null); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"><X size={16}/></button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4 space-y-2">
+              {customerBookingsLoading ? (
+                <div className="space-y-2">{[1,2,3].map(i=><div key={i} className="h-16 rounded-2xl booka-shimmer"/>)}</div>
+              ) : customerBookings.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-8">No bookings found</p>
+              ) : customerBookings.map((b: any) => (
+                <div key={b.id} className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{b.store_name}</p>
+                      <p className="text-xs text-slate-400">{format(parseISO(b.reservation_date), "MMM d, yyyy")} · {b.start_time?.slice(0,5)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-bold text-slate-700">{fmtJ(b.total_amount)}</p>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${b.status==="completed"?"bg-green-100 text-green-700":b.status==="cancelled"?"bg-red-100 text-red-700":"bg-amber-100 text-amber-700"}`}>{b.status}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
