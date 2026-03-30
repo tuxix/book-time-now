@@ -1,0 +1,400 @@
+Now I have the full picture. Here's the complete prompt to paste into Replit:
+
+---
+
+*"Please read the entire codebase carefully before making any changes. Do not duplicate anything already built. Here is everything that needs to be added, changed or fixed. Work through each section in order and confirm each one is done before moving to the next:*
+
+***SECTION 1 — SCHEDULING SYSTEM REBUILD***
+
+*The current manual slot system needs to be replaced with an opening hours system. This is a complete rebuild of how stores set their schedule:*
+
+*1. Give me all SQL as code blocks first and wait for my confirmation before writing any code:*
+```sql
+-- Opening hours table
+CREATE TABLE IF NOT EXISTS public.store_hours (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+  day_of_week integer NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+  is_open boolean NOT NULL DEFAULT true,
+  open_time time NOT NULL DEFAULT '09:00',
+  close_time time NOT NULL DEFAULT '17:00',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(store_id, day_of_week)
+);
+
+ALTER TABLE public.store_hours ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can read store hours"
+ON public.store_hours FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Store owners can manage hours"
+ON public.store_hours FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = store_hours.store_id AND user_id = auth.uid())
+)
+WITH CHECK (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = store_hours.store_id AND user_id = auth.uid())
+);
+
+-- Breaks table
+CREATE TABLE IF NOT EXISTS public.store_breaks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+  day_of_week integer NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+  break_start time NOT NULL,
+  break_end time NOT NULL,
+  label text NOT NULL DEFAULT 'Break',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.store_breaks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can read store breaks"
+ON public.store_breaks FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Store owners can manage breaks"
+ON public.store_breaks FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = store_breaks.store_id AND user_id = auth.uid())
+)
+WITH CHECK (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = store_breaks.store_id AND user_id = auth.uid())
+);
+
+-- Late night surcharge
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS late_night_start time;
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS late_night_surcharge numeric(10,2) DEFAULT 0;
+
+-- Service duration
+ALTER TABLE public.services ADD COLUMN IF NOT EXISTS duration_minutes integer;
+ALTER TABLE public.services ADD COLUMN IF NOT EXISTS min_duration_minutes integer;
+ALTER TABLE public.services ADD COLUMN IF NOT EXISTS max_duration_minutes integer;
+```
+
+*2. Store Hours Setup — replace the current Slots tab with a new Hours tab on the store dashboard:*
+- *7 day cards — one per day — Monday to Sunday*
+- *Each day card has an Open/Closed toggle*
+- *When open show a start time picker and end time picker*
+- *Support any hours including late night — a barber can set 6:00 PM to 12:00 AM with no restrictions*
+- *Below the time pickers show a Breaks section*
+- *Free tier — 1 break per day maximum — break start and end time picker with a label field defaulting to Lunch Break*
+- *Pro and Premium — unlimited breaks per day — Add Break button creates additional break rows*
+- *Save button saves all hours and breaks for that day*
+- *When hours are saved automatically generate booking windows for that day based on the store's primary category default duration*
+
+*3. Auto generated booking windows — when a customer opens the booking screen:*
+- *Fetch the store's opening hours and breaks for the selected day*
+- *Fetch all existing confirmed reservations for that store on that date*
+- *Generate available time windows by:*
+  - *Starting at open_time*
+  - *Dividing the day into slots of the service duration selected by the customer*
+  - *Adding 15 minutes mandatory buffer after each slot*
+  - *Skipping any windows that overlap with break times*
+  - *Skipping any windows that overlap with existing confirmed reservations plus their buffer*
+  - *Stopping at close_time*
+- *Show the resulting available windows to the customer in chronological order in 12 hour AM/PM format*
+
+*4. Default service durations per category — used to generate windows on free tier:*
+- *Barber — 30 minutes — min 10 — max 30*
+- *Hair Salon — 120 minutes — min 30 — max 240*
+- *Nail Tech — 60 minutes — min 30 — max 90*
+- *Dog Grooming — 120 minutes — min 60 — max 240*
+- *Lash Tech — 90 minutes — min 45 — max 120*
+- *Spa and Wellness — 60 minutes — min 30 — max 90*
+- *Massage — 60 minutes — min 30 — max 90*
+
+*5. Free tier duration customization:*
+- *On the Menu tab when a store owner edits a service show a Duration field*
+- *Free tier — slider or stepper between the category minimum and maximum — cannot exceed the category maximum*
+- *Pro and Premium — open number input — no ceiling — they can set any duration they need*
+- *Show the duration clearly on each service card in the menu*
+
+*6. Mandatory 15 minute buffer — ALL tiers:*
+- *Buffer is always 15 minutes minimum between appointments*
+- *Pro and Premium can increase it beyond 15 but cannot go below 15*
+- *Free tier is fixed at exactly 15 minutes — no adjustment*
+- *Buffer time is added after every completed booking window before the next available window starts*
+
+*7. Walk in button — ALL tiers:*
+- *Add a Walk In button to the Bookings tab on the store dashboard*
+- *Tapping it shows a dialog — select date (defaults to today) and select which time window to block*
+- *After confirming the window is marked as a walk in and disappears from the customer booking screen*
+- *Walk ins count toward the free tier daily booking limit*
+- *Walk ins can be unblocked from the same dialog*
+
+*8. Late night surcharge — Pro and Premium only:*
+- *In the store dashboard Profile tab add a Late Night Pricing section*
+- *Toggle to enable late night surcharge*
+- *Time picker for when late night begins — for example 8:00 PM*
+- *Number input for the surcharge amount in J$*
+- *When a customer books a slot that falls after the late night start time show the surcharge added to the price*
+- *Receipt shows Late Night Surcharge as a separate line item*
+
+*9. Manual blocking notification — Free tier:*
+- *When a booking is confirmed for a free tier store check if the service duration is longer than the slot window*
+- *If so send a notification to the store owner saying: Your next slot may overlap with this booking. Tap to block it*
+- *Show a one tap Block Next Slot button in the notification*
+- *Tapping it marks the next available window as blocked*
+
+*10. Keep the existing store_time_slots table and manual slot system working for stores that already have slots set up — do not delete or break existing data. New stores use the opening hours system. Existing stores see a banner saying Switch to the new Hours system for smarter scheduling with a button to migrate*
+
+***SECTION 2 — DEFAULT SERVICES PER CATEGORY***
+
+*11. When a new store completes their first time setup automatically create these default services in their menu based on their primary category. Store owners can edit the name, price and duration of any default service or delete it entirely:*
+
+*Barber:*
+- *Haircut — J$1500 — 30 mins*
+- *Fade — J$2000 — 30 mins*
+- *Kids Cut — J$1200 — 20 mins*
+- *Shape Up and Lineup — J$800 — 15 mins*
+- *Haircut and Beard — J$2500 — 45 mins*
+- *Full Service — J$3500 — 60 mins*
+
+*Hair Salon:*
+- *Wash and Set — J$3000 — 60 mins*
+- *Trim — J$2000 — 45 mins*
+- *Blowout — J$3500 — 60 mins*
+- *Relaxer — J$5000 — 120 mins*
+- *Braids — J$8000 — 240 mins*
+- *Twist — J$6000 — 180 mins*
+- *Wig Install — J$7000 — 120 mins*
+- *Weave Install — J$10000 — 180 mins*
+- *Colour — J$8000 — 120 mins*
+
+*Nail Tech:*
+- *Basic Manicure — J$2000 — 45 mins*
+- *Gel Manicure — J$3500 — 60 mins*
+- *Acrylic Full Set — J$5000 — 90 mins*
+- *Nail Fill — J$3000 — 60 mins*
+- *Basic Pedicure — J$2500 — 45 mins*
+- *Gel Pedicure — J$4000 — 60 mins*
+- *Nail Art — J$5500 — 90 mins*
+
+*Dog Grooming:*
+- *Bath and Dry — J$3000 — 60 mins*
+- *Bath and Trim — J$4500 — 90 mins*
+- *Full Groom — J$6000 — 120 mins*
+- *Nail Trim — J$1500 — 20 mins*
+- *Ear Cleaning — J$1000 — 15 mins*
+- *Teeth Brushing — J$1000 — 15 mins*
+- *Dematting — J$2000 — 60 mins*
+
+*Lash Tech:*
+- *Classic Full Set — J$5000 — 90 mins*
+- *Hybrid Full Set — J$6000 — 100 mins*
+- *Volume Full Set — J$7000 — 120 mins*
+- *Lash Fill — J$3500 — 60 mins*
+- *Lash Removal — J$2000 — 30 mins*
+- *Bottom Lashes — J$3000 — 45 mins*
+
+*Spa and Wellness:*
+- *Swedish Massage 30 mins — J$4000 — 30 mins*
+- *Swedish Massage 60 mins — J$7000 — 60 mins*
+- *Deep Tissue 60 mins — J$9000 — 60 mins*
+- *Facial — J$6000 — 60 mins*
+- *Body Scrub — J$7000 — 60 mins*
+- *Manicure and Pedicure — J$5000 — 90 mins*
+- *Hot Stone 60 mins — J$10000 — 60 mins*
+
+*Massage:*
+- *Relaxation 30 mins — J$4000 — 30 mins*
+- *Relaxation 60 mins — J$7000 — 60 mins*
+- *Deep Tissue 60 mins — J$9000 — 60 mins*
+- *Hot Stone 60 mins — J$10000 — 60 mins*
+- *Couples Massage 60 mins — J$15000 — 60 mins*
+- *Sports Massage 60 mins — J$9000 — 60 mins*
+
+*12. Free tier stores are limited to 3 active services — this is already enforced. Make sure default services respect this limit — only the first 3 defaults are active, the rest are created as inactive and can be activated once they upgrade or delete an active service*
+
+***SECTION 3 — CATEGORY UPDATE***
+
+*13. Remove Beard Grooming from the category list everywhere in the app — it is now covered under Barber. The updated category list is:*
+- *✂️ Barber*
+- *💇 Hair Salon*
+- *💅 Nail Tech*
+- *🐕 Dog Grooming*
+- *👁️ Lash Tech*
+- *🧖 Spa and Wellness*
+- *💆 Massage*
+
+*14. Update everywhere this list appears:*
+- *Store setup category selector*
+- *Store dashboard profile tab category grid*
+- *Customer explore screen browse services grid*
+- *Customer search*
+- *Map pin emoji mapping*
+- *Admin dashboard category filters*
+- *Default service creation logic*
+- *Daily booking limit logic*
+- *Default duration logic*
+
+***SECTION 4 — DISPUTE SYSTEM***
+
+*15. Give me this as a SQL code block:*
+```sql
+CREATE TABLE IF NOT EXISTS public.disputes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reservation_id uuid NOT NULL REFERENCES public.reservations(id) ON DELETE CASCADE,
+  customer_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  store_id uuid NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
+  reason text NOT NULL CHECK (reason IN ('service_not_as_described', 'no_show_by_store', 'overcharged', 'other')),
+  description text NOT NULL DEFAULT '',
+  evidence_url text,
+  status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'under_review', 'resolved_customer', 'resolved_store', 'closed')),
+  admin_notes text,
+  resolved_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.disputes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Customers can create disputes"
+ON public.disputes FOR INSERT TO authenticated
+WITH CHECK (auth.uid() = customer_id);
+
+CREATE POLICY "Customers can view own disputes"
+ON public.disputes FOR SELECT TO authenticated
+USING (auth.uid() = customer_id);
+
+CREATE POLICY "Store owners can view their disputes"
+ON public.disputes FOR SELECT TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.stores WHERE id = disputes.store_id AND user_id = auth.uid())
+);
+
+CREATE POLICY "Admins can manage all disputes"
+ON public.disputes FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+);
+```
+
+*16. Customer side — Open Dispute button appears on completed and cancelled booking cards*
+*17. Tapping it opens a form with:*
+- *Reason selector — Service not as described, No show by store, Overcharged, Other*
+- *Description text field — explain what happened*
+- *Optional photo upload for evidence*
+- *Submit button*
+
+*18. After submitting show a confirmation saying your dispute has been submitted and will be reviewed within 48 hours*
+
+*19. Store owner is notified in their Messages tab that a dispute has been opened against their store*
+
+*20. Admin dashboard — add a Disputes tab showing:*
+- *All open disputes sorted by date newest first*
+- *Each dispute shows customer name, store name, reason, description, evidence photo if uploaded, current status*
+- *Resolve in favour of customer button — triggers full refund and marks dispute as resolved customer*
+- *Resolve in favour of store button — closes dispute with no refund and marks as resolved store*
+- *Admin notes field — admin can add internal notes*
+- *Pro stores — standard 48 hour response*
+- *Premium stores — priority 24 hour response — show a PRIORITY badge on those disputes*
+
+***SECTION 5 — RESCHEDULING SYSTEM***
+
+*21. Give me this as a SQL code block:*
+```sql
+ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS reschedule_count integer NOT NULL DEFAULT 0;
+ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS original_date date;
+ALTER TABLE public.reservations ADD COLUMN IF NOT EXISTS original_start_time time;
+```
+
+*22. Reschedule button appears on upcoming booking cards — only when:*
+- *Status is Scheduled*
+- *The appointment is outside the store's cancellation window*
+- *Free tier — button does not appear at all*
+- *Pro tier — button appears if reschedule_count is 0 — one free reschedule per booking*
+- *Premium tier — button always appears regardless of reschedule count*
+
+*23. Tapping Reschedule opens the booking screen for the same store with:*
+- *A banner at the top saying Rescheduling your appointment at [store name]*
+- *The customer picks a new date and time slot*
+- *The original slot is released back to available*
+- *The new slot is booked*
+- *reschedule_count increments by 1*
+- *original_date and original_start_time are saved for reference*
+
+*24. Store owner is notified that a reschedule has happened — shows the old and new time*
+*25. Receipt shows if the booking was rescheduled and the original date*
+
+***SECTION 6 — SETTINGS SCREEN IMPROVEMENTS***
+
+*26. The current settings screen only has dark/light mode toggle, push notifications toggle and about section. Expand it to include:*
+
+*Account section:*
+- *Edit Profile — links to existing edit profile screen*
+- *Change Email — input field to enter new email with a Send Verification button — uses Supabase updateUser*
+- *Change Password — current password, new password, confirm new password fields*
+- *Forgot Password — sends a reset email via Supabase resetPasswordForEmail*
+- *Delete Account — confirmation dialog with warning — deletes the user from Supabase auth and all their data*
+
+*Notifications section — already exists, keep it*
+
+*Appearance section:*
+- *Dark and light mode toggle — already exists, keep it*
+- *Move the map style toggle (dark/light map) from the explore screen into here*
+
+*Location section:*
+- *Show current location permission status — Granted or Denied*
+- *If denied show a button Open Location Settings that links to the device settings*
+
+*Privacy section:*
+- *Privacy Policy — opens a web view or link*
+- *Terms of Service — opens a web view or link*
+
+*Support section:*
+- *Help and FAQ — simple accordion with common questions and answers*
+- *Report a Bug — opens a form with a description field and optional screenshot upload — saves to a bug_reports table*
+- *Rate the App — links to the app store page when published, for now shows a thank you message*
+
+*About section — already exists, keep it*
+
+***SECTION 7 — KNOWN LIMITATIONS TO FIX***
+
+*27. Forgot Password screen:*
+- *Add a Forgot Password link on the sign in screen*
+- *Tapping it shows an email input field*
+- *Submit sends a password reset email via Supabase resetPasswordForEmail*
+- *Show a confirmation message saying check your email for a reset link*
+
+*28. Map showing Kingston only:*
+- *The map currently centres on Kingston by default — this is fine*
+- *But stores outside Kingston with valid coordinates should still appear as pins*
+- *Make sure the map loads ALL stores with coordinates regardless of their location — not just stores near Kingston*
+- *When a customer grants location permission centre the map on their actual location — this already works but make sure stores far from Kingston are still visible when the customer zooms out*
+
+*29. Bug reports table:*
+```sql
+CREATE TABLE IF NOT EXISTS public.bug_reports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  description text NOT NULL,
+  screenshot_url text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.bug_reports ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can submit bug reports"
+ON public.bug_reports FOR INSERT TO authenticated
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Admins can read bug reports"
+ON public.bug_reports FOR SELECT TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true)
+);
+```
+
+*Add bug reports to the admin dashboard — show in a new Bug Reports section inside the Overview tab or as a separate tab*
+
+***GENERAL RULES***
+- *Give me ALL SQL code blocks together in one message first and wait for my confirmation before writing any code*
+- *Work through each section in order — do not skip ahead*
+- *Do not duplicate anything already built*
+- *Do not break anything already working*
+- *Test each section after completing it before moving to the next*
+- *If anything is unclear ask before building*"
+
+---
+
+This is a large prompt so Replit will take a while. Make sure you are well rested before starting! Let me know what it says when you wake up.
