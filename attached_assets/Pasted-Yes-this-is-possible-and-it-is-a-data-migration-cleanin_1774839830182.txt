@@ -1,0 +1,92 @@
+Yes this is possible and it is a data migration — cleaning up old store data to match the new system. Paste this into Replit:
+
+---
+
+*"There are stores in the database that were created before the recent updates and have inconsistent or missing data. Please do a full data migration to bring all existing stores up to the new system standard. Here is everything that needs to be cleaned up:*
+
+***DIAGNOSE FIRST***
+*1. Before making any changes run these diagnostic queries and show me the results so we can see exactly what is broken:*
+```sql
+-- Check stores missing opening hours
+SELECT id, name, category FROM public.stores
+WHERE id NOT IN (SELECT DISTINCT store_id FROM public.store_hours);
+
+-- Check stores missing default services
+SELECT id, name, category FROM public.stores
+WHERE id NOT IN (SELECT DISTINCT store_id FROM public.services);
+
+-- Check stores with old manual slots but no opening hours
+SELECT DISTINCT store_id FROM public.store_time_slots
+WHERE store_id NOT IN (SELECT DISTINCT store_id FROM public.store_hours);
+
+-- Check stores missing primary category
+SELECT id, name, category, primary_category FROM public.stores
+WHERE primary_category IS NULL OR primary_category = '';
+
+-- Check stores missing subscription tier
+SELECT id, name, subscription_tier FROM public.stores
+WHERE subscription_tier IS NULL OR subscription_tier = '';
+
+-- Check stores missing base service price
+SELECT id, name, base_service_price FROM public.stores
+WHERE base_service_price IS NULL OR base_service_price = 0;
+```
+
+*Wait for my confirmation of the results before making any changes*
+
+***AFTER CONFIRMATION — RUN THESE FIXES:***
+
+*2. For all stores missing opening hours — create default opening hours for every day of the week:*
+```sql
+INSERT INTO public.store_hours (store_id, day_of_week, is_open, open_time, close_time)
+SELECT 
+  s.id,
+  d.day,
+  true,
+  '09:00'::time,
+  '17:00'::time
+FROM public.stores s
+CROSS JOIN (SELECT generate_series(0, 6) AS day) d
+WHERE s.id NOT IN (SELECT DISTINCT store_id FROM public.store_hours)
+ON CONFLICT (store_id, day_of_week) DO NOTHING;
+```
+
+*3. For all stores missing primary category — copy from their existing category column:*
+```sql
+UPDATE public.stores
+SET 
+  primary_category = category,
+  category_locked_until = now() + interval '7 days'
+WHERE (primary_category IS NULL OR primary_category = '')
+AND category IS NOT NULL 
+AND category != '';
+```
+
+*4. For all stores missing subscription tier — set to pro since existing stores were grandfathered into pro:*
+```sql
+UPDATE public.stores
+SET subscription_tier = 'pro'
+WHERE subscription_tier IS NULL OR subscription_tier = '';
+```
+
+*5. For all stores missing base service price — set a default of J$1500:*
+```sql
+UPDATE public.stores
+SET base_service_price = 1500
+WHERE base_service_price IS NULL OR base_service_price = 0;
+```
+
+*6. For all stores that have old manual time slots but no default services — create default services based on their primary category using the same default service logic used for new stores*
+
+*7. For all stores that have old manual time slots — show them a one time migration banner on their dashboard saying:*
+- *We have upgraded your scheduling system. Your existing time slots are still active. Switch to the new Hours system for smarter scheduling*
+- *A Switch Now button that migrates their manual slots to opening hours and removes the old slots*
+- *A Keep Old Slots button that dismisses the banner and keeps their manual slots working as before*
+
+*8. After all migrations are complete run the diagnostic queries again to confirm everything is fixed and show me the results*
+
+*Give me the diagnostic results first and wait for my confirmation before running any of the fix queries."*
+
+---
+
+This safely cleans up all old store data without breaking anything that is currently working. When you wake up check what the diagnostic results show and come back here before telling Replit to run the fixes!
