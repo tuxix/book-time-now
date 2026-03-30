@@ -1101,6 +1101,12 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
             setPendingChat(target);
             setActiveTab("messages");
           }}
+          onReschedule={async (storeId, reservationId) => {
+            const { data: storeData } = await supabase.from("stores").select("*").eq("id", storeId).single();
+            if (storeData) {
+              setBookingStore({ ...storeData, rescheduleReservationId: reservationId } as any);
+            }
+          }}
         />
       )}
 

@@ -3,12 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Calendar, Clock, MapPin, Star, RefreshCw, XCircle, LogIn, Receipt, Search, MessageSquare,
+  AlertTriangle, RotateCcw, Shield,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import ReviewDialog from "@/components/ReviewDialog";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { getCategoryEmoji } from "@/lib/categories";
 
@@ -27,11 +29,15 @@ interface Reservation {
   commitment_fee_amount?: number;
   checkin_code?: string;
   cancelled_by?: string;
+  reschedule_count?: number;
+  original_date?: string | null;
+  original_start_time?: string | null;
   stores: {
     name: string;
     category?: string;
     address: string;
     cancellation_hours?: number;
+    subscription_tier?: string | null;
   } | null;
   reservation_services?: ReservationServiceData[];
 }
@@ -83,12 +89,24 @@ function checkCancellation(r: Reservation): {
   };
 }
 
+const DISPUTE_REASONS = [
+  "Service not as described",
+  "Service not completed",
+  "Poor quality service",
+  "Overcharged",
+  "No show by provider",
+  "Unsafe/unprofessional conduct",
+  "Other",
+];
+
 const CustomerReservations = ({
   onUnreadChange,
   onOpenChat,
+  onReschedule,
 }: {
   onUnreadChange?: (n: number) => void;
   onOpenChat?: (target: ChatTarget) => void;
+  onReschedule?: (storeId: string, reservationId: string) => void;
 }) => {
   const { user } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -102,6 +120,11 @@ const CustomerReservations = ({
   const [cancelling, setCancelling] = useState(false);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
   const [receiptTarget, setReceiptTarget] = useState<Reservation | null>(null);
+  const [disputeTarget, setDisputeTarget] = useState<Reservation | null>(null);
+  const [disputeReason, setDisputeReason] = useState("");
+  const [disputeDesc, setDisputeDesc] = useState("");
+  const [submittingDispute, setSubmittingDispute] = useState(false);
+  const [disputedIds, setDisputedIds] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
 
@@ -111,16 +134,18 @@ const CustomerReservations = ({
 
   const fetchData = async () => {
     if (!user) return;
-    const [resResult, reviewResult] = await Promise.all([
+    const [resResult, reviewResult, disputeResult] = await Promise.all([
       supabase
         .from("reservations")
-        .select("*, stores(name, category, address, cancellation_hours), reservation_services(*)")
+        .select("*, stores(name, category, address, cancellation_hours, subscription_tier), reservation_services(*)")
         .eq("customer_id", user.id)
         .order("reservation_date", { ascending: false }),
       supabase.from("reviews").select("reservation_id").eq("customer_id", user.id),
+      supabase.from("disputes").select("reservation_id").eq("customer_id", user.id),
     ]);
     if (resResult.data) setReservations(resResult.data as unknown as Reservation[]);
     if (reviewResult.data) setReviewedIds(new Set(reviewResult.data.map((r) => r.reservation_id)));
+    if (disputeResult.data) setDisputedIds(new Set(disputeResult.data.map((d: any) => d.reservation_id)));
     setLoading(false);
     setRefreshing(false);
   };
@@ -190,6 +215,26 @@ const CustomerReservations = ({
     }
     setCancelling(false);
     setCancelTarget(null);
+  };
+
+  const handleSubmitDispute = async () => {
+    if (!disputeTarget || !user || !disputeReason) return;
+    setSubmittingDispute(true);
+    const { error } = await supabase.from("disputes").insert({
+      reservation_id: disputeTarget.id,
+      customer_id: user.id,
+      store_id: disputeTarget.store_id,
+      reason: disputeReason,
+      description: disputeDesc.trim() || null,
+      status: "open",
+    });
+    if (error) { toast.error("Failed to submit dispute. Please try again."); setSubmittingDispute(false); return; }
+    setDisputedIds((prev) => new Set([...prev, disputeTarget.id]));
+    toast.success("Dispute submitted. Our team will review within 48 hours.");
+    setDisputeTarget(null);
+    setDisputeReason("");
+    setDisputeDesc("");
+    setSubmittingDispute(false);
   };
 
   // Partition reservations into the 3 tab buckets
@@ -336,6 +381,23 @@ const CustomerReservations = ({
                 <LogIn size={13} /> {checkingIn === r.id ? "Checking in…" : "Check In — I'm here!"}
               </button>
             )}
+            {/* Reschedule button — Pro stores allow 1 reschedule, Premium unlimited */}
+            {r.status === "scheduled" && onReschedule && (() => {
+              const tier = r.stores?.subscription_tier ?? "free";
+              const rescheduleCount = r.reschedule_count ?? 0;
+              const canReschedule = (tier === "pro" && rescheduleCount === 0) || tier === "premium";
+              if (!canReschedule) return null;
+              return (
+                <button
+                  data-testid={`button-reschedule-${r.id}`}
+                  onClick={() => onReschedule(r.store_id, r.id)}
+                  className="w-full py-2.5 rounded-xl border border-blue-200 text-blue-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-blue-50 active:scale-[0.97]"
+                >
+                  <RotateCcw size={13} /> Reschedule
+                  {tier === "pro" && <span className="text-[10px] text-blue-400 ml-1">(1 allowed)</span>}
+                </button>
+              );
+            })()}
             <button
               data-testid={`button-message-store-${r.id}`}
               onClick={() => onOpenChat?.({
@@ -455,6 +517,21 @@ const CustomerReservations = ({
             )}
             {r.status === "completed" && reviewedIds.has(r.id) && (
               <p className="text-xs text-green-600 text-center font-medium">✓ Review submitted</p>
+            )}
+            {/* Dispute button — completed or no_show */}
+            {(r.status === "completed" || r.status === "no_show") && !disputedIds.has(r.id) && (
+              <button
+                data-testid={`button-dispute-${r.id}`}
+                onClick={() => { setDisputeTarget(r); setDisputeReason(""); setDisputeDesc(""); }}
+                className="w-full py-2.5 rounded-xl border border-orange-200 text-orange-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:bg-orange-50 active:scale-[0.97]"
+              >
+                <AlertTriangle size={13} /> Open Dispute
+              </button>
+            )}
+            {(r.status === "completed" || r.status === "no_show") && disputedIds.has(r.id) && (
+              <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-orange-600 font-medium">
+                <Shield size={12} /> Dispute submitted — under review
+              </div>
             )}
             <button
               data-testid={`button-receipt-${r.id}`}
@@ -698,6 +775,59 @@ const CustomerReservations = ({
           onClose={() => setReceiptTarget(null)}
         />
       )}
+
+      {/* ── Dispute dialog ───────────────────────────────────────────────── */}
+      <Dialog open={!!disputeTarget} onOpenChange={(o) => { if (!o) { setDisputeTarget(null); setDisputeReason(""); setDisputeDesc(""); } }}>
+        <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><AlertTriangle size={18} className="text-orange-500" /> Open a Dispute</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700">
+              <p className="text-xs text-orange-700 dark:text-orange-300 leading-relaxed">
+                Disputes are reviewed by the Booka team within <strong>48 hours</strong>. Please describe the issue clearly.
+                {disputeTarget?.stores?.subscription_tier === "premium" && (
+                  <span className="ml-1 font-semibold">⭐ Priority review within 24h for this Premium store.</span>
+                )}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Reason *</p>
+              <div className="grid grid-cols-1 gap-1.5">
+                {DISPUTE_REASONS.map((reason) => (
+                  <button
+                    key={reason}
+                    onClick={() => setDisputeReason(reason)}
+                    className={"w-full text-left px-3 py-2 rounded-xl text-xs font-medium border transition-all " + (disputeReason === reason ? "bg-orange-500 text-white border-orange-500" : "bg-secondary border-border text-foreground hover:border-orange-300")}
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1.5">Additional Details (optional)</p>
+              <Textarea
+                data-testid="input-dispute-description"
+                placeholder="Describe what happened…"
+                value={disputeDesc}
+                onChange={(e) => setDisputeDesc(e.target.value)}
+                className="rounded-xl resize-none"
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { setDisputeTarget(null); setDisputeReason(""); setDisputeDesc(""); }}>Cancel</Button>
+              <Button
+                data-testid="button-submit-dispute"
+                className="flex-1 rounded-xl bg-orange-500 hover:bg-orange-600 text-white"
+                onClick={handleSubmitDispute}
+                disabled={!disputeReason || submittingDispute}
+              >
+                {submittingDispute ? "Submitting…" : "Submit Dispute"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Cancellation dialog */}
       <Dialog open={!!cancelTarget} onOpenChange={(o) => { if (!o) setCancelTarget(null); }}>

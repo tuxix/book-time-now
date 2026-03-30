@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { format, startOfWeek, startOfMonth } from "date-fns";
-import { CATEGORIES, DAILY_LIMITS } from "@/lib/categories";
+import { CATEGORIES, DAILY_LIMITS, DEFAULT_SERVICES } from "@/lib/categories";
 import { timeAgo } from "@/lib/categories";
 
 interface Reservation {
@@ -115,7 +115,26 @@ interface StoreService {
   base_price: number;
   sort_order: number;
   is_active: boolean;
+  duration_minutes?: number | null;
   service_option_groups: ServiceOptionGroup[];
+}
+
+interface StoreHour {
+  id?: string;
+  store_id: string;
+  day_of_week: number;
+  is_open: boolean;
+  open_time: string;
+  close_time: string;
+}
+
+interface StoreBreak {
+  id?: string;
+  store_id: string;
+  day_of_week: number;
+  break_start: string;
+  break_end: string;
+  label?: string;
 }
 
 interface StorePhoto {
@@ -289,6 +308,25 @@ const StoreSetupScreen = ({
           if (coords) supabase.from("stores").update({ latitude: coords.lat, longitude: coords.lng }).eq("user_id", userId);
         });
       }
+      // Create default store_hours (Mon–Fri 9am–5pm, Sat 9am–2pm, Sun closed)
+      const hourRows = [0,1,2,3,4,5,6].map((d) => ({
+        store_id: data.id, day_of_week: d,
+        is_open: d >= 1 && d <= 6,
+        open_time: "09:00",
+        close_time: d === 6 ? "14:00" : "17:00",
+      }));
+      await supabase.from("store_hours").insert(hourRows);
+
+      // Create default services based on primary category
+      const defaultSvcs = DEFAULT_SERVICES[primaryCategory] ?? [];
+      if (defaultSvcs.length > 0) {
+        const svcRows = defaultSvcs.slice(0, 3).map((s, i) => ({
+          store_id: data.id, name: s.name, base_price: s.price, sort_order: i, is_active: true,
+          duration_minutes: s.duration,
+        }));
+        await supabase.from("store_services").insert(svcRows);
+      }
+
       const slotRows: { store_id: string; day_of_week: number; start_time: string; end_time: string; capacity: number }[] = [];
       for (let day = 0; day <= 6; day++) {
         for (const [start, end] of DEFAULT_TIMES) {
@@ -353,7 +391,7 @@ const StoreSetupScreen = ({
 const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [tab, setTab] = useState<"reservations" | "slots" | "profile" | "calendar" | "services" | "reviews" | "messages" | "photos">("reservations");
+  const [tab, setTab] = useState<"reservations" | "slots" | "hours" | "profile" | "calendar" | "services" | "reviews" | "messages" | "photos">("reservations");
   const [storeUnreadMsgCount, setStoreUnreadMsgCount] = useState(0);
   const [storeAnnouncement, setStoreAnnouncement] = useState<{ id: string; title: string; message: string } | null>(null);
   const [store, setStore] = useState<StoreData | null>(null);
@@ -444,6 +482,20 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     return () => clearInterval(id);
   }, []);
 
+  // Hours tab
+  const [storeHours, setStoreHours] = useState<StoreHour[]>([]);
+  const [storeBreaks, setStoreBreaks] = useState<StoreBreak[]>([]);
+  const [hoursLoading, setHoursLoading] = useState(false);
+  const [savingHours, setSavingHours] = useState(false);
+  const [breakDialog, setBreakDialog] = useState<number | null>(null);
+  const [newBreakStart, setNewBreakStart] = useState("12:00");
+  const [newBreakEnd, setNewBreakEnd] = useState("13:00");
+  const [newBreakLabel, setNewBreakLabel] = useState("Lunch");
+
+  // Late-night surcharge (Pro/Premium)
+  const [lateNightStart, setLateNightStart] = useState((store as any)?.late_night_start ?? "");
+  const [lateNightSurcharge, setLateNightSurcharge] = useState(String((store as any)?.late_night_surcharge ?? "0"));
+
   // Services (Menu) tab
   const [storeServices, setStoreServices] = useState<StoreService[]>([]);
   const [loadingServices, setLoadingServices] = useState(false);
@@ -452,6 +504,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [newSvcName, setNewSvcName] = useState("");
   const [newSvcDesc, setNewSvcDesc] = useState("");
   const [newSvcPrice, setNewSvcPrice] = useState("0");
+  const [newSvcDuration, setNewSvcDuration] = useState("");
   const [savingService, setSavingService] = useState(false);
   const [groupDialog, setGroupDialog] = useState<string | null>(null);
   const [newGrpLabel, setNewGrpLabel] = useState("");
@@ -642,6 +695,67 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   useEffect(() => { if (tab === "services" && store) fetchServices(); }, [tab, store]);
 
+  // ── Fetch / save store hours ─────────────────────────────────────────────
+  const fetchStoreHours = async () => {
+    if (!store) return;
+    setHoursLoading(true);
+    const [hoursRes, breaksRes] = await Promise.all([
+      supabase.from("store_hours").select("*").eq("store_id", store.id).order("day_of_week"),
+      supabase.from("store_breaks").select("*").eq("store_id", store.id).order("day_of_week"),
+    ]);
+    if (hoursRes.data) {
+      const loaded = hoursRes.data as StoreHour[];
+      // Ensure all 7 days exist
+      const full: StoreHour[] = [0,1,2,3,4,5,6].map((d) => {
+        const existing = loaded.find((h) => h.day_of_week === d);
+        return existing ?? { store_id: store.id, day_of_week: d, is_open: d >= 1 && d <= 5, open_time: "09:00", close_time: "17:00" };
+      });
+      setStoreHours(full);
+    } else {
+      setStoreHours([0,1,2,3,4,5,6].map((d) => ({ store_id: store.id, day_of_week: d, is_open: d >= 1 && d <= 5, open_time: "09:00", close_time: "17:00" })));
+    }
+    if (breaksRes.data) setStoreBreaks(breaksRes.data as StoreBreak[]);
+    setHoursLoading(false);
+  };
+
+  const saveAllHours = async () => {
+    if (!store) return;
+    setSavingHours(true);
+    for (const hour of storeHours) {
+      if (hour.id) {
+        await supabase.from("store_hours").update({ is_open: hour.is_open, open_time: hour.open_time, close_time: hour.close_time }).eq("id", hour.id);
+      } else {
+        const { data } = await supabase.from("store_hours").insert({ store_id: store.id, day_of_week: hour.day_of_week, is_open: hour.is_open, open_time: hour.open_time, close_time: hour.close_time }).select().single();
+        if (data) setStoreHours((prev) => prev.map((h) => h.day_of_week === hour.day_of_week ? { ...h, id: (data as any).id } : h));
+      }
+    }
+    setSavingHours(false);
+    toast.success("Hours saved");
+  };
+
+  const addBreak = async (dayOfWeek: number) => {
+    if (!store) return;
+    const { data, error } = await supabase.from("store_breaks").insert({ store_id: store.id, day_of_week: dayOfWeek, break_start: newBreakStart, break_end: newBreakEnd, label: newBreakLabel.trim() || null }).select().single();
+    if (error) { toast.error("Could not add break"); return; }
+    setStoreBreaks((prev) => [...prev, data as StoreBreak]);
+    setBreakDialog(null);
+    setNewBreakStart("12:00"); setNewBreakEnd("13:00"); setNewBreakLabel("Lunch");
+    toast.success("Break added");
+  };
+
+  const deleteBreak = async (breakId: string) => {
+    await supabase.from("store_breaks").delete().eq("id", breakId);
+    setStoreBreaks((prev) => prev.filter((b) => b.id !== breakId));
+  };
+
+  const saveLateNight = async () => {
+    if (!store) return;
+    await supabase.from("stores").update({ late_night_start: lateNightStart || null, late_night_surcharge: parseFloat(lateNightSurcharge) || 0 }).eq("id", store.id);
+    toast.success("Late-night surcharge saved");
+  };
+
+  useEffect(() => { if (tab === "hours" && store) fetchStoreHours(); }, [tab, store]);
+
   // ── Photos CRUD ──────────────────────────────────────────────────────────
   const fetchPhotos = async () => {
     if (!store) return;
@@ -732,14 +846,14 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     setSavingService(true);
     const { data, error } = await supabase
       .from("store_services")
-      .insert({ store_id: store.id, name: newSvcName.trim(), description: newSvcDesc.trim() || null, base_price: parseFloat(newSvcPrice) || 0, sort_order: storeServices.length })
+      .insert({ store_id: store.id, name: newSvcName.trim(), description: newSvcDesc.trim() || null, base_price: parseFloat(newSvcPrice) || 0, sort_order: storeServices.length, duration_minutes: newSvcDuration ? parseInt(newSvcDuration) : null })
       .select("*, service_option_groups(*, service_option_items(*))")
       .single();
     setSavingService(false);
     if (error) { toast.error("Could not add service."); return; }
     setStoreServices((prev) => [...prev, data as StoreService]);
     setServiceDialog(false);
-    setNewSvcName(""); setNewSvcDesc(""); setNewSvcPrice("0");
+    setNewSvcName(""); setNewSvcDesc(""); setNewSvcPrice("0"); setNewSvcDuration("");
     toast.success("Service added!");
   };
 
@@ -1426,7 +1540,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const navTabs = [
     { id: "reservations" as const, label: "Bookings", icon: Calendar },
-    { id: "slots" as const, label: "Slots", icon: Clock },
+    { id: "hours" as const, label: "Hours", icon: Clock },
     { id: "services" as const, label: "Menu", icon: Package },
     { id: "photos" as const, label: "Photos", icon: Image },
     { id: "messages" as const, label: "Messages", icon: MessageSquare },
@@ -1628,173 +1742,103 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       )}
 
       {/* ── Slots tab ─────────────────────────────────────────────────────── */}
-      {tab === "slots" && (() => {
-        const grouped = groupSlots(slots);
-        const DayChips = ({ selected, onToggle }: { selected: number[]; onToggle: (d: number) => void }) => (
-          <div className="flex flex-wrap gap-1.5">
-            {DAYS.map((label, i) => {
-              const active = selected.includes(i);
-              return (
-                <button key={i} type="button" onClick={() => onToggle(i)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 ${active ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        );
-        const toggleDay = (setter: (fn: (prev: number[]) => number[]) => void, d: number) => {
-          setter((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]);
-        };
-        return (
-          <div className="flex-1 overflow-y-auto px-5 pt-4 pb-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Time Slots</h2>
-              <Button data-testid="button-add-slot" size="sm" className="rounded-xl gap-1 text-xs h-8"
-                onClick={() => { setSlotStart(""); setSlotEnd(""); setSlotDays([]); setSlotDialog(true); }}>
-                <Plus size={13} /> Add
-              </Button>
+      {tab === "hours" && (
+        <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 space-y-3">
+          {hoursLoading ? (
+            <div className="space-y-3">
+              {[1,2,3].map((i) => <div key={i} className="h-20 rounded-2xl booka-shimmer" />)}
             </div>
-            {grouped.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Clock size={32} className="mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No time slots configured</p>
-                <p className="text-xs mt-1 opacity-70">Tap + Add to create your first time slot</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Business Hours</p>
+                <Button size="sm" className="rounded-xl gap-1 text-xs h-8" onClick={saveAllHours} disabled={savingHours}>
+                  {savingHours ? "Saving…" : "Save Hours"}
+                </Button>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {grouped.map((g, i) => (
-                  <div key={`${g.startTime}|${g.endTime}|${g.capacity}`} data-testid={`card-slot-group-${i}`}
-                    className="flex items-center gap-3 p-3.5 rounded-xl bg-card booka-shadow-sm">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-foreground">{fmt12(g.startTime)} – {fmt12(g.endTime)}</p>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-secondary text-muted-foreground">
-                          ×{g.capacity}
+              <p className="text-xs text-muted-foreground -mt-1 mb-2">Customers will only see booking slots during these hours.</p>
+
+              {storeHours.map((hour, idx) => {
+                const dayBreaks = storeBreaks.filter((b) => b.day_of_week === hour.day_of_week);
+                return (
+                  <div key={hour.day_of_week} className="p-4 rounded-2xl bg-card booka-shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <p className="text-sm font-bold text-foreground w-8">{DAYS[hour.day_of_week]}</p>
+                        <button
+                          onClick={() => setStoreHours((prev) => prev.map((h, i) => i === idx ? { ...h, is_open: !h.is_open } : h))}
+                          className={`relative w-11 h-6 rounded-full transition-all ${hour.is_open ? "bg-primary" : "bg-secondary"}`}
+                        >
+                          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${hour.is_open ? "left-5" : "left-0.5"}`} />
+                        </button>
+                        <span className={`text-xs font-semibold ${hour.is_open ? "text-primary" : "text-muted-foreground"}`}>
+                          {hour.is_open ? "Open" : "Closed"}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{formatDays(g.days)}</p>
                     </div>
-                    <button onClick={() => openEditGroup(g)} className="p-1.5 rounded-lg hover:bg-secondary active:scale-95 transition-all">
-                      <Pencil size={13} className="text-muted-foreground" />
-                    </button>
-                    <button data-testid={`button-remove-slot-group-${i}`} onClick={() => removeGroupedSlot(g.ids)}
-                      className="p-1.5 rounded-lg hover:bg-destructive/10 active:scale-95 transition-all">
-                      <Trash2 size={13} className="text-destructive" />
-                    </button>
+
+                    {hour.is_open && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Input type="time" value={hour.open_time} onChange={(e) => setStoreHours((prev) => prev.map((h, i) => i === idx ? { ...h, open_time: e.target.value } : h))} className="rounded-xl text-sm h-9 flex-1" />
+                          <span className="text-xs text-muted-foreground">to</span>
+                          <Input type="time" value={hour.close_time} onChange={(e) => setStoreHours((prev) => prev.map((h, i) => i === idx ? { ...h, close_time: e.target.value } : h))} className="rounded-xl text-sm h-9 flex-1" />
+                        </div>
+
+                        {dayBreaks.length > 0 && (
+                          <div className="space-y-1.5">
+                            {dayBreaks.map((b) => (
+                              <div key={b.id} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-secondary text-xs">
+                                <span className="font-medium text-foreground flex-1">{b.label || "Break"}: {b.break_start.slice(0,5)} – {b.break_end.slice(0,5)}</span>
+                                <button onClick={() => deleteBreak(b.id!)} className="text-destructive p-0.5 rounded active:scale-95">
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => { setBreakDialog(hour.day_of_week); setNewBreakStart("12:00"); setNewBreakEnd("13:00"); setNewBreakLabel("Lunch"); }}
+                          className="w-full text-xs font-semibold text-primary py-1.5 rounded-xl border border-dashed border-primary/40 hover:bg-primary/5 transition-all"
+                        >
+                          + Add Break
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ))}
+                );
+              })}
+
+              <Button className="w-full rounded-xl mt-2" onClick={saveAllHours} disabled={savingHours}>
+                {savingHours ? "Saving…" : "Save All Hours"}
+              </Button>
+            </>
+          )}
+
+          {/* Add break dialog */}
+          <Dialog open={breakDialog !== null} onOpenChange={(o) => { if (!o) setBreakDialog(null); }}>
+            <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+              <DialogHeader><DialogTitle>Add Break — {breakDialog !== null ? DAYS[breakDialog] : ""}</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">Break Label (optional)</p>
+                  <Input placeholder="e.g. Lunch, Prayer Time" value={newBreakLabel} onChange={(e) => setNewBreakLabel(e.target.value)} className="rounded-xl" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-1.5">Break Time</p>
+                  <div className="flex gap-2">
+                    <Input type="time" value={newBreakStart} onChange={(e) => setNewBreakStart(e.target.value)} className="rounded-xl" />
+                    <Input type="time" value={newBreakEnd} onChange={(e) => setNewBreakEnd(e.target.value)} className="rounded-xl" />
+                  </div>
+                </div>
+                <Button className="w-full rounded-xl" onClick={() => breakDialog !== null && addBreak(breakDialog)}>
+                  Add Break
+                </Button>
               </div>
-            )}
-
-            {/* Add slot dialog */}
-            <Dialog open={slotDialog} onOpenChange={(o) => { if (!o) { setSlotDialog(false); setSlotDays([]); setSlotCapacity(1); } }}>
-              <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
-                <DialogHeader><DialogTitle>Add Time Slot</DialogTitle></DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Time Range</p>
-                    <div className="flex gap-2">
-                      <Input data-testid="input-slot-start" type="time" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} className="rounded-xl" />
-                      <Input data-testid="input-slot-end" type="time" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} className="rounded-xl" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold text-muted-foreground">Days</p>
-                      <button type="button" onClick={() => setSlotDays(slotDays.length === 7 ? [] : [0, 1, 2, 3, 4, 5, 6])}
-                        className="text-xs font-semibold text-primary">
-                        {slotDays.length === 7 ? "Clear All" : "Every Day"}
-                      </button>
-                    </div>
-                    <DayChips selected={slotDays} onToggle={(d) => toggleDay(setSlotDays, d)} />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-xs font-semibold text-muted-foreground">Capacity (simultaneous bookings)</p>
-                      {storeTier === "free" && (
-                        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">Free: max 1</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button type="button" onClick={() => setSlotCapacity((c) => Math.max(1, c - 1))}
-                        className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">−</button>
-                      <span className="text-lg font-bold w-8 text-center">{slotCapacity}</span>
-                      <button type="button" onClick={() => {
-                        if (slotCapacity >= tierCapLimit) {
-                          toast.error("Free plan is limited to 1 person per slot. Upgrade to Pro to increase capacity.");
-                          setSlotDialog(false);
-                          setShowSubscription(true);
-                          return;
-                        }
-                        setSlotCapacity((c) => c + 1);
-                      }}
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg active:scale-95 ${storeTier === "free" ? "bg-secondary opacity-40" : "bg-secondary"}`}>+</button>
-                      <span className="text-xs text-muted-foreground">{slotCapacity === 1 ? "1 person at a time" : `${slotCapacity} people at once`}</span>
-                    </div>
-                  </div>
-                  <Button className="w-full rounded-xl" onClick={addSlot} disabled={!slotStart || !slotEnd || slotDays.length === 0}>
-                    Save {slotDays.length > 0 ? `(${slotDays.length} day${slotDays.length > 1 ? "s" : ""})` : ""}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            {/* Edit slot dialog */}
-            <Dialog open={editGroupIds !== null} onOpenChange={(o) => { if (!o) { setEditGroupIds(null); setEditDays([]); setEditCapacity(1); } }}>
-              <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
-                <DialogHeader><DialogTitle>Edit Time Slot</DialogTitle></DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Time Range</p>
-                    <div className="flex gap-2">
-                      <Input type="time" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="rounded-xl" />
-                      <Input type="time" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="rounded-xl" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold text-muted-foreground">Days</p>
-                      <button type="button" onClick={() => setEditDays(editDays.length === 7 ? [] : [0, 1, 2, 3, 4, 5, 6])}
-                        className="text-xs font-semibold text-primary">
-                        {editDays.length === 7 ? "Clear All" : "Every Day"}
-                      </button>
-                    </div>
-                    <DayChips selected={editDays} onToggle={(d) => { setEditDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]); }} />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-xs font-semibold text-muted-foreground">Capacity (simultaneous bookings)</p>
-                      {storeTier === "free" && (
-                        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">Free: max 1</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button type="button" onClick={() => setEditCapacity((c) => Math.max(1, c - 1))}
-                        className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center font-bold text-lg active:scale-95">−</button>
-                      <span className="text-lg font-bold w-8 text-center">{editCapacity}</span>
-                      <button type="button" onClick={() => {
-                        if (editCapacity >= tierCapLimit) {
-                          toast.error("Free plan is limited to 1 person per slot. Upgrade to Pro to increase capacity.");
-                          setEditGroupIds(null);
-                          setShowSubscription(true);
-                          return;
-                        }
-                        setEditCapacity((c) => c + 1);
-                      }}
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg active:scale-95 ${storeTier === "free" ? "bg-secondary opacity-40" : "bg-secondary"}`}>+</button>
-                      <span className="text-xs text-muted-foreground">{editCapacity === 1 ? "1 person at a time" : `${editCapacity} people at once`}</span>
-                    </div>
-                  </div>
-                  <Button className="w-full rounded-xl" onClick={saveEditGroup} disabled={!editStart || !editEnd || editDays.length === 0}>
-                    Update {editDays.length > 0 ? `(${editDays.length} day${editDays.length > 1 ? "s" : ""})` : ""}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        );
-      })()}
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
 
       {/* ── Calendar tab ──────────────────────────────────────────────────── */}
       {tab === "calendar" && store && (
@@ -2125,6 +2169,27 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               Shows as a highlighted banner on your store profile. Leave empty to hide it.
             </p>
           </div>
+
+          {/* Late-night surcharge (Pro/Premium only) */}
+          {(storeTier === "pro" || storeTier === "premium") && (
+            <div className="p-4 rounded-2xl bg-card border border-border space-y-3">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Late-Night Surcharge</p>
+              <p className="text-xs text-muted-foreground">Automatically add a surcharge for bookings after a certain time.</p>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-muted-foreground mb-1">From Time</p>
+                  <Input type="time" value={lateNightStart} onChange={(e) => setLateNightStart(e.target.value)} className="rounded-xl h-9" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-muted-foreground mb-1">Surcharge (J$)</p>
+                  <Input type="number" min="0" placeholder="0" value={lateNightSurcharge} onChange={(e) => setLateNightSurcharge(e.target.value)} className="rounded-xl h-9" />
+                </div>
+              </div>
+              <Button variant="outline" size="sm" className="w-full rounded-xl" onClick={saveLateNight}>
+                Save Surcharge
+              </Button>
+            </div>
+          )}
 
           <Button data-testid="button-save-profile" className="w-full rounded-xl" onClick={saveProfile} disabled={saving}>
             {saving ? "Saving…" : "Save Changes"}
@@ -2571,6 +2636,11 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               <label className="text-xs font-semibold text-muted-foreground">Base Price (J$)</label>
               <Input type="number" min="0" placeholder="0" value={newSvcPrice} onChange={(e) => setNewSvcPrice(e.target.value)} className="rounded-xl mt-1" />
               <p className="text-[10px] text-muted-foreground mt-1">Set to 0 if the price is fully determined by option selections.</p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Duration (minutes, optional)</label>
+              <Input type="number" min="15" step="15" placeholder="e.g. 60" value={newSvcDuration} onChange={(e) => setNewSvcDuration(e.target.value)} className="rounded-xl mt-1" />
+              <p className="text-[10px] text-muted-foreground mt-1">Helps customers know how long to expect.</p>
             </div>
             <Button className="w-full rounded-xl" onClick={addService} disabled={savingService || !newSvcName.trim()}>
               {savingService ? "Adding…" : "Add Service"}

@@ -60,21 +60,63 @@ interface ConfirmedDetails {
   totalCapacity?: number;
 }
 
+interface StoreHour {
+  day_of_week: number;
+  is_open: boolean;
+  open_time: string;
+  close_time: string;
+}
+
+interface StoreBreak {
+  day_of_week: number;
+  break_start: string;
+  break_end: string;
+}
+
 interface Props {
-  store: Store;
+  store: Store & { rescheduleReservationId?: string };
   onBack: () => void;
 }
 
 const fmt = (p: number) => `J$${p.toFixed(0)}`;
 
+function generateSlotsFromHours(
+  storeHour: StoreHour,
+  storeBreaks: StoreBreak[],
+  stepMins: number,
+  dayOfWeek: number,
+): TimeSlot[] {
+  if (!storeHour.is_open) return [];
+  const toMins = (t: string) => { const [h, m] = t.slice(0, 5).split(":").map(Number); return h * 60 + m; };
+  const toTime = (mins: number) => `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+  const openMins = toMins(storeHour.open_time);
+  const closeMins = toMins(storeHour.close_time);
+  const breaks = storeBreaks.filter((b) => b.day_of_week === dayOfWeek);
+  const slots: TimeSlot[] = [];
+  let cur = openMins;
+  while (cur + stepMins <= closeMins) {
+    const slotEnd = cur + stepMins;
+    const overlapsBreak = breaks.some((b) => cur < toMins(b.break_end) && slotEnd > toMins(b.break_start));
+    if (!overlapsBreak) {
+      slots.push({ id: `gen-${cur}`, day_of_week: dayOfWeek, start_time: toTime(cur), end_time: toTime(slotEnd), is_available: true, capacity: 1 });
+    }
+    cur += stepMins;
+  }
+  return slots;
+}
+
 const CustomerBooking = ({ store, onBack }: Props) => {
   const { user } = useAuth();
+  const rescheduleReservationId = (store as any).rescheduleReservationId as string | undefined;
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [takenSlotIds, setTakenSlotIds] = useState<Set<string>>(new Set());
   const [slotBookingCounts, setSlotBookingCounts] = useState<Record<string, number>>({});
   const [existingBookings, setExistingBookings] = useState<{ start_time: string }[]>([]);
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
   const [dailyBookingCount, setDailyBookingCount] = useState(0);
+  const [useHoursSystem, setUseHoursSystem] = useState(false);
+  const [storeHours, setStoreHours] = useState<StoreHour[]>([]);
+  const [storeBreaks, setStoreBreaks] = useState<StoreBreak[]>([]);
   const [selectedDate, setSelectedDate] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
@@ -113,7 +155,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     return existingBookings.filter((b) => timeToMins(b.start_time) < slotStart).length;
   };
 
-  // Fetch services on mount
+  // Fetch services and store_hours on mount
   useEffect(() => {
     supabase
       .from("store_services")
@@ -122,6 +164,19 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       .eq("is_active", true)
       .order("sort_order")
       .then(({ data }) => { if (data) setServices(data as StoreService[]); });
+
+    Promise.all([
+      supabase.from("store_hours").select("*").eq("store_id", store.id),
+      supabase.from("store_breaks").select("*").eq("store_id", store.id),
+    ]).then(([hoursRes, breaksRes]) => {
+      const hours = (hoursRes.data ?? []) as StoreHour[];
+      const breaks = (breaksRes.data ?? []) as StoreBreak[];
+      if (hours.length > 0) {
+        setUseHoursSystem(true);
+        setStoreHours(hours);
+        setStoreBreaks(breaks);
+      }
+    });
   }, [store.id]);
 
   useEffect(() => {
@@ -134,82 +189,88 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     const isFreeStore = (store.subscription_tier ?? "free") === "free";
     const dailyLimit = isFreeStore ? (DAILY_LIMITS[store.category ?? ""] ?? 0) : 0;
 
-    console.log("[CustomerBooking] Fetching slots — store_id:", store.id, "day_of_week:", dayOfWeek, "date:", selectedDateStr);
+    supabase
+      .from("reservations")
+      .select("start_time, end_time")
+      .eq("store_id", store.id)
+      .eq("reservation_date", selectedDateStr)
+      .neq("status", "cancelled")
+      .then((reservationsRes) => {
+        const bookings = (reservationsRes.data ?? []) as { start_time: string; end_time: string }[];
+        setExistingBookings(bookings);
 
-    Promise.all([
-      supabase
-        .from("store_time_slots")
-        .select("*")
-        .eq("store_id", store.id)
-        .eq("day_of_week", dayOfWeek)
-        .eq("is_available", true)
-        .order("start_time", { ascending: true }),
-      supabase
-        .from("reservations")
-        .select("start_time, end_time")
-        .eq("store_id", store.id)
-        .eq("reservation_date", selectedDateStr)
-        .neq("status", "cancelled"),
-    ]).then(([slotsRes, reservationsRes]) => {
-      console.log("[CustomerBooking] Raw slots from DB:", slotsRes.data);
-      console.log("[CustomerBooking] Existing bookings:", reservationsRes.data);
-
-      // Sort by start_time ascending as a hard guarantee
-      const availableSlots = ((slotsRes.data ?? []) as TimeSlot[])
-        .sort((a, b) => a.start_time.slice(0, 5).localeCompare(b.start_time.slice(0, 5)));
-      const bookings = (reservationsRes.data ?? []) as { start_time: string; end_time: string }[];
-      setSlots(availableSlots);
-      setExistingBookings(bookings);
-
-      // ── Daily limit check (free tier) ──────────────────────────────────
-      if (isFreeStore && dailyLimit > 0) {
-        const dayCount = bookings.length;
-        setDailyBookingCount(dayCount);
-        if (dayCount >= dailyLimit) {
-          setDailyLimitReached(true);
-          setTakenSlotIds(new Set(availableSlots.map((s) => s.id)));
-          setSlotBookingCounts({});
-          setLoadingSlots(false);
-          return;
-        }
-      }
-
-      const buffer = store.buffer_minutes ?? 0;
-      const taken = new Set<string>();
-      const counts: Record<string, number> = {};
-
-      availableSlots.forEach((slot) => {
-        const slotStart = timeToMins(slot.start_time);
-        const slotEnd = timeToMins(slot.end_time);
-        const cap = slot.capacity ?? 1;
-
-        const exactCount = bookings.filter(
-          (b) => b.start_time.slice(0, 5) === slot.start_time.slice(0, 5) &&
-                 b.end_time.slice(0, 5) === slot.end_time.slice(0, 5)
-        ).length;
-        counts[slot.id] = exactCount;
-
-        if (exactCount >= cap) {
-          taken.add(slot.id);
-        } else {
-          for (const b of bookings) {
-            const bookingStart = timeToMins(b.start_time);
-            const bookingEnd = timeToMins(b.end_time) + buffer;
-            if (slotStart < bookingEnd && slotEnd > bookingStart &&
-                !(b.start_time.slice(0, 5) === slot.start_time.slice(0, 5) &&
-                  b.end_time.slice(0, 5) === slot.end_time.slice(0, 5))) {
-              taken.add(slot.id);
-              break;
+        const processSlots = (availableSlots: TimeSlot[]) => {
+          // Daily limit check (free tier)
+          if (isFreeStore && dailyLimit > 0) {
+            const dayCount = bookings.length;
+            setDailyBookingCount(dayCount);
+            if (dayCount >= dailyLimit) {
+              setDailyLimitReached(true);
+              setTakenSlotIds(new Set(availableSlots.map((s) => s.id)));
+              setSlotBookingCounts({});
+              setLoadingSlots(false);
+              return;
             }
           }
+          const buffer = store.buffer_minutes ?? 0;
+          const taken = new Set<string>();
+          const counts: Record<string, number> = {};
+          availableSlots.forEach((slot) => {
+            const slotStart = timeToMins(slot.start_time);
+            const slotEnd = timeToMins(slot.end_time);
+            const cap = slot.capacity ?? 1;
+            const exactCount = bookings.filter(
+              (b) => b.start_time.slice(0, 5) === slot.start_time.slice(0, 5) &&
+                     b.end_time.slice(0, 5) === slot.end_time.slice(0, 5)
+            ).length;
+            counts[slot.id] = exactCount;
+            if (exactCount >= cap) {
+              taken.add(slot.id);
+            } else {
+              for (const b of bookings) {
+                const bookingStart = timeToMins(b.start_time);
+                const bookingEnd = timeToMins(b.end_time) + buffer;
+                if (slotStart < bookingEnd && slotEnd > bookingStart &&
+                    !(b.start_time.slice(0, 5) === slot.start_time.slice(0, 5) &&
+                      b.end_time.slice(0, 5) === slot.end_time.slice(0, 5))) {
+                  taken.add(slot.id);
+                  break;
+                }
+              }
+            }
+          });
+          setSlots(availableSlots);
+          setSlotBookingCounts(counts);
+          setTakenSlotIds(taken);
+          setLoadingSlots(false);
+        };
+
+        if (useHoursSystem && storeHours.length > 0) {
+          const todayHour = storeHours.find((h) => h.day_of_week === dayOfWeek);
+          if (todayHour && todayHour.is_open) {
+            const stepMins = 60;
+            const generated = generateSlotsFromHours(todayHour, storeBreaks, stepMins, dayOfWeek);
+            processSlots(generated);
+          } else {
+            setSlots([]);
+            setLoadingSlots(false);
+          }
+        } else {
+          supabase
+            .from("store_time_slots")
+            .select("*")
+            .eq("store_id", store.id)
+            .eq("day_of_week", dayOfWeek)
+            .eq("is_available", true)
+            .order("start_time", { ascending: true })
+            .then((slotsRes) => {
+              const availableSlots = ((slotsRes.data ?? []) as TimeSlot[])
+                .sort((a, b) => a.start_time.slice(0, 5).localeCompare(b.start_time.slice(0, 5)));
+              processSlots(availableSlots);
+            });
         }
       });
-
-      setSlotBookingCounts(counts);
-      setTakenSlotIds(taken);
-      setLoadingSlots(false);
-    });
-  }, [store.id, store.buffer_minutes, dayOfWeek, selectedDateStr, calendarDate]);
+  }, [store.id, store.buffer_minutes, dayOfWeek, selectedDateStr, calendarDate, useHoursSystem, storeHours, storeBreaks]);
 
   // ── Service computed values ──────────────────────────────────────────────
   const selectedService = services.find((s) => s.id === selectedServiceId) ?? null;
@@ -253,6 +314,30 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     if (!slot || !user) return;
     setBooking(true);
     try {
+      // ── RESCHEDULE MODE ────────────────────────────────────────────────────
+      if (rescheduleReservationId) {
+        const { data: oldRes } = await supabase
+          .from("reservations")
+          .select("reservation_date, start_time, reschedule_count, original_date, original_start_time")
+          .eq("id", rescheduleReservationId)
+          .single();
+        const origDate = (oldRes as any)?.original_date ?? (oldRes as any)?.reservation_date;
+        const origStart = (oldRes as any)?.original_start_time ?? (oldRes as any)?.start_time;
+        const { error } = await supabase.from("reservations").update({
+          reservation_date: selectedDateStr,
+          start_time: slot.start_time,
+          end_time: slot.end_time,
+          status: "scheduled",
+          reschedule_count: ((oldRes as any)?.reschedule_count ?? 0) + 1,
+          original_date: origDate,
+          original_start_time: origStart,
+        }).eq("id", rescheduleReservationId);
+        if (error) throw error;
+        toast.success("Appointment rescheduled successfully!");
+        onBack();
+        return;
+      }
+
       const { count: existingCount } = await supabase
         .from("reservations")
         .select("id", { count: "exact", head: true })
@@ -778,6 +863,14 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             )}
           </div>
         </div>
+
+        {/* Reschedule banner */}
+        {rescheduleReservationId && (
+          <div className="px-4 py-3 rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-200 text-xs leading-relaxed">
+            <span className="font-bold block mb-0.5">🔄 Rescheduling Appointment</span>
+            Select a new date and time below. Your booking will be updated at no extra cost.
+          </div>
+        )}
 
         {/* Announcement banner */}
         {store.announcement && (

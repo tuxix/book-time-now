@@ -17,7 +17,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 
-type AdminTab = "overview" | "stores" | "customers" | "reports" | "bookings" | "revenue" | "announcements" | "messages";
+type AdminTab = "overview" | "stores" | "customers" | "reports" | "disputes" | "bugs" | "bookings" | "revenue" | "announcements" | "messages";
 
 interface StoreRow {
   id: string; name: string; category: string; address?: string; phone?: string;
@@ -56,6 +56,16 @@ interface ThreadMessage {
 interface ActivityItem {
   id: string; type: "store" | "customer" | "booking" | "report";
   description: string; timestamp: string;
+}
+interface DisputeRow {
+  id: string; reservation_id: string; customer_id: string; store_id: string;
+  reason: string; description: string; evidence_url?: string;
+  status: string; admin_notes?: string; created_at: string;
+  customer_name?: string; store_name?: string;
+}
+interface BugReportRow {
+  id: string; user_id: string; description: string; screenshot_url?: string;
+  created_at: string; user_name?: string;
 }
 interface RevenueState {
   allTime: number; thisMonth: number; thisWeek: number; avgBooking: number;
@@ -132,16 +142,29 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [thread, setThread] = useState<ThreadMessage[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
 
+  // Disputes
+  const [disputes, setDisputes] = useState<DisputeRow[]>([]);
+  const [disputesLoading, setDisputesLoading] = useState(false);
+  const [disputeNotes, setDisputeNotes] = useState<Record<string, string>>({});
+  const [savingDisputeId, setSavingDisputeId] = useState<string | null>(null);
+
+  // Bug Reports
+  const [bugReports, setBugReports] = useState<BugReportRow[]>([]);
+  const [bugsLoading, setBugsLoading] = useState(false);
+  const [overviewBugCount, setOverviewBugCount] = useState(0);
+
   // Admin grant
   const [adminEmailInput, setAdminEmailInput] = useState("");
   const [grantingAdmin, setGrantingAdmin] = useState(false);
 
   // ── Effects ──────────────────────────────────────────────────────────────────
-  useEffect(() => { fetchStats(); fetchActivity(); }, []);
+  useEffect(() => { fetchStats(); fetchActivity(); fetchOverviewBugCount(); }, []);
   useEffect(() => {
     if (activeTab === "stores") fetchStores();
     else if (activeTab === "customers") fetchCustomers();
     else if (activeTab === "reports") fetchReports();
+    else if (activeTab === "disputes") fetchDisputes();
+    else if (activeTab === "bugs") fetchBugReports();
     else if (activeTab === "bookings") fetchBookings();
     else if (activeTab === "revenue") fetchRevenue();
     else if (activeTab === "announcements") fetchAnnouncements();
@@ -506,6 +529,54 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setAdminEmailInput("");
   };
 
+  const fetchOverviewBugCount = async () => {
+    const { count } = await supabase.from("bug_reports").select("id", { count: "exact", head: true });
+    setOverviewBugCount(count ?? 0);
+  };
+
+  const fetchDisputes = async () => {
+    setDisputesLoading(true);
+    const { data } = await supabase.from("disputes").select("*").order("created_at", { ascending: false });
+    if (data) {
+      const disputes = data as DisputeRow[];
+      const storeIds = [...new Set(disputes.map((d) => d.store_id))];
+      const customerIds = [...new Set(disputes.map((d) => d.customer_id))];
+      const [storesRes, profilesRes] = await Promise.all([
+        storeIds.length ? supabase.from("stores").select("id, name").in("id", storeIds) : { data: [] },
+        customerIds.length ? supabase.from("profiles").select("id, full_name").in("id", customerIds) : { data: [] },
+      ]);
+      const storeMap = new Map((storesRes.data ?? []).map((s: any) => [s.id, s.name]));
+      const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p.full_name]));
+      setDisputes(disputes.map((d) => ({ ...d, store_name: storeMap.get(d.store_id) ?? "Unknown", customer_name: profileMap.get(d.customer_id) ?? "Unknown" })));
+      const initialNotes: Record<string, string> = {};
+      disputes.forEach((d) => { initialNotes[d.id] = d.admin_notes ?? ""; });
+      setDisputeNotes(initialNotes);
+    }
+    setDisputesLoading(false);
+  };
+
+  const updateDisputeStatus = async (id: string, status: string) => {
+    const notes = disputeNotes[id] ?? "";
+    setSavingDisputeId(id);
+    await supabase.from("disputes").update({ status, admin_notes: notes }).eq("id", id);
+    setSavingDisputeId(null);
+    setDisputes((prev) => prev.map((d) => d.id === id ? { ...d, status, admin_notes: notes } : d));
+    toast.success(`Dispute ${status}`);
+  };
+
+  const fetchBugReports = async () => {
+    setBugsLoading(true);
+    const { data } = await supabase.from("bug_reports").select("*").order("created_at", { ascending: false });
+    if (data) {
+      const reports = data as BugReportRow[];
+      const userIds = [...new Set(reports.map((r) => r.user_id))];
+      const { data: profilesData } = userIds.length ? await supabase.from("profiles").select("id, full_name").in("id", userIds) : { data: [] };
+      const profileMap = new Map((profilesData ?? []).map((p: any) => [p.id, p.full_name]));
+      setBugReports(reports.map((r) => ({ ...r, user_name: profileMap.get(r.user_id) ?? "Unknown" })));
+    }
+    setBugsLoading(false);
+  };
+
   const sendAnnouncement = async () => {
     if (!annTitle.trim() || !annMessage.trim()) { toast.error("Title and message required"); return; }
     if (!user) return;
@@ -604,6 +675,9 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
               <StatCard label="Pending Approval" value={stats.pendingApproval} highlight={stats.pendingApproval > 0 ? "amber" : undefined} sub="stores awaiting review" />
               <div className="col-span-2">
                 <StatCard label="Unresolved Reports" value={stats.unresolvedReports} highlight={stats.unresolvedReports > 0 ? "red" : undefined} sub="pending customer reports" />
+              </div>
+              <div className="col-span-2">
+                <StatCard label="Bug Reports" value={overviewBugCount} highlight={overviewBugCount > 0 ? "amber" : undefined} sub="submitted by users" />
               </div>
             </div>
           </div>
@@ -1061,11 +1135,93 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   // ── renderContent ─────────────────────────────────────────────────────────
+  const renderDisputes = () => (
+    <div className="p-4 space-y-3">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Customer Disputes</p>
+      {disputesLoading ? (
+        <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="h-24 rounded-2xl booka-shimmer" />)}</div>
+      ) : disputes.length === 0 ? (
+        <div className="text-center py-16 text-slate-400">
+          <Shield size={36} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No disputes filed yet</p>
+        </div>
+      ) : (
+        disputes.map((d) => {
+          const statusColors: Record<string, string> = { open: "bg-amber-100 text-amber-700", resolved: "bg-green-100 text-green-700", rejected: "bg-red-100 text-red-700" };
+          return (
+            <div key={d.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">{d.reason}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{d.customer_name} vs {d.store_name} · {format(new Date(d.created_at), "MMM d, yyyy")}</p>
+                </div>
+                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColors[d.status] ?? "bg-slate-100 text-slate-600"}`}>{d.status}</span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">{d.description}</p>
+              {d.evidence_url && (
+                <a href={d.evidence_url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">View Evidence</a>
+              )}
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-1">Admin Notes</p>
+                <textarea
+                  value={disputeNotes[d.id] ?? ""}
+                  onChange={(e) => setDisputeNotes((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                  rows={2}
+                  className="w-full text-xs rounded-xl border border-slate-200 p-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="Add internal notes…"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 text-white border-0 text-xs"
+                  onClick={() => updateDisputeStatus(d.id, "resolved")} disabled={savingDisputeId === d.id || d.status === "resolved"}>
+                  {savingDisputeId === d.id ? "Saving…" : "Resolve"}
+                </Button>
+                <Button size="sm" variant="outline" className="flex-1 rounded-xl text-xs border-red-200 text-red-500 hover:bg-red-50"
+                  onClick={() => updateDisputeStatus(d.id, "rejected")} disabled={savingDisputeId === d.id || d.status === "rejected"}>
+                  Reject
+                </Button>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
+  const renderBugReports = () => (
+    <div className="p-4 space-y-3">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Bug Reports ({bugReports.length})</p>
+      {bugsLoading ? (
+        <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="h-20 rounded-2xl booka-shimmer" />)}</div>
+      ) : bugReports.length === 0 ? (
+        <div className="text-center py-16 text-slate-400">
+          <AlertCircle size={36} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No bug reports yet</p>
+        </div>
+      ) : (
+        bugReports.map((r) => (
+          <div key={r.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-slate-600">{r.user_name}</p>
+              <p className="text-[11px] text-slate-400">{format(new Date(r.created_at), "MMM d, h:mm a")}</p>
+            </div>
+            <p className="text-sm text-slate-800 leading-relaxed">{r.description}</p>
+            {r.screenshot_url && (
+              <a href={r.screenshot_url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">View Screenshot</a>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+
   const renderContent = () => {
     if (activeTab === "overview") return renderOverview();
     if (activeTab === "stores") return renderStores();
     if (activeTab === "customers") return renderCustomers();
     if (activeTab === "reports") return renderReports();
+    if (activeTab === "disputes") return renderDisputes();
+    if (activeTab === "bugs") return renderBugReports();
     if (activeTab === "bookings") return renderBookings();
     if (activeTab === "revenue") return renderRevenue();
     if (activeTab === "announcements") return renderAnnouncements();
@@ -1078,6 +1234,8 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     { id: "stores", label: "Stores", icon: Store },
     { id: "customers", label: "Customers", icon: Users },
     { id: "reports", label: "Reports", icon: Flag },
+    { id: "disputes", label: "Disputes", icon: Shield },
+    { id: "bugs", label: "Bug Reports", icon: AlertCircle },
     { id: "bookings", label: "Bookings", icon: Calendar },
     { id: "revenue", label: "Revenue", icon: DollarSign },
     { id: "announcements", label: "Announce", icon: Megaphone },
