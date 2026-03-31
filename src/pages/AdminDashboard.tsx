@@ -27,7 +27,7 @@ interface StoreRow {
   created_at: string; booking_count: number; active_slots: number;
   last_booking_date: string | null; total_revenue: number;
   subscription_tier?: string; is_booka_recommended?: boolean; is_verified?: boolean;
-  trust_score?: number;
+  trust_score?: number; category_locked_until?: string | null;
 }
 interface CustomerRow {
   id: string; full_name: string | null; phone: string | null;
@@ -349,7 +349,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setStoresLoading(true);
     const { data } = await supabase
       .from("stores")
-      .select("id, name, category, address, phone, rating, review_count, is_suspended, is_approved, created_at")
+      .select("id, name, category, address, phone, rating, review_count, is_suspended, is_approved, created_at, subscription_tier, is_booka_recommended, is_verified, category_locked_until")
       .order("created_at", { ascending: false });
     if (data) {
       const ids = data.map((s: any) => s.id);
@@ -822,8 +822,9 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setSavingStoreAction(true);
     const id = storeActionTarget.id;
     if (storeActionType === "category") {
-      await supabase.from("stores").update({ category: storeActionCategory, category_locked_until: null } as any).eq("id", id);
-      setStores((prev) => prev.map((s) => s.id === id ? { ...s, category: storeActionCategory } : s));
+      const { error: catErr } = await supabase.from("stores").update({ category: storeActionCategory, category_locked_until: null }).eq("id", id);
+      if (catErr) { toast.error("Failed to update category"); setSavingStoreAction(false); return; }
+      setStores((prev) => prev.map((s) => s.id === id ? { ...s, category: storeActionCategory, category_locked_until: null } : s));
       toast.success(`Category updated for ${storeActionTarget.name}`);
     } else if (storeActionType === "tier") {
       await supabase.from("stores").update({ subscription_tier: storeActionTier }).eq("id", id);
@@ -866,7 +867,9 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   const resetCategoryLock = async (s: StoreRow) => {
-    await supabase.from("stores").update({ category_locked_until: null }).eq("id", s.id);
+    const { error } = await supabase.from("stores").update({ category_locked_until: null }).eq("id", s.id);
+    if (error) { toast.error("Failed to unlock category"); return; }
+    setStores((prev) => prev.map((st) => st.id === s.id ? { ...st, category_locked_until: null } : st));
     toast.success(`Category lock cleared for ${s.name}`);
   };
 
@@ -1103,66 +1106,75 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           <p className="text-sm text-slate-400 text-center py-8">No stores found</p>
         ) : filtered.map((s) => {
           const inactive = isInactive(s.last_booking_date, 30);
+          const lockUntil = s.category_locked_until ? new Date(s.category_locked_until) : null;
+          const isCatLocked = !!(lockUntil && lockUntil > new Date());
+          const tierColor = s.subscription_tier === "premium" ? "bg-purple-100 text-purple-700" : s.subscription_tier === "pro" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500";
           return (
-            <div key={s.id} className={`rounded-2xl border shadow-sm p-4 space-y-3 ${inactive && s.booking_count > 0 ? "bg-amber-50 border-amber-200" : "bg-white border-slate-100"}`}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-bold text-slate-900 text-sm">{s.name}</p>
-                    {s.is_suspended && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">SUSPENDED</span>}
-                    {!s.is_approved && <span className="text-[10px] font-bold bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">PENDING</span>}
-                    {inactive && s.booking_count > 0 && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">INACTIVE</span>}
+                <div key={s.id} className={`rounded-2xl border shadow-sm p-4 space-y-3 ${inactive && s.booking_count > 0 ? "bg-amber-50 border-amber-200" : "bg-white border-slate-100"}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-bold text-slate-900 text-sm">{s.name}</p>
+                        {s.is_suspended && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">SUSPENDED</span>}
+                        {!s.is_approved && <span className="text-[10px] font-bold bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">PENDING</span>}
+                        {inactive && s.booking_count > 0 && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">INACTIVE</span>}
+                        {s.is_booka_recommended && <span className="text-[10px] font-bold bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">★ FEATURED</span>}
+                        {s.is_verified && <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">✓ VERIFIED</span>}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${tierColor}`}>{s.subscription_tier ?? "free"}</span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">{s.category} · ★ {s.review_count > 0 ? s.rating.toFixed(1) : "New"}</p>
+                      {s.address && <p className="text-xs text-slate-500 mt-0.5 truncate">{s.address}</p>}
+                      {s.phone && <p className="text-xs text-slate-500">{s.phone}</p>}
+                      {isCatLocked && <p className="text-[11px] text-orange-500 font-semibold mt-0.5">🔒 Category locked until {format(lockUntil!, "MMM d, yyyy")}</p>}
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                        <p className="text-[11px] text-slate-400">{s.booking_count} bookings</p>
+                        <p className="text-[11px] text-slate-400">{s.active_slots} slots</p>
+                        <p className="text-[11px] text-slate-400">Revenue: {fmtJ(s.total_revenue)}</p>
+                        <p className="text-[11px] text-slate-400">Last booking: {s.last_booking_date ? format(parseISO(s.last_booking_date), "MMM d, yyyy") : "Never"}</p>
+                        <p className="text-[11px] text-slate-400">Joined {format(new Date(s.created_at), "MMM d, yyyy")}</p>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">{s.category} · ★ {s.review_count > 0 ? s.rating.toFixed(1) : "New"}</p>
-                  {s.address && <p className="text-xs text-slate-500 mt-0.5 truncate">{s.address}</p>}
-                  {s.phone && <p className="text-xs text-slate-500">{s.phone}</p>}
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                    <p className="text-[11px] text-slate-400">{s.booking_count} bookings</p>
-                    <p className="text-[11px] text-slate-400">{s.active_slots} slots</p>
-                    <p className="text-[11px] text-slate-400">Revenue: {fmtJ(s.total_revenue)}</p>
-                    <p className="text-[11px] text-slate-400">Last booking: {s.last_booking_date ? format(parseISO(s.last_booking_date), "MMM d, yyyy") : "Never"}</p>
-                    <p className="text-[11px] text-slate-400">Joined {format(new Date(s.created_at), "MMM d, yyyy")}</p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button onClick={() => toggleStoreSuspend(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_suspended ? "border-green-200 text-green-700 hover:bg-green-50" : "border-red-200 text-red-600 hover:bg-red-50"}`}>
+                      <Ban size={11} />{s.is_suspended ? "Reinstate" : "Suspend"}
+                    </button>
+                    <button onClick={() => toggleStoreApprove(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_approved ? "border-slate-200 text-slate-500 hover:bg-slate-50" : "border-green-200 text-green-700 hover:bg-green-50"}`}>
+                      <CheckCircle2 size={11} />{s.is_approved ? "Revoke" : "Approve"}
+                    </button>
+                    <button onClick={() => openStoreAction(s, "category")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-purple-200 text-purple-600 hover:bg-purple-50 transition-all active:scale-95">
+                      <Store size={11} /> Category
+                    </button>
+                    <button onClick={() => openStoreAction(s, "tier")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all active:scale-95">
+                      <CreditCard size={11} /> Tier
+                    </button>
+                    <button onClick={() => openStoreAction(s, "edit")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
+                      <Pencil size={11} /> Edit
+                    </button>
+                    <button onClick={() => toggleStoreRecommended(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_booka_recommended ? "border-amber-300 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+                      <Star size={11} /> {s.is_booka_recommended ? "Unfeature" : "Feature"}
+                    </button>
+                    <button onClick={() => toggleStoreVerified(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_verified ? "border-green-300 text-green-600 bg-green-50" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+                      <CheckCircle2 size={11} /> {s.is_verified ? "Unverify" : "Verify"}
+                    </button>
+                    {isCatLocked && (
+                      <button onClick={() => resetCategoryLock(s)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-orange-300 text-orange-600 hover:bg-orange-50 transition-all active:scale-95">
+                        <Clock size={11} /> Unlock Category
+                      </button>
+                    )}
+                    <button onClick={() => openStoreAction(s, "notes")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all active:scale-95">
+                      <Plus size={11} /> Note
+                    </button>
+                    {s.phone && (
+                      <button onClick={() => setContactTarget({ name: s.name, phone: s.phone! })} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all active:scale-95">
+                        <Phone size={11} /> Call
+                      </button>
+                    )}
+                    <button onClick={() => openStoreAction(s, "delete")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-red-300 text-red-600 hover:bg-red-50 transition-all active:scale-95">
+                      <Trash2 size={11} /> Delete
+                    </button>
                   </div>
                 </div>
-              </div>
-              <div className="flex gap-1.5 flex-wrap">
-                <button onClick={() => toggleStoreSuspend(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_suspended ? "border-green-200 text-green-700 hover:bg-green-50" : "border-red-200 text-red-600 hover:bg-red-50"}`}>
-                  <Ban size={11} />{s.is_suspended ? "Reinstate" : "Suspend"}
-                </button>
-                <button onClick={() => toggleStoreApprove(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_approved ? "border-slate-200 text-slate-500 hover:bg-slate-50" : "border-green-200 text-green-700 hover:bg-green-50"}`}>
-                  <CheckCircle2 size={11} />{s.is_approved ? "Revoke" : "Approve"}
-                </button>
-                <button onClick={() => openStoreAction(s, "category")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-purple-200 text-purple-600 hover:bg-purple-50 transition-all active:scale-95">
-                  <Store size={11} /> Category
-                </button>
-                <button onClick={() => openStoreAction(s, "tier")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all active:scale-95">
-                  <CreditCard size={11} /> Tier
-                </button>
-                <button onClick={() => openStoreAction(s, "edit")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
-                  <Pencil size={11} /> Edit
-                </button>
-                <button onClick={() => toggleStoreRecommended(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_booka_recommended ? "border-amber-300 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
-                  <Star size={11} /> {s.is_booka_recommended ? "Unfeature" : "Feature"}
-                </button>
-                <button onClick={() => toggleStoreVerified(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_verified ? "border-green-300 text-green-600 bg-green-50" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
-                  <CheckCircle2 size={11} /> {s.is_verified ? "Unverify" : "Verify"}
-                </button>
-                <button onClick={() => resetCategoryLock(s)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all active:scale-95">
-                  <Clock size={11} /> Unlock
-                </button>
-                <button onClick={() => openStoreAction(s, "notes")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all active:scale-95">
-                  <Plus size={11} /> Note
-                </button>
-                {s.phone && (
-                  <button onClick={() => setContactTarget({ name: s.name, phone: s.phone! })} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all active:scale-95">
-                    <Phone size={11} /> Call
-                  </button>
-                )}
-                <button onClick={() => openStoreAction(s, "delete")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-red-300 text-red-600 hover:bg-red-50 transition-all active:scale-95">
-                  <Trash2 size={11} /> Delete
-                </button>
-              </div>
-            </div>
           );
         })}
       </div>
