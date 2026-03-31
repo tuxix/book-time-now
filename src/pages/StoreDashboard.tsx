@@ -889,7 +889,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   const deleteService = async (id: string) => {
-    await supabase.from("store_services").delete().eq("id", id);
+    const { error } = await supabase.from("store_services").delete().eq("id", id);
+    if (error) { console.error("deleteService RLS error:", error); toast.error("Could not remove service."); return; }
     setStoreServices((prev) => prev.filter((s) => s.id !== id));
     toast.success("Service removed.");
   };
@@ -930,10 +931,12 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const applyDefaultServicesForCategory = async (storeId: string, newCategory: string, tier: "free" | "pro" | "premium") => {
     // Fetch current service IDs fresh from DB — never rely on React state here
-    const { data: existing } = await supabase.from("store_services").select("id").eq("store_id", storeId);
+    const { data: existing, error: selErr } = await supabase.from("store_services").select("id").eq("store_id", storeId);
+    if (selErr) console.error("applyDefaultServices select error:", selErr);
     if (existing && existing.length > 0) {
       const ids = existing.map((s) => s.id);
-      await supabase.from("store_services").delete().in("id", ids);
+      const { error: delErr } = await supabase.from("store_services").delete().in("id", ids);
+      if (delErr) console.error("applyDefaultServices delete error:", delErr);
     }
     // Insert new defaults for the new category
     const defaults = DEFAULT_SERVICES[newCategory] ?? [];
