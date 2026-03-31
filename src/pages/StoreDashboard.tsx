@@ -930,8 +930,10 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const applyDefaultServicesForCategory = async (storeId: string, newCategory: string, currentServices: StoreService[], tier: "free" | "pro" | "premium") => {
     // Delete ALL existing services when category changes — fresh slate
+    // Delete by explicit IDs to satisfy RLS (same path as individual service delete)
     if (currentServices.length > 0) {
-      await supabase.from("store_services").delete().eq("store_id", storeId);
+      const ids = currentServices.map((s) => s.id);
+      await supabase.from("store_services").delete().in("id", ids);
     }
     // Insert new defaults for the new category
     const defaults = DEFAULT_SERVICES[newCategory] ?? [];
