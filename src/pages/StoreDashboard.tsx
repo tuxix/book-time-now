@@ -929,28 +929,20 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   const applyDefaultServicesForCategory = async (storeId: string, newCategory: string, currentServices: StoreService[], tier: "free" | "pro" | "premium") => {
+    // Delete ALL existing services when category changes — fresh slate
+    if (currentServices.length > 0) {
+      await supabase.from("store_services").delete().eq("store_id", storeId);
+    }
+    // Insert new defaults for the new category
     const defaults = DEFAULT_SERVICES[newCategory] ?? [];
     if (defaults.length === 0) return;
-    const defaultNames = new Set(defaults.map((d) => d.name.toLowerCase()));
-    // Keep custom services (those that DON'T match any default name for any category)
-    const allDefaultNames = new Set(
-      Object.values(DEFAULT_SERVICES).flat().map((d) => d.name.toLowerCase())
-    );
-    const customServices = currentServices.filter((s) => !allDefaultNames.has(s.name.toLowerCase()));
-    // Delete all current default-matched services
-    const toDelete = currentServices.filter((s) => allDefaultNames.has(s.name.toLowerCase()));
-    for (const s of toDelete) {
-      await supabase.from("store_services").delete().eq("id", s.id);
-    }
-    // Insert new defaults
     const svcLimit = tier === "free" ? 3 : Infinity;
-    const baseOrder = customServices.length;
     const rows = defaults.map((d, i) => ({
       store_id: storeId,
       name: d.name,
       base_price: d.price,
       duration_minutes: d.duration,
-      sort_order: baseOrder + i,
+      sort_order: i,
       is_active: tier === "free" ? i < svcLimit : true,
     }));
     await supabase.from("store_services").insert(rows);

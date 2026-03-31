@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { CATEGORIES } from "@/lib/categories";
+import { CATEGORIES, DEFAULT_SERVICES } from "@/lib/categories";
 import {
   LayoutDashboard, Store, Users, Flag, Calendar, LogOut,
   Search, TrendingUp, Star, Ban, CheckCircle2, X, Shield,
@@ -823,6 +823,22 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     if (storeActionType === "category") {
       const { data: catData, error: catErr } = await supabase.from("stores").update({ category: storeActionCategory, category_locked_until: null }).eq("id", id).select("id");
       if (catErr || !catData?.length) { toast.error("Failed to update category — permission denied"); setSavingStoreAction(false); return; }
+      // Delete all existing services and seed defaults for the new category
+      await supabase.from("store_services").delete().eq("store_id", id);
+      const defaults = DEFAULT_SERVICES[storeActionCategory] ?? [];
+      if (defaults.length > 0) {
+        const tier = storeActionTarget.subscription_tier ?? "free";
+        const svcLimit = tier === "free" ? 3 : Infinity;
+        const rows = defaults.map((d, i) => ({
+          store_id: id,
+          name: d.name,
+          base_price: d.price,
+          duration_minutes: d.duration,
+          sort_order: i,
+          is_active: tier === "free" ? i < svcLimit : true,
+        }));
+        await supabase.from("store_services").insert(rows);
+      }
       setStores((prev) => prev.map((s) => s.id === id ? { ...s, category: storeActionCategory, category_locked_until: null } : s));
       toast.success(`Category updated for ${storeActionTarget.name}`);
     } else if (storeActionType === "tier") {

@@ -602,9 +602,16 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                         {svc.description && (
                           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{svc.description}</p>
                         )}
-                        <p className="text-xs text-primary font-semibold mt-1">
-                          {svc.base_price > 0 ? `From ${fmt(svc.base_price)}` : "Price by selection"}
-                        </p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <p className="text-xs text-primary font-semibold">
+                            {svc.base_price > 0 ? `From ${fmt(svc.base_price)}` : "Price by selection"}
+                          </p>
+                          {svc.duration_minutes && (
+                            <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
+                              <Clock size={10} />~{svc.duration_minutes} min
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ml-3 transition-all ${
                         isSelected ? "bg-primary border-primary" : "border-border"
