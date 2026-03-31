@@ -930,13 +930,25 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   const applyDefaultServicesForCategory = async (storeId: string, newCategory: string, tier: "free" | "pro" | "premium") => {
-    // Fetch current service IDs fresh from DB — never rely on React state here
+    // Fetch current service IDs fresh from DB
     const { data: existing, error: selErr } = await supabase.from("store_services").select("id").eq("store_id", storeId);
     if (selErr) console.error("applyDefaultServices select error:", selErr);
     if (existing && existing.length > 0) {
       const ids = existing.map((s) => s.id);
-      const { error: delErr } = await supabase.from("store_services").delete().in("id", ids);
-      if (delErr) console.error("applyDefaultServices delete error:", delErr);
+      // Find which services are referenced in past bookings — those can't be hard-deleted
+      const { data: referenced } = await supabase.from("reservation_service_selections").select("service_id").in("service_id", ids);
+      const referencedSet = new Set((referenced ?? []).map((r) => r.service_id));
+      const deletableIds = ids.filter((id) => !referencedSet.has(id));
+      const lockedIds = ids.filter((id) => referencedSet.has(id));
+      // Hard delete services with no booking history
+      if (deletableIds.length > 0) {
+        const { error: delErr } = await supabase.from("store_services").delete().in("id", deletableIds);
+        if (delErr) console.error("applyDefaultServices delete error:", delErr);
+      }
+      // Soft-disable services tied to past bookings — preserve history but hide from active menu
+      if (lockedIds.length > 0) {
+        await supabase.from("store_services").update({ is_active: false }).in("id", lockedIds);
+      }
     }
     // Insert new defaults for the new category
     const defaults = DEFAULT_SERVICES[newCategory] ?? [];

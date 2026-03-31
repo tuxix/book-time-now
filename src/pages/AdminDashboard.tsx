@@ -823,8 +823,17 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     if (storeActionType === "category") {
       const { data: catData, error: catErr } = await supabase.from("stores").update({ category: storeActionCategory, category_locked_until: null }).eq("id", id).select("id");
       if (catErr || !catData?.length) { toast.error("Failed to update category — permission denied"); setSavingStoreAction(false); return; }
-      // Delete all existing services and seed defaults for the new category
-      await supabase.from("store_services").delete().eq("store_id", id);
+      // Delete/disable all existing services and seed defaults for the new category
+      const { data: existingSvcs } = await supabase.from("store_services").select("id").eq("store_id", id);
+      if (existingSvcs && existingSvcs.length > 0) {
+        const svcIds = existingSvcs.map((s) => s.id);
+        const { data: refSvcs } = await supabase.from("reservation_service_selections").select("service_id").in("service_id", svcIds);
+        const refSet = new Set((refSvcs ?? []).map((r) => r.service_id));
+        const deletable = svcIds.filter((sid) => !refSet.has(sid));
+        const locked = svcIds.filter((sid) => refSet.has(sid));
+        if (deletable.length > 0) await supabase.from("store_services").delete().in("id", deletable);
+        if (locked.length > 0) await supabase.from("store_services").update({ is_active: false }).in("id", locked);
+      }
       const defaults = DEFAULT_SERVICES[storeActionCategory] ?? [];
       if (defaults.length > 0) {
         const tier = storeActionTarget.subscription_tier ?? "free";
