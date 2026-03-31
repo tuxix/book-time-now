@@ -928,11 +928,11 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     toast.success("Service updated!");
   };
 
-  const applyDefaultServicesForCategory = async (storeId: string, newCategory: string, currentServices: StoreService[], tier: "free" | "pro" | "premium") => {
-    // Delete ALL existing services when category changes — fresh slate
-    // Delete by explicit IDs to satisfy RLS (same path as individual service delete)
-    if (currentServices.length > 0) {
-      const ids = currentServices.map((s) => s.id);
+  const applyDefaultServicesForCategory = async (storeId: string, newCategory: string, tier: "free" | "pro" | "premium") => {
+    // Fetch current service IDs fresh from DB — never rely on React state here
+    const { data: existing } = await supabase.from("store_services").select("id").eq("store_id", storeId);
+    if (existing && existing.length > 0) {
+      const ids = existing.map((s) => s.id);
       await supabase.from("store_services").delete().in("id", ids);
     }
     // Insert new defaults for the new category
@@ -1421,7 +1421,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     setStore({ ...store, ...updates } as StoreData);
     setEditCategory(primaryCategory);
     if (isPrimaryChanging && store.id) {
-      await applyDefaultServicesForCategory(store.id, primaryCategory, storeServices, storeTier);
+      await applyDefaultServicesForCategory(store.id, primaryCategory, storeTier);
       await fetchServices();
     }
     if (editAddr.trim()) {
