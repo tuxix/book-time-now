@@ -719,6 +719,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       .from("store_services")
       .select("*, service_option_groups(*, service_option_items(*))")
       .eq("store_id", store.id)
+      .neq("is_archived", true)
       .order("sort_order");
     if (data) setStoreServices(data as StoreService[]);
     setLoadingServices(false);
@@ -945,9 +946,9 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         const { error: delErr } = await supabase.from("store_services").delete().in("id", deletableIds);
         if (delErr) console.error("applyDefaultServices delete error:", delErr);
       }
-      // Soft-disable services tied to past bookings — preserve history but hide from active menu
+      // Archive services tied to past bookings — hidden from menu, preserved for booking history
       if (lockedIds.length > 0) {
-        await supabase.from("store_services").update({ is_active: false }).in("id", lockedIds);
+        await supabase.from("store_services").update({ is_archived: true }).in("id", lockedIds);
       }
     }
     // Insert new defaults for the new category

@@ -832,7 +832,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         const deletable = svcIds.filter((sid) => !refSet.has(sid));
         const locked = svcIds.filter((sid) => refSet.has(sid));
         if (deletable.length > 0) await supabase.from("store_services").delete().in("id", deletable);
-        if (locked.length > 0) await supabase.from("store_services").update({ is_active: false }).in("id", locked);
+        if (locked.length > 0) await supabase.from("store_services").update({ is_archived: true }).in("id", locked);
       }
       const defaults = DEFAULT_SERVICES[storeActionCategory] ?? [];
       if (defaults.length > 0) {
