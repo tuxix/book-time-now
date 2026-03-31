@@ -278,6 +278,16 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   // ── Service computed values ──────────────────────────────────────────────
   const selectedService = services.find((s) => s.id === selectedServiceId) ?? null;
 
+  // ── End-of-day slot filter ───────────────────────────────────────────────
+  // When a service is selected, hide slots where start + duration + buffer exceeds closing time
+  const todayHour = storeHours.find((h) => h.day_of_week === dayOfWeek);
+  const closingMins = todayHour?.is_open && todayHour?.close_time ? timeToMins(todayHour.close_time) : null;
+  const bufferMins = store.buffer_minutes ?? 15;
+  const svcDuration = selectedService?.duration_minutes ?? null;
+  const displaySlots = (useHoursSystem && closingMins !== null && svcDuration !== null)
+    ? slots.filter((slot) => timeToMins(slot.start_time) + svcDuration + bufferMins <= closingMins)
+    : slots;
+
   const serviceTotal = selectedService
     ? selectedService.base_price +
       selectedService.service_option_groups.flatMap((g) =>
@@ -960,11 +970,11 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             <div className="grid grid-cols-2 gap-2">
               {[1, 2, 3, 4].map((i) => <div key={i} className="h-16 rounded-xl booka-shimmer" />)}
             </div>
-          ) : slots.length === 0 ? (
+          ) : displaySlots.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">No available slots for this day</p>
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              {slots.map((slot) => {
+              {displaySlots.map((slot) => {
                 const isTaken = takenSlotIds.has(slot.id);
                 const isSelected = selectedSlot === slot.id;
                 const cap = slot.capacity ?? 1;
