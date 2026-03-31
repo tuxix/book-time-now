@@ -46,6 +46,7 @@ interface StoreService {
   base_price: number;
   sort_order: number;
   is_active: boolean;
+  duration_minutes?: number | null;
   service_option_groups: ServiceOptionGroup[];
 }
 
@@ -111,7 +112,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [takenSlotIds, setTakenSlotIds] = useState<Set<string>>(new Set());
   const [slotBookingCounts, setSlotBookingCounts] = useState<Record<string, number>>({});
-  const [existingBookings, setExistingBookings] = useState<{ start_time: string }[]>([]);
+  const [existingBookings, setExistingBookings] = useState<{ start_time: string; end_time: string; service_duration_minutes?: number | null }[]>([]);
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
   const [dailyBookingCount, setDailyBookingCount] = useState(0);
   const [useHoursSystem, setUseHoursSystem] = useState(false);
@@ -191,12 +192,12 @@ const CustomerBooking = ({ store, onBack }: Props) => {
 
     supabase
       .from("reservations")
-      .select("start_time, end_time")
+      .select("start_time, end_time, service_duration_minutes")
       .eq("store_id", store.id)
       .eq("reservation_date", selectedDateStr)
       .neq("status", "cancelled")
       .then((reservationsRes) => {
-        const bookings = (reservationsRes.data ?? []) as { start_time: string; end_time: string }[];
+        const bookings = (reservationsRes.data ?? []) as { start_time: string; end_time: string; service_duration_minutes?: number | null }[];
         setExistingBookings(bookings);
 
         const processSlots = (availableSlots: TimeSlot[]) => {
@@ -212,7 +213,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               return;
             }
           }
-          const buffer = store.buffer_minutes ?? 0;
+          const buffer = store.buffer_minutes ?? 15;
           const taken = new Set<string>();
           const counts: Record<string, number> = {};
           availableSlots.forEach((slot) => {
@@ -228,9 +229,11 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               taken.add(slot.id);
             } else {
               for (const b of bookings) {
-                const bookingStart = timeToMins(b.start_time);
-                const bookingEnd = timeToMins(b.end_time) + buffer;
-                if (slotStart < bookingEnd && slotEnd > bookingStart &&
+                const effectiveDuration = b.service_duration_minutes != null
+                  ? b.service_duration_minutes
+                  : (timeToMins(b.end_time) - timeToMins(b.start_time));
+                const bookingEnd = timeToMins(b.start_time) + effectiveDuration + buffer;
+                if (slotStart < bookingEnd && slotEnd > timeToMins(b.start_time) &&
                     !(b.start_time.slice(0, 5) === slot.start_time.slice(0, 5) &&
                       b.end_time.slice(0, 5) === slot.end_time.slice(0, 5))) {
                   taken.add(slot.id);
@@ -388,6 +391,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           total_amount: totalCharged,
           service_total: selectedService ? serviceTotal : null,
           commitment_fee_amount: commitmentFee,
+          service_duration_minutes: selectedService?.duration_minutes ?? null,
         })
         .select("id")
         .single();
@@ -932,6 +936,19 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               </p>
             </div>
           )}
+          {!dailyLimitReached && (() => {
+            const isFreeStore = (store.subscription_tier ?? "free") === "free";
+            const dailyLimit = isFreeStore ? (DAILY_LIMITS[store.category ?? ""] ?? 0) : 0;
+            if (!isFreeStore || dailyLimit === 0 || dailyBookingCount < Math.ceil(dailyLimit * 0.8)) return null;
+            return (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 mb-3">
+                <AlertCircle size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                  Almost full — booking up fast for {selectedDateStr === format(new Date(), "yyyy-MM-dd") ? "today" : format(new Date(selectedDateStr + "T00:00:00"), "MMM d")}!
+                </p>
+              </div>
+            );
+          })()}
           {loadingSlots ? (
             <div className="grid grid-cols-2 gap-2">
               {[1, 2, 3, 4].map((i) => <div key={i} className="h-16 rounded-xl booka-shimmer" />)}

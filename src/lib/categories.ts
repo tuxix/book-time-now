@@ -60,14 +60,14 @@ export const DAILY_LIMITS: Record<string, number> = {
 };
 
 export const CATEGORY_DURATIONS: Record<string, { default: number; min: number; max: number }> = {
-  "Barber": { default: 30, min: 10, max: 30 },
-  "Barber and Beard": { default: 30, min: 10, max: 30 },
-  "Hair Salon": { default: 120, min: 30, max: 240 },
-  "Nail Tech": { default: 60, min: 30, max: 90 },
+  "Barber": { default: 30, min: 10, max: 60 },
+  "Barber and Beard": { default: 30, min: 10, max: 60 },
+  "Hair Salon": { default: 120, min: 30, max: 480 },
+  "Nail Tech": { default: 60, min: 30, max: 120 },
   "Dog Grooming": { default: 120, min: 60, max: 240 },
-  "Lash Tech": { default: 90, min: 45, max: 120 },
-  "Spa and Wellness": { default: 60, min: 30, max: 90 },
-  "Massage": { default: 60, min: 30, max: 90 },
+  "Lash Tech": { default: 90, min: 45, max: 150 },
+  "Spa and Wellness": { default: 60, min: 30, max: 120 },
+  "Massage": { default: 60, min: 30, max: 120 },
 };
 
 export const DEFAULT_SERVICES: Record<string, { name: string; price: number; duration: number }[]> = {

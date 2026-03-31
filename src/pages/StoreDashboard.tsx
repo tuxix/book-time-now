@@ -6,7 +6,7 @@ import {
   Clock, Calendar, Settings, LogOut,
   Plus, Trash2, Store, ArrowLeft, ArrowRight, Pencil, RefreshCw, CalendarDays,
   TrendingUp, Star, MessageSquare, Upload, Reply, Package, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Receipt, Phone, User, Sun, Moon, Bell, X as XIcon,
-  Image, ImagePlus, CheckCircle2, Crown, Zap, Lock, AlertCircle, Menu as MenuIcon,
+  Image, ImagePlus, CheckCircle2, Crown, Zap, Lock, AlertCircle, Menu as MenuIcon, UserPlus,
 } from "lucide-react";
 import ReceiptDialog, { type ReservationServiceData } from "@/components/ReceiptDialog";
 import ChatScreen from "@/components/ChatScreen";
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { format, startOfWeek, startOfMonth } from "date-fns";
-import { CATEGORIES, DAILY_LIMITS, DEFAULT_SERVICES } from "@/lib/categories";
+import { CATEGORIES, DAILY_LIMITS, DEFAULT_SERVICES, CATEGORY_DURATIONS } from "@/lib/categories";
 import { timeAgo } from "@/lib/categories";
 
 interface Reservation {
@@ -44,6 +44,8 @@ interface Reservation {
   customer_phone?: string;
   checkin_code?: string;
   cancelled_by?: string;
+  is_walk_in?: boolean;
+  walk_in_name?: string | null;
   reservation_services?: ReservationServiceData[];
 }
 
@@ -527,6 +529,16 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [editSvcActive, setEditSvcActive] = useState(true);
   const [savingEditSvc, setSavingEditSvc] = useState(false);
 
+  // Walk-in system
+  const [walkInDialog, setWalkInDialog] = useState(false);
+  const [walkInDate, setWalkInDate] = useState(TODAY);
+  const [walkInSlots, setWalkInSlots] = useState<TimeSlot[]>([]);
+  const [walkInTakenIds, setWalkInTakenIds] = useState<Set<string>>(new Set());
+  const [walkInSlotId, setWalkInSlotId] = useState<string | null>(null);
+  const [walkInName, setWalkInName] = useState("");
+  const [walkInLoading, setWalkInLoading] = useState(false);
+  const [savingWalkIn, setSavingWalkIn] = useState(false);
+
   // Category-change confirmation dialog
   const [pendingCategoryChange, setPendingCategoryChange] = useState(false);
 
@@ -595,7 +607,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     const [resRes, slotsRes, reviewsRes] = await Promise.all([
       supabase
         .from("reservations")
-        .select("id, reservation_date, start_time, end_time, status, fee, payment_status, total_amount, refund_amount, retained_amount, commitment_fee_amount, customer_id, checkin_code, cancelled_by, reservation_services(*)")
+        .select("id, reservation_date, start_time, end_time, status, fee, payment_status, total_amount, refund_amount, retained_amount, commitment_fee_amount, customer_id, checkin_code, cancelled_by, is_walk_in, walk_in_name, reservation_services(*)")
         .eq("store_id", store.id)
         .order("reservation_date", { ascending: false }),
       supabase
@@ -614,12 +626,14 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       const profileMap = new Map((profilesData ?? []).map((p) => [p.id, p]));
       setReservations(
         reservationData.map((r, i) => {
-          const profile = profileMap.get(r.customer_id as string);
+          const isWalkIn = !!(r as any).is_walk_in;
+          const walkInName = (r as any).walk_in_name as string | null;
+          const profile = isWalkIn ? null : profileMap.get(r.customer_id as string);
           return {
             ...r,
-            customer_label: profile?.full_name || `Customer #${i + 1}`,
-            customer_name: profile?.full_name ?? undefined,
-            customer_phone: profile?.phone ?? undefined,
+            customer_label: isWalkIn ? (walkInName || "Walk-in Customer") : (profile?.full_name || `Customer #${i + 1}`),
+            customer_name: isWalkIn ? (walkInName || "Walk-in Customer") : (profile?.full_name ?? undefined),
+            customer_phone: isWalkIn ? undefined : (profile?.phone ?? undefined),
           } as unknown as Reservation;
         })
       );
@@ -1194,6 +1208,108 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     toast.success("Reply saved");
   };
 
+  // ── Walk-in helpers ──────────────────────────────────────────────────────
+  const fetchWalkInSlots = async (dateStr: string) => {
+    if (!store) return;
+    setWalkInLoading(true);
+    setWalkInSlotId(null);
+    const toMins = (t: string) => { const [h, m] = t.slice(0, 5).split(":").map(Number); return h * 60 + m; };
+    const toTime = (mins: number) => `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+    const dayOfWeek = new Date(dateStr + "T12:00:00").getDay();
+    const [hoursRes, breaksRes, existingRes] = await Promise.all([
+      supabase.from("store_hours").select("*").eq("store_id", store.id),
+      supabase.from("store_breaks").select("*").eq("store_id", store.id),
+      supabase.from("reservations").select("start_time, end_time, service_duration_minutes").eq("store_id", store.id).eq("reservation_date", dateStr).neq("status", "cancelled"),
+    ]);
+    const hours = (hoursRes.data ?? []) as StoreHour[];
+    const breaks = (breaksRes.data ?? []) as StoreBreak[];
+    const bookings = (existingRes.data ?? []) as { start_time: string; end_time: string; service_duration_minutes?: number | null }[];
+    let availableSlots: TimeSlot[] = [];
+    if (hours.length > 0) {
+      const todayHour = hours.find((h) => h.day_of_week === dayOfWeek);
+      if (todayHour && todayHour.is_open) {
+        const openMins = toMins(todayHour.open_time);
+        const closeMins = toMins(todayHour.close_time);
+        const dayBreaks = breaks.filter((b) => b.day_of_week === dayOfWeek);
+        let cur = openMins;
+        while (cur + 60 <= closeMins) {
+          const slotEnd = cur + 60;
+          const overlapsBreak = dayBreaks.some((b) => cur < toMins(b.break_end) && slotEnd > toMins(b.break_start));
+          if (!overlapsBreak) {
+            availableSlots.push({ id: `gen-${cur}`, day_of_week: dayOfWeek, start_time: toTime(cur), end_time: toTime(slotEnd), is_available: true, capacity: 1 });
+          }
+          cur += 60;
+        }
+      }
+    } else {
+      const { data: manualSlots } = await supabase.from("store_time_slots").select("*").eq("store_id", store.id).eq("day_of_week", dayOfWeek).eq("is_available", true).order("start_time");
+      availableSlots = (manualSlots ?? []) as TimeSlot[];
+    }
+    const buffer = store.buffer_minutes ?? 15;
+    const taken = new Set<string>();
+    availableSlots.forEach((slot) => {
+      const slotStart = toMins(slot.start_time);
+      const slotEnd = toMins(slot.end_time);
+      const cap = slot.capacity ?? 1;
+      const exactCount = bookings.filter((b) => b.start_time.slice(0, 5) === slot.start_time.slice(0, 5) && b.end_time.slice(0, 5) === slot.end_time.slice(0, 5)).length;
+      if (exactCount >= cap) {
+        taken.add(slot.id);
+      } else {
+        for (const b of bookings) {
+          const effectiveDuration = b.service_duration_minutes != null ? b.service_duration_minutes : (toMins(b.end_time) - toMins(b.start_time));
+          const bookingEnd = toMins(b.start_time) + effectiveDuration + buffer;
+          if (slotStart < bookingEnd && slotEnd > toMins(b.start_time) && !(b.start_time.slice(0, 5) === slot.start_time.slice(0, 5) && b.end_time.slice(0, 5) === slot.end_time.slice(0, 5))) {
+            taken.add(slot.id);
+            break;
+          }
+        }
+      }
+    });
+    setWalkInSlots(availableSlots);
+    setWalkInTakenIds(taken);
+    setWalkInLoading(false);
+  };
+
+  const createWalkIn = async () => {
+    if (!store || !walkInSlotId || !user) return;
+    const slot = walkInSlots.find((s) => s.id === walkInSlotId);
+    if (!slot) return;
+    setSavingWalkIn(true);
+    if (storeTier === "free") {
+      const primaryCategory = store.categories?.[0] ?? store.category;
+      const dailyLimit = DAILY_LIMITS[primaryCategory] ?? 0;
+      if (dailyLimit > 0) {
+        const { count } = await supabase.from("reservations").select("id", { count: "exact", head: true }).eq("store_id", store.id).eq("reservation_date", walkInDate).neq("status", "cancelled");
+        if ((count ?? 0) >= dailyLimit) {
+          toast.error("Daily booking limit reached. Cannot add more walk-ins.");
+          setSavingWalkIn(false);
+          return;
+        }
+      }
+    }
+    const { error } = await supabase.from("reservations").insert({
+      customer_id: user.id,
+      store_id: store.id,
+      reservation_date: walkInDate,
+      start_time: slot.start_time,
+      end_time: slot.end_time,
+      status: "in_progress",
+      total_amount: 0,
+      commitment_fee_amount: 0,
+      payment_status: "waived",
+      is_walk_in: true,
+      walk_in_name: walkInName.trim() || "Walk-in Customer",
+    });
+    setSavingWalkIn(false);
+    if (error) { toast.error("Could not create walk-in booking."); return; }
+    toast.success(`Walk-in added${walkInName.trim() ? ` for ${walkInName.trim()}` : ""}!`);
+    setWalkInDialog(false);
+    setWalkInName("");
+    setWalkInSlotId(null);
+    setWalkInDate(TODAY);
+    fetchData();
+  };
+
   // ── Slot helpers ────────────────────────────────────────────────────────
   interface GroupedSlot { startTime: string; endTime: string; days: number[]; ids: string[]; capacity: number; }
 
@@ -1414,7 +1530,12 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
               <span className="text-xs font-bold text-primary">{initials}</span>
             </div>
-            <p className="font-bold text-sm flex-1 min-w-0 truncate">{displayName}</p>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm truncate">{displayName}</p>
+              {r.is_walk_in && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 inline-block mt-0.5">Walk-in</span>
+              )}
+            </div>
             <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 ${cfg.bg} ${(r.status === "scheduled" || r.status === "arrived") ? "pulse-badge" : ""}`}>
               {badgeLabel}
             </span>
@@ -1802,12 +1923,27 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         >
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Overview</h2>
-            <button
-              onClick={() => { setRefreshing(true); fetchData(); }}
-              className={`p-1.5 rounded-lg hover:bg-secondary ${refreshing ? "animate-spin" : ""}`}
-            >
-              <RefreshCw size={14} className="text-muted-foreground" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                data-testid="button-walk-in"
+                onClick={() => {
+                  setWalkInDate(TODAY);
+                  setWalkInSlotId(null);
+                  setWalkInName("");
+                  setWalkInDialog(true);
+                  fetchWalkInSlots(TODAY);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 active:scale-95 transition-all"
+              >
+                <UserPlus size={13} /> Walk In
+              </button>
+              <button
+                onClick={() => { setRefreshing(true); fetchData(); }}
+                className={`p-1.5 rounded-lg hover:bg-secondary ${refreshing ? "animate-spin" : ""}`}
+              >
+                <RefreshCw size={14} className="text-muted-foreground" />
+              </button>
+            </div>
           </div>
 
           <AnalyticsSection reservations={reservations} reviews={storeReviews} />
@@ -2239,7 +2375,6 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="0">0 minutes — no buffer</SelectItem>
                 <SelectItem value="15">15 minutes — default</SelectItem>
                 <SelectItem value="30">30 minutes</SelectItem>
                 <SelectItem value="45">45 minutes</SelectItem>
@@ -2806,8 +2941,31 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               <Input type="number" min="0" value={editSvcPrice} onChange={(e) => setEditSvcPrice(e.target.value)} className="rounded-xl mt-1" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground">Duration (minutes)</label>
-              <Input type="number" min="5" step="5" placeholder="e.g. 30" value={editSvcDuration} onChange={(e) => setEditSvcDuration(e.target.value)} className="rounded-xl mt-1" />
+              {(() => {
+                const catDur = CATEGORY_DURATIONS[store?.category ?? ""];
+                return (
+                  <>
+                    <label className="text-xs font-semibold text-muted-foreground">Duration (minutes)</label>
+                    <Input
+                      type="number"
+                      min={catDur && storeTier === "free" ? catDur.min : "5"}
+                      max={catDur && storeTier === "free" ? catDur.max : undefined}
+                      step="5"
+                      placeholder={catDur ? `e.g. ${catDur.default}` : "e.g. 30"}
+                      value={editSvcDuration}
+                      onChange={(e) => setEditSvcDuration(e.target.value)}
+                      className="rounded-xl mt-1"
+                    />
+                    {catDur && (
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {storeTier === "free"
+                          ? `Free plan: ${catDur.min}–${catDur.max} mins for ${store?.category}`
+                          : `Typical: ${catDur.min}–${catDur.max} mins for ${store?.category}`}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
             <div className="flex items-center justify-between rounded-xl border border-border p-3">
               <span className="text-sm font-medium">Active</span>
@@ -2856,9 +3014,31 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               <p className="text-[10px] text-muted-foreground mt-1">Set to 0 if the price is fully determined by option selections.</p>
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground">Duration (minutes, optional)</label>
-              <Input type="number" min="15" step="15" placeholder="e.g. 60" value={newSvcDuration} onChange={(e) => setNewSvcDuration(e.target.value)} className="rounded-xl mt-1" />
-              <p className="text-[10px] text-muted-foreground mt-1">Helps customers know how long to expect.</p>
+              {(() => {
+                const catDur = CATEGORY_DURATIONS[store?.category ?? ""];
+                return (
+                  <>
+                    <label className="text-xs font-semibold text-muted-foreground">Duration (minutes)</label>
+                    <Input
+                      type="number"
+                      min={catDur && storeTier === "free" ? catDur.min : "5"}
+                      max={catDur && storeTier === "free" ? catDur.max : undefined}
+                      step="5"
+                      placeholder={catDur ? `e.g. ${catDur.default}` : "e.g. 60"}
+                      value={newSvcDuration}
+                      onChange={(e) => setNewSvcDuration(e.target.value)}
+                      className="rounded-xl mt-1"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {catDur
+                        ? storeTier === "free"
+                          ? `Free plan: ${catDur.min}–${catDur.max} mins for ${store?.category}`
+                          : `Typical: ${catDur.min}–${catDur.max} mins for ${store?.category}. Leave blank to skip.`
+                        : "Helps customers know how long to expect."}
+                    </p>
+                  </>
+                );
+              })()}
             </div>
             <Button className="w-full rounded-xl" onClick={addService} disabled={savingService || !newSvcName.trim()}>
               {savingService ? "Adding…" : "Add Service"}
@@ -2919,6 +3099,78 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               addItem(groupId, serviceId);
             }} disabled={savingItem || !newItemLabel.trim()}>
               {savingItem ? "Adding…" : "Add Option"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Walk-in dialog ────────────────────────────────────────────────── */}
+      <Dialog open={walkInDialog} onOpenChange={(o) => { if (!o) { setWalkInDialog(false); setWalkInName(""); setWalkInSlotId(null); } }}>
+        <DialogContent className="max-w-sm rounded-2xl" aria-describedby={undefined}>
+          <DialogHeader><DialogTitle>Add Walk-in Booking</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Date</label>
+              <Input
+                type="date"
+                value={walkInDate}
+                min={TODAY}
+                onChange={(e) => { setWalkInDate(e.target.value); fetchWalkInSlots(e.target.value); }}
+                className="rounded-xl mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Time Slot</label>
+              {walkInLoading ? (
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {[1, 2, 3, 4].map((i) => <div key={i} className="h-10 rounded-xl booka-shimmer" />)}
+                </div>
+              ) : walkInSlots.length === 0 ? (
+                <p className="text-xs text-muted-foreground mt-2 py-3 text-center bg-secondary rounded-xl">No slots available for this day</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {walkInSlots.map((slot) => {
+                    const isTaken = walkInTakenIds.has(slot.id);
+                    const isSelected = walkInSlotId === slot.id;
+                    const fmt12wi = (t: string) => { const [h, m] = t.slice(0, 5).split(":").map(Number); const ap = h >= 12 ? "PM" : "AM"; return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ap}`; };
+                    return (
+                      <button
+                        key={slot.id}
+                        onClick={() => !isTaken && setWalkInSlotId(slot.id)}
+                        disabled={isTaken}
+                        className={`py-2.5 px-3 rounded-xl text-xs font-medium transition-all active:scale-95 ${
+                          isTaken
+                            ? "bg-muted text-muted-foreground cursor-not-allowed opacity-40"
+                            : isSelected
+                            ? "booka-gradient text-white booka-shadow-blue"
+                            : "bg-card border border-border hover:border-primary/30 hover:bg-primary/5"
+                        }`}
+                      >
+                        {fmt12wi(slot.start_time)} – {fmt12wi(slot.end_time)}
+                        {isTaken && <span className="block text-[10px]">Full</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Customer Name (optional)</label>
+              <Input
+                placeholder="e.g. John Smith"
+                value={walkInName}
+                onChange={(e) => setWalkInName(e.target.value)}
+                className="rounded-xl mt-1"
+                data-testid="input-walkin-name"
+              />
+            </div>
+            <Button
+              className="w-full rounded-xl"
+              onClick={createWalkIn}
+              disabled={savingWalkIn || !walkInSlotId}
+              data-testid="button-confirm-walkin"
+            >
+              {savingWalkIn ? "Adding…" : "Add Walk-in Booking"}
             </Button>
           </div>
         </DialogContent>
