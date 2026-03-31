@@ -26,8 +26,7 @@ interface StoreRow {
   rating: number; review_count: number; is_suspended: boolean; is_approved: boolean;
   created_at: string; booking_count: number; active_slots: number;
   last_booking_date: string | null; total_revenue: number;
-  subscription_tier?: string; is_booka_recommended?: boolean; is_verified?: boolean;
-  trust_score?: number; category_locked_until?: string | null;
+  subscription_tier?: string; trust_score?: number; category_locked_until?: string | null;
 }
 interface CustomerRow {
   id: string; full_name: string | null; phone: string | null;
@@ -349,7 +348,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setStoresLoading(true);
     const { data } = await supabase
       .from("stores")
-      .select("id, name, category, address, phone, rating, review_count, is_suspended, is_approved, created_at, subscription_tier, is_booka_recommended, is_verified, category_locked_until")
+      .select("id, name, category, address, phone, rating, review_count, is_suspended, is_approved, created_at, subscription_tier, category_locked_until")
       .order("created_at", { ascending: false });
     if (data) {
       const ids = data.map((s: any) => s.id);
@@ -852,20 +851,6 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setStoreActionType(null);
   };
 
-  const toggleStoreRecommended = async (s: StoreRow) => {
-    const val = !s.is_booka_recommended;
-    await supabase.from("stores").update({ is_booka_recommended: val }).eq("id", s.id);
-    setStores((prev) => prev.map((st) => st.id === s.id ? { ...st, is_booka_recommended: val } : st));
-    toast.success(val ? `${s.name} featured as Booka Pick` : `Feature removed from ${s.name}`);
-  };
-
-  const toggleStoreVerified = async (s: StoreRow) => {
-    const val = !s.is_verified;
-    await supabase.from("stores").update({ is_verified: val }).eq("id", s.id);
-    setStores((prev) => prev.map((st) => st.id === s.id ? { ...st, is_verified: val } : st));
-    toast.success(val ? `Verified badge awarded to ${s.name}` : `Verified badge removed from ${s.name}`);
-  };
-
   const resetCategoryLock = async (s: StoreRow) => {
     const { error } = await supabase.from("stores").update({ category_locked_until: null }).eq("id", s.id);
     if (error) { toast.error("Failed to unlock category"); return; }
@@ -1118,8 +1103,6 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                         {s.is_suspended && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">SUSPENDED</span>}
                         {!s.is_approved && <span className="text-[10px] font-bold bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">PENDING</span>}
                         {inactive && s.booking_count > 0 && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">INACTIVE</span>}
-                        {s.is_booka_recommended && <span className="text-[10px] font-bold bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">★ FEATURED</span>}
-                        {s.is_verified && <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">✓ VERIFIED</span>}
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${tierColor}`}>{s.subscription_tier ?? "free"}</span>
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">{s.category} · ★ {s.review_count > 0 ? s.rating.toFixed(1) : "New"}</p>
@@ -1150,12 +1133,6 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                     </button>
                     <button onClick={() => openStoreAction(s, "edit")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
                       <Pencil size={11} /> Edit
-                    </button>
-                    <button onClick={() => toggleStoreRecommended(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_booka_recommended ? "border-amber-300 text-amber-600 bg-amber-50" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
-                      <Star size={11} /> {s.is_booka_recommended ? "Unfeature" : "Feature"}
-                    </button>
-                    <button onClick={() => toggleStoreVerified(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_verified ? "border-green-300 text-green-600 bg-green-50" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
-                      <CheckCircle2 size={11} /> {s.is_verified ? "Unverify" : "Verify"}
                     </button>
                     {isCatLocked && (
                       <button onClick={() => resetCategoryLock(s)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-orange-300 text-orange-600 hover:bg-orange-50 transition-all active:scale-95">
