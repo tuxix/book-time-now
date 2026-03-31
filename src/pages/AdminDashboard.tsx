@@ -821,12 +821,13 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setSavingStoreAction(true);
     const id = storeActionTarget.id;
     if (storeActionType === "category") {
-      const { error: catErr } = await supabase.from("stores").update({ category: storeActionCategory, category_locked_until: null }).eq("id", id);
-      if (catErr) { toast.error("Failed to update category"); setSavingStoreAction(false); return; }
+      const { data: catData, error: catErr } = await supabase.from("stores").update({ category: storeActionCategory, category_locked_until: null }).eq("id", id).select("id");
+      if (catErr || !catData?.length) { toast.error("Failed to update category — permission denied"); setSavingStoreAction(false); return; }
       setStores((prev) => prev.map((s) => s.id === id ? { ...s, category: storeActionCategory, category_locked_until: null } : s));
       toast.success(`Category updated for ${storeActionTarget.name}`);
     } else if (storeActionType === "tier") {
-      await supabase.from("stores").update({ subscription_tier: storeActionTier }).eq("id", id);
+      const { data: tierData, error: tierErr } = await supabase.from("stores").update({ subscription_tier: storeActionTier }).eq("id", id).select("id");
+      if (tierErr || !tierData?.length) { toast.error("Failed to update tier — permission denied"); setSavingStoreAction(false); return; }
       setStores((prev) => prev.map((s) => s.id === id ? { ...s, subscription_tier: storeActionTier } : s));
       toast.success(`${storeActionTarget.name} updated to ${storeActionTier}`);
     } else if (storeActionType === "edit") {
@@ -834,16 +835,19 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       if (storeEditName.trim()) updates.name = storeEditName.trim();
       if (storeEditAddr.trim()) updates.address = storeEditAddr.trim();
       if (storeEditPhone.trim()) updates.phone = storeEditPhone.trim();
-      await supabase.from("stores").update(updates).eq("id", id);
+      const { data: editData, error: editErr } = await supabase.from("stores").update(updates).eq("id", id).select("id");
+      if (editErr || !editData?.length) { toast.error("Failed to update store details — permission denied"); setSavingStoreAction(false); return; }
       setStores((prev) => prev.map((s) => s.id === id ? { ...s, ...updates } : s));
       toast.success("Store details updated");
     } else if (storeActionType === "delete") {
       if (storeDeleteConfirm !== "DELETE") { toast.error("Type DELETE to confirm"); setSavingStoreAction(false); return; }
-      await supabase.from("stores").delete().eq("id", id);
+      const { error: delErr } = await supabase.from("stores").delete().eq("id", id);
+      if (delErr) { toast.error("Failed to delete store — permission denied"); setSavingStoreAction(false); return; }
       setStores((prev) => prev.filter((s) => s.id !== id));
       toast.success("Store permanently deleted");
     } else if (storeActionType === "notes") {
-      await supabase.from("admin_store_notes").insert({ store_id: id, admin_id: user!.id, note: storeAdminNote.trim() });
+      const { error: noteErr } = await supabase.from("admin_store_notes").insert({ store_id: id, admin_id: user!.id, note: storeAdminNote.trim() });
+      if (noteErr) { toast.error("Failed to save note"); setSavingStoreAction(false); return; }
       toast.success("Note saved");
     }
     setSavingStoreAction(false);
@@ -852,8 +856,8 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   const resetCategoryLock = async (s: StoreRow) => {
-    const { error } = await supabase.from("stores").update({ category_locked_until: null }).eq("id", s.id);
-    if (error) { toast.error("Failed to unlock category"); return; }
+    const { data, error } = await supabase.from("stores").update({ category_locked_until: null }).eq("id", s.id).select("id");
+    if (error || !data?.length) { toast.error("Failed to unlock category — permission denied"); return; }
     setStores((prev) => prev.map((st) => st.id === s.id ? { ...st, category_locked_until: null } : st));
     toast.success(`Category lock cleared for ${s.name}`);
   };
