@@ -57,7 +57,7 @@ const RoleSelectPage = () => {
         <div className="text-center space-y-2 fade-in">
           <h1 className="text-2xl font-bold text-foreground">Almost there!</h1>
           <p className="text-sm text-muted-foreground">
-            Choose how you'll use Booka
+            Choose how you'll use Rezo
           </p>
         </div>
 

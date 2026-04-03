@@ -163,6 +163,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       .select("*, service_option_groups(*, service_option_items(*))")
       .eq("store_id", store.id)
       .eq("is_active", true)
+      .neq("is_archived", true)
       .order("sort_order")
       .then(({ data }) => { if (data) setServices(data as StoreService[]); });
 
@@ -407,6 +408,30 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         .single();
 
       if (error) throw error;
+
+      // ── Post-insert race condition check ────────────────────────────────────
+      // Re-count the slot immediately after insert to catch concurrent bookings
+      if (inserted?.id) {
+        const { count: postCount } = await supabase
+          .from("reservations")
+          .select("id", { count: "exact", head: true })
+          .eq("store_id", store.id)
+          .eq("reservation_date", selectedDateStr)
+          .eq("start_time", slot.start_time)
+          .eq("end_time", slot.end_time)
+          .neq("status", "cancelled");
+        if ((postCount ?? 0) > cap) {
+          // Another booking sneaked in simultaneously — roll back ours
+          await supabase.from("reservations").delete().eq("id", inserted.id);
+          toast.error("That slot just filled up. Please choose another time.");
+          setTakenSlotIds((prev) => new Set([...prev, slot.id]));
+          setSelectedSlot(null);
+          setPaymentStep(false);
+          setServiceStep(false);
+          setBooking(false);
+          return;
+        }
+      }
 
       if (selectedService && inserted?.id) {
         const allSelectedIds = Object.values(selectedItems).flat();

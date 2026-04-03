@@ -2912,7 +2912,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                     <button
                       onClick={() => {
                         const msg = encodeURIComponent(
-                          `Hi! I'd like to upgrade my Booka store "${store?.name}" to the ${plan.name} plan (${plan.price}). My store ID is ${store?.id}.`
+                          `Hi! I'd like to upgrade my Rezo store "${store?.name}" to the ${plan.name} plan (${plan.price}). My store ID is ${store?.id}.`
                         );
                         window.open(`https://wa.me/18761234567?text=${msg}`, "_blank");
                       }}

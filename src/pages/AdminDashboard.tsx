@@ -1928,7 +1928,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         </button>
         <div className="flex-1">
           <p className="text-white font-bold text-base leading-tight">Admin Dashboard</p>
-          <p className="text-blue-200 text-[11px]">Booka Platform</p>
+          <p className="text-blue-200 text-[11px]">Rezo Platform</p>
         </div>
         <button onClick={() => signOut()} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 active:scale-90 transition-all">
           <LogOut size={16} />

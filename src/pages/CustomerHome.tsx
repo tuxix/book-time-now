@@ -113,7 +113,7 @@ const ProfileTab = ({
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === "accepted") { setDeferredPrompt(null); toast.success("Booka added to your home screen!"); }
+      if (outcome === "accepted") { setDeferredPrompt(null); toast.success("Rezo added to your home screen!"); }
     }
   };
 
@@ -162,7 +162,7 @@ const ProfileTab = ({
             <div className="flex items-start gap-3">
               <Download size={18} className="text-primary shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-foreground mb-0.5">Add Booka to Home Screen</p>
+                <p className="text-sm font-semibold text-foreground mb-0.5">Add Rezo to Home Screen</p>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Tap the <strong>Share</strong> button in Safari, then choose <strong>Add to Home Screen</strong> for the full app experience.
                 </p>
@@ -181,7 +181,7 @@ const ProfileTab = ({
               <Download size={18} className="text-primary" />
             </div>
             <div className="flex-1 text-left">
-              <p className="text-sm font-semibold text-foreground">Install Booka App</p>
+              <p className="text-sm font-semibold text-foreground">Install Rezo App</p>
               <p className="text-xs text-muted-foreground">Add to your home screen</p>
             </div>
             <ChevronRight size={16} className="text-muted-foreground shrink-0" />
