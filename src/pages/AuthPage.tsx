@@ -116,7 +116,7 @@ const AuthPage = () => {
           src={rezoWordmark}
           alt="Rezo"
           className="object-contain drop-shadow-lg"
-          style={{ width: 220, height: 88 }}
+          style={{ width: 300, height: 120 }}
         />
         <p className="text-white/65 text-sm font-medium mt-2 text-center max-w-xs" style={{ textShadow: "0 1px 10px rgba(0,0,0,0.7)" }}>
           Find and book top service providers across Jamaica
