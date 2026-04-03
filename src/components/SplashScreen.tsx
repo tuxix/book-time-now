@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import bookaLogo from "@/assets/booka-logo.png";
+import rezoWordmark from "@/assets/rezo-wordmark.png";
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -16,25 +16,26 @@ const SplashScreen = ({ onComplete }: SplashScreenProps) => {
   }, [onComplete]);
 
   return (
-    <div className="fixed inset-0 z-50 booka-gradient flex flex-col items-center justify-center">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center" style={{ background: "#0d1b2e" }}>
       <div
         className="transition-all duration-700 ease-out"
         style={{
           opacity: phase === "enter" ? 0 : phase === "exit" ? 0 : 1,
-          transform: phase === "enter" ? "scale(0.8) translateY(20px)" : phase === "exit" ? "scale(1.1)" : "scale(1) translateY(0)",
+          transform: phase === "enter" ? "scale(0.9) translateY(16px)" : phase === "exit" ? "scale(1.05)" : "scale(1) translateY(0)",
         }}
       >
-        <img src={bookaLogo} alt="Booka" className="w-48 h-48 object-contain drop-shadow-2xl" />
+        <img src={rezoWordmark} alt="Rezo" className="object-contain" style={{ width: 240, height: 96 }} />
       </div>
       <div
-        className="mt-6 flex gap-1.5 transition-opacity duration-500"
+        className="mt-8 flex gap-1.5 transition-opacity duration-500"
         style={{ opacity: phase === "exit" ? 0 : phase === "enter" ? 0 : 1 }}
       >
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="w-2 h-2 rounded-full bg-primary-foreground/60"
+            className="w-2 h-2 rounded-full"
             style={{
+              background: "rgba(99,179,237,0.6)",
               animation: "float 1.2s ease-in-out infinite",
               animationDelay: `${i * 0.2}s`,
             }}

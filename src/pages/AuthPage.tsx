@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import bookaLogo from "@/assets/booka-logo.png";
+import rezoWordmark from "@/assets/rezo-wordmark.png";
 
 declare global { interface Window { L: any; } }
 type Mode = "login" | "signup" | "forgot";
@@ -111,12 +111,14 @@ const AuthPage = () => {
       <div className="absolute inset-x-0 bottom-0 z-10 pointer-events-none" style={{ height: "55%", background: "linear-gradient(to top, rgba(4,12,30,0.97) 55%, rgba(4,12,30,0.6) 80%, transparent 100%)" }} />
 
       {/* Hero */}
-      <div className="absolute inset-x-0 top-0 z-20 flex flex-col items-center pt-16 px-6 fade-in">
-        <div className="w-18 h-18 rounded-2xl booka-gradient flex items-center justify-center booka-shadow-blue mb-3" style={{ width: 72, height: 72 }}>
-          <img src={bookaLogo} alt="Rezo" className="w-14 h-14 object-contain" style={{ filter: "brightness(0) invert(1)" }} />
-        </div>
-        <h1 className="text-4xl font-black text-white tracking-tight" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.6)", letterSpacing: "-0.02em" }}>REZO</h1>
-        <p className="text-white/70 text-sm font-medium mt-2 text-center max-w-xs" style={{ textShadow: "0 1px 8px rgba(0,0,0,0.5)" }}>
+      <div className="absolute inset-x-0 top-0 z-20 flex flex-col items-center pt-12 px-6 fade-in">
+        <img
+          src={rezoWordmark}
+          alt="Rezo"
+          className="object-contain"
+          style={{ width: 210, height: 84, borderRadius: 16 }}
+        />
+        <p className="text-white/70 text-sm font-medium mt-3 text-center max-w-xs" style={{ textShadow: "0 1px 8px rgba(0,0,0,0.5)" }}>
           Find and book top service providers across Jamaica
         </p>
       </div>
