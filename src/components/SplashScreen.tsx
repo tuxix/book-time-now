@@ -29,13 +29,13 @@ const SplashScreen = ({ onComplete }: SplashScreenProps) => {
           src={rezoAppIcon}
           alt="Rezo"
           className="object-contain"
-          style={{ width: 96, height: 96 }}
+          style={{ width: 120, height: 120 }}
         />
         <img
           src={rezoWordmark}
           alt="Rezo"
           className="object-contain"
-          style={{ width: 180, height: 72 }}
+          style={{ width: 240, height: 96 }}
         />
       </div>
       <div
