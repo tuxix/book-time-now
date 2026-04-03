@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import rezoWordmark from "@/assets/rezo-wordmark.png";
+import rezoWordmark from "@/assets/rezo-wordmark-light.png";
 
 declare global { interface Window { L: any; } }
 type Mode = "login" | "signup" | "forgot";
@@ -115,10 +115,10 @@ const AuthPage = () => {
         <img
           src={rezoWordmark}
           alt="Rezo"
-          className="object-contain"
-          style={{ width: 210, height: 84, borderRadius: 16 }}
+          className="object-contain drop-shadow-lg"
+          style={{ width: 220, height: 88 }}
         />
-        <p className="text-white/70 text-sm font-medium mt-3 text-center max-w-xs" style={{ textShadow: "0 1px 8px rgba(0,0,0,0.5)" }}>
+        <p className="text-white/65 text-sm font-medium mt-2 text-center max-w-xs" style={{ textShadow: "0 1px 10px rgba(0,0,0,0.7)" }}>
           Find and book top service providers across Jamaica
         </p>
       </div>
