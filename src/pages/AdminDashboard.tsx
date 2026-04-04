@@ -2273,7 +2273,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                 onChange={(e) => setPromoForm((f) => ({ ...f, category: e.target.value }))}
                 className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none">
                 <option value="">Select category…</option>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                {CATEGORIES.map((c) => <option key={c.label} value={c.label}>{c.emoji} {c.label}</option>)}
               </select>
             </div>
           )}
