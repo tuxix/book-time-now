@@ -9,6 +9,7 @@ import {
   Download, Send, ArrowLeft, Clock, UserCheck, Loader2,
   Trash2, ChevronDown, ChevronUp, Settings2, CreditCard, Eye,
   Bell as Bell2, Pencil, Plus, Image, RefreshCw, Tag, ToggleLeft, ToggleRight,
+  Menu, Wallet,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -120,6 +121,7 @@ const downloadCSV = (filename: string, headers: string[], rows: (string | number
 const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Overview
   const [stats, setStats] = useState({
@@ -217,6 +219,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [financialSubTab, setFinancialSubTab] = useState<"subscriptions" | "payouts" | "refunds">("subscriptions");
   const [payoutRows, setPayoutRows] = useState<{ store_id: string; name: string; unpaid: number; total_commission: number; booking_count: number }[]>([]);
   const [payoutsLoading, setPayoutsLoading] = useState(false);
+  const [payoutRequests, setPayoutRequests] = useState<{ id: string; store_id: string; store_name: string; note: string; created_at: string }[]>([]);
   const [proStores, setProStores] = useState<StoreRow[]>([]);
   const [premiumStores, setPremiumStores] = useState<StoreRow[]>([]);
   const [freeStores, setFreeStores] = useState<StoreRow[]>([]);
@@ -889,10 +892,17 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const fetchPayoutsData = async () => {
     setPayoutsLoading(true);
-    const { data } = await supabase
-      .from("reservations")
-      .select("store_id, store_earnings, commission_amount, total_amount, payout_status, stores(name)")
-      .eq("status", "completed");
+    const [{ data }, { data: noteData }] = await Promise.all([
+      supabase
+        .from("reservations")
+        .select("store_id, store_earnings, commission_amount, total_amount, payout_status, stores(name)")
+        .eq("status", "completed"),
+      supabase
+        .from("admin_store_notes")
+        .select("id, store_id, note, created_at, stores(name)")
+        .like("note", "PAYOUT_REQUEST:%")
+        .order("created_at", { ascending: false }),
+    ]);
     if (data) {
       const storeMap: Record<string, { name: string; unpaid: number; total_commission: number; booking_count: number }> = {};
       (data as any[]).forEach((r) => {
@@ -911,6 +921,17 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         .filter((r) => r.unpaid > 0)
         .sort((a, b) => b.unpaid - a.unpaid);
       setPayoutRows(rows);
+    }
+    if (noteData) {
+      setPayoutRequests(
+        (noteData as any[]).map((n) => ({
+          id: n.id,
+          store_id: n.store_id,
+          store_name: n.stores?.name ?? "Store",
+          note: n.note,
+          created_at: n.created_at,
+        }))
+      );
     }
     setPayoutsLoading(false);
   };
@@ -1310,8 +1331,11 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   );
 
   // ── Render stores ─────────────────────────────────────────────────────────
+  const TIER_ORDER: Record<string, number> = { premium: 0, pro: 1, free: 2 };
   const renderStores = () => {
-    const filtered = stores.filter((s) => !storeSearch || s.name.toLowerCase().includes(storeSearch.toLowerCase()));
+    const filtered = stores
+      .filter((s) => !storeSearch || s.name.toLowerCase().includes(storeSearch.toLowerCase()))
+      .sort((a, b) => (TIER_ORDER[a.subscription_tier ?? "free"] ?? 2) - (TIER_ORDER[b.subscription_tier ?? "free"] ?? 2));
     return (
       <div className="p-4 space-y-3">
         <div className="flex gap-2">
@@ -1948,13 +1972,18 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     <div className="p-4 space-y-3">
       <div className="flex gap-2 mb-3">
         {(["subscriptions","payouts","refunds"] as const).map(t=>(
-          <button key={t} onClick={()=>{ setFinancialSubTab(t); if(t==="payouts") fetchPayoutsData(); }} className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${financialSubTab===t?"bg-slate-800 text-white border-slate-800":"bg-card border-border text-muted-foreground"}`}>
-            {t==="subscriptions"?"Plans":t==="payouts"?"Payouts":"Refunds"}
+          <button key={t} onClick={()=>{ setFinancialSubTab(t); if(t==="payouts") fetchPayoutsData(); if(t==="subscriptions") fetchFinancialData(); }} className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${financialSubTab===t?"bg-slate-800 text-white border-slate-800":"bg-card border-border text-muted-foreground"}`}>
+            {t==="subscriptions"?"Plans":t==="payouts"?`Payouts${payoutRequests.length>0?` (${payoutRequests.length})`:""}` :"Refunds"}
           </button>
         ))}
       </div>
       {financialLoading ? <div className="h-40 rounded-2xl booka-shimmer"/> : financialSubTab==="subscriptions" ? (
         <div className="space-y-4">
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-3 grid grid-cols-3 gap-2 text-center">
+            <div><p className="text-lg font-extrabold text-amber-600">{premiumStores.length}</p><p className="text-[10px] text-muted-foreground font-semibold">Premium</p></div>
+            <div><p className="text-lg font-extrabold text-blue-600">{proStores.length}</p><p className="text-[10px] text-muted-foreground font-semibold">Pro</p></div>
+            <div><p className="text-lg font-extrabold text-foreground">{freeStores.length}</p><p className="text-[10px] text-muted-foreground font-semibold">Free</p></div>
+          </div>
           {[{label:"Premium",stores:premiumStores,color:"amber"},{label:"Pro",stores:proStores,color:"blue"},{label:"Free",stores:freeStores,color:"slate"}].map(({label,stores,color})=>(
             <div key={label}>
               <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">{label} ({stores.length})</p>
@@ -1980,38 +2009,67 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
           {payoutsLoading ? (
             <div className="space-y-2">{[1,2,3].map(i=><div key={i} className="h-16 rounded-2xl booka-shimmer"/>)}</div>
-          ) : payoutRows.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <DollarSign size={36} className="mx-auto mb-3 opacity-30"/>
-              <p className="text-sm">No pending payouts</p>
-            </div>
           ) : (
             <>
-              <div className="bg-card rounded-2xl border border-border shadow-sm p-4 grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Total Pending</p>
-                  <p className="text-lg font-extrabold text-foreground">{fmtJ(payoutRows.reduce((s, r) => s + r.unpaid, 0))}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Rezo Commission</p>
-                  <p className="text-lg font-extrabold text-green-700">{fmtJ(payoutRows.reduce((s, r) => s + r.total_commission, 0))}</p>
-                </div>
-              </div>
-              <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border">
-                {payoutRows.map(r => (
-                  <div key={r.store_id} className="flex items-center gap-3 px-4 py-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{r.name}</p>
-                      <p className="text-[11px] text-muted-foreground">{r.booking_count} completed bookings · commission {fmtJ(r.total_commission)}</p>
+              {payoutRequests.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-700 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Wallet size={14} className="text-amber-600" />
+                    <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Payout Requests ({payoutRequests.length})</p>
+                  </div>
+                  {payoutRequests.map(req => (
+                    <div key={req.id} className="bg-white dark:bg-card rounded-xl border border-amber-200 dark:border-amber-700/40 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{req.store_name}</p>
+                          <p className="text-[11px] text-muted-foreground">{req.note.replace("PAYOUT_REQUEST: ","")}</p>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground shrink-0 mt-0.5">{format(parseISO(req.created_at), "MMM d, h:mma")}</p>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-amber-700">{fmtJ(r.unpaid)}</p>
-                      <p className="text-[10px] text-muted-foreground">unpaid</p>
+                  ))}
+                </div>
+              )}
+              {payoutRows.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <DollarSign size={36} className="mx-auto mb-3 opacity-30"/>
+                  <p className="text-sm">No pending payouts</p>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-card rounded-2xl border border-border shadow-sm p-4 grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Total Pending</p>
+                      <p className="text-lg font-extrabold text-foreground">{fmtJ(payoutRows.reduce((s, r) => s + r.unpaid, 0))}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Rezo Commission</p>
+                      <p className="text-lg font-extrabold text-green-700">{fmtJ(payoutRows.reduce((s, r) => s + r.total_commission, 0))}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-              <p className="text-[11px] text-muted-foreground text-center">Weekly payouts processed every Monday. Mark reservations as paid in the Bookings tab once processed.</p>
+                  <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border">
+                    {payoutRows.map(r => {
+                      const hasReq = payoutRequests.some(req => req.store_id === r.store_id);
+                      return (
+                        <div key={r.store_id} className="flex items-center gap-3 px-4 py-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-foreground truncate">{r.name}</p>
+                              {hasReq && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">REQUESTED</span>}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground">{r.booking_count} completed bookings · commission {fmtJ(r.total_commission)}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-bold text-amber-700">{fmtJ(r.unpaid)}</p>
+                            <p className="text-[10px] text-muted-foreground">unpaid</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground text-center">Weekly payouts processed every Monday. Mark reservations as paid in the Bookings tab once processed.</p>
+                </>
+              )}
             </>
           )}
         </div>
@@ -2470,6 +2528,18 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     { id: "messages", label: "Messages", icon: MessageSquare },
   ];
 
+  const menuGroups: { label: string; items: typeof navItems }[] = [
+    { label: "Dashboard", items: navItems.filter(n => n.id === "overview") },
+    { label: "Management", items: navItems.filter(n => ["stores", "customers"].includes(n.id)) },
+    { label: "Operations", items: navItems.filter(n => ["bookings", "disputes", "reports", "bugs"].includes(n.id)) },
+    { label: "Revenue", items: navItems.filter(n => ["revenue", "financial", "promotions"].includes(n.id)) },
+    { label: "Communication", items: navItems.filter(n => ["messages", "announcements", "communication"].includes(n.id)) },
+    { label: "Platform", items: navItems.filter(n => ["platform", "moderation"].includes(n.id)) },
+  ];
+
+  const currentNavItem = navItems.find(n => n.id === activeTab);
+  const CurrentIcon = currentNavItem?.icon ?? LayoutDashboard;
+
   // ── Main render ───────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 bg-background z-50 flex flex-col">
@@ -2478,24 +2548,60 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         <button onClick={onBack} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 active:scale-90 transition-all">
           <X size={18} />
         </button>
-        <div className="flex-1">
-          <p className="text-white font-bold text-base leading-tight">Admin Dashboard</p>
-          <p className="text-blue-200 text-[11px]">Rezo Platform</p>
+        <button onClick={() => setMenuOpen(true)} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 active:scale-90 transition-all">
+          <Menu size={18} />
+        </button>
+        <div className="flex-1 flex items-center gap-2">
+          <CurrentIcon size={15} className="text-blue-200 shrink-0" />
+          <div>
+            <p className="text-white font-bold text-base leading-tight">{currentNavItem?.label ?? "Admin"}</p>
+            <p className="text-blue-200 text-[11px]">Rezo Platform</p>
+          </div>
         </div>
         <button onClick={() => signOut()} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 active:scale-90 transition-all">
           <LogOut size={16} />
         </button>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex overflow-x-auto bg-card border-b border-border shrink-0 px-2 scrollbar-hide">
-        {navItems.map((item) => (
-          <button key={item.id} onClick={() => { setSelectedConv(null); setThread([]); setActiveTab(item.id); }}
-            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTab === item.id ? "border-[#1e3a8a] text-[#1e3a8a]" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
-            <item.icon size={14} />{item.label}
-          </button>
-        ))}
-      </div>
+      {/* Burger menu drawer */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-[300] flex" onClick={() => setMenuOpen(false)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative bg-card w-72 max-w-[85vw] h-full flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#1e3a8a] px-5 py-4 flex items-center justify-between shrink-0">
+              <div>
+                <p className="text-white font-bold text-base">Admin Menu</p>
+                <p className="text-blue-200 text-xs">Rezo Platform</p>
+              </div>
+              <button onClick={() => setMenuOpen(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 active:scale-90 transition-all">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-3">
+              {menuGroups.map(group => (
+                <div key={group.label} className="mb-1">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-5 pt-3 pb-1.5">{group.label}</p>
+                  {group.items.map(item => (
+                    <button key={item.id}
+                      onClick={() => { setSelectedConv(null); setThread([]); setActiveTab(item.id); setMenuOpen(false); }}
+                      className={`w-full flex items-center gap-3 px-5 py-2.5 text-sm font-medium transition-all active:scale-[0.98] ${activeTab === item.id ? "bg-[#1e3a8a]/10 text-[#1e3a8a] dark:bg-blue-500/10 dark:text-blue-400" : "text-foreground hover:bg-secondary"}`}
+                    >
+                      <item.icon size={16} className={activeTab === item.id ? "text-[#1e3a8a] dark:text-blue-400" : "text-muted-foreground"} />
+                      {item.label}
+                      {activeTab === item.id && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#1e3a8a] dark:bg-blue-400" />}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-border px-5 py-4 shrink-0">
+              <button onClick={() => { signOut(); setMenuOpen(false); }} className="w-full flex items-center gap-3 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 px-3 py-2.5 rounded-xl transition-all active:scale-[0.98]">
+                <LogOut size={16} /> Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
