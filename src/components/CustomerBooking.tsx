@@ -189,6 +189,11 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       .catch(() => setActivePromotion(null));
   }, [store.id, store.category]);
 
+  // Auto-show terms gate the moment we confirm they haven't accepted yet
+  useEffect(() => {
+    if (termsAccepted === false) setShowTermsModal(true);
+  }, [termsAccepted]);
+
   const acceptTermsAndBook = async () => {
     if (!user) return;
     setAcceptingTerms(true);
@@ -198,7 +203,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     setTermsAccepted(true);
     setShowTermsModal(false);
     setAcceptingTerms(false);
-    handleBook();
+    // No handleBook() here — user now continues to select a date normally
   };
 
   // Fetch services and store_hours on mount
@@ -1157,13 +1162,20 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       {showTermsModal && (
         <div className="fixed inset-0 z-[600] flex flex-col bg-background">
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
-            <button onClick={() => setShowTermsModal(false)} className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-muted transition-colors">
+            <button
+              onClick={() => {
+                // If user hasn't started booking yet (gate mode), exit fully
+                if (!selectedSlot && !paymentStep) { onBack(); }
+                else { setShowTermsModal(false); }
+              }}
+              className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-muted transition-colors"
+            >
               <ArrowLeft size={20} />
             </button>
             <h2 className="font-bold text-base text-foreground">Rezo Platform Terms</h2>
           </div>
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 text-sm text-foreground/80 leading-relaxed">
-            <p className="font-bold text-foreground text-base">Before your first booking, please read and accept the Rezo User Terms.</p>
+            <p className="font-bold text-foreground text-base">Before booking, please read and accept the Rezo User Terms.</p>
 
             <div className="space-y-3">
               <h3 className="font-bold text-foreground">1. Booking Responsibility</h3>
@@ -1188,7 +1200,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               <p>Rezo reserves the right to modify these terms at any time. Continued use of the platform constitutes acceptance of any updated terms.</p>
             </div>
 
-            <p className="text-xs text-muted-foreground pt-2">By tapping "Accept & Book" you confirm you have read and agree to these terms. Rezo is a contractor marketplace — stores are independent businesses, not Rezo employees.</p>
+            <p className="text-xs text-muted-foreground pt-2">By tapping "Accept & Continue" you confirm you have read and agree to these terms. Rezo is a contractor marketplace — stores are independent businesses, not Rezo employees.</p>
           </div>
           <div className="shrink-0 p-4 border-t border-border">
             <Button
@@ -1200,11 +1212,11 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               {acceptingTerms ? (
                 <span className="flex items-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Confirming…
+                  Saving…
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
-                  <CheckCircle2 size={16} /> Accept & Book
+                  <CheckCircle2 size={16} /> Accept & Continue
                 </span>
               )}
             </Button>
