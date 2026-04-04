@@ -469,7 +469,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           end_time: slot.end_time,
           total_amount: bookingTotal,
           service_total: selectedService ? serviceTotal : null,
-          payment_status: "pending",
+          payment_status: null,
           service_duration_minutes: selectedService?.duration_minutes ?? null,
           commission_amount: bookingTotal > 0 ? commissionAmount : null,
           store_earnings: bookingTotal > 0 ? storeEarnings : null,
@@ -549,7 +549,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
          See src/lib/payments.ts for the scaffold.
       ── END FYGARO HOOK ──────────────────────────────────────────────────── */
 
-      // Show confirmation immediately (payment_status = 'pending', pay at appointment)
+      // Show confirmation immediately (payment_status = null, pay at appointment)
       setConfirmed({
         date: format(activeDateObj, "MMMM d, yyyy"),
         startTime: slot.start_time.slice(0, 5),
