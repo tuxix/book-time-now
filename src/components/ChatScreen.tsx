@@ -175,9 +175,9 @@ const ChatScreen = ({ reservationId, storeName, customerName, currentRole, onBac
 
       {/* Permanent anti-bypass warning */}
       <div className="shrink-0 mx-3 mt-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 flex items-start gap-2">
-        <span className="text-sm shrink-0 mt-0.5">⚠️</span>
+        <span className="text-sm shrink-0 mt-0.5">🛡️</span>
         <p className="text-[11px] text-amber-800 dark:text-amber-200 leading-snug font-medium">
-          For your protection, all payments must go through Booka. Never pay or accept payment outside this platform.
+          For your protection, keep all bookings and payments within Rezo. Never pay or share personal contact details outside this platform.
         </p>
       </div>
 

@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   ArrowLeft, Star, MapPin, Clock, CheckCircle2, AlertCircle,
-  Calendar, ChevronDown, CreditCard, Users, Check, ShoppingBag, ChevronRight,
+  Calendar, ChevronDown, Users, Check, ShoppingBag, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, addDays } from "date-fns";
@@ -252,7 +252,12 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         if (useHoursSystem && storeHours.length > 0) {
           const todayHour = storeHours.find((h) => h.day_of_week === dayOfWeek);
           if (todayHour && todayHour.is_open) {
-            const stepMins = 60;
+            // Use the minimum service duration as the slot step (respects duration-awareness)
+            // Falls back to 60 min if no services have a duration set
+            const durations = services
+              .map((s) => s.duration_minutes)
+              .filter((d): d is number => typeof d === "number" && d >= 15);
+            const stepMins = durations.length > 0 ? Math.min(...durations) : 60;
             const generated = generateSlotsFromHours(todayHour, storeBreaks, stepMins, dayOfWeek);
             processSlots(generated);
           } else {
@@ -274,7 +279,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             });
         }
       });
-  }, [store.id, store.buffer_minutes, dayOfWeek, selectedDateStr, calendarDate, useHoursSystem, storeHours, storeBreaks]);
+  }, [store.id, store.buffer_minutes, dayOfWeek, selectedDateStr, calendarDate, useHoursSystem, storeHours, storeBreaks, services]);
 
   // ── Service computed values ──────────────────────────────────────────────
   const selectedService = services.find((s) => s.id === selectedServiceId) ?? null;
@@ -317,11 +322,6 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       return { ...prev, [group.id]: already ? current.filter((i) => i !== itemId) : [...current, itemId] };
     });
   };
-
-  // Always 25% of service total, minimum J$750 for no-service bookings
-  const commitmentFee = selectedService
-    ? Math.round(serviceTotal * 0.25)
-    : 750;
 
   const handleBook = async () => {
     const slot = slots.find((s) => s.id === selectedSlot);
@@ -390,7 +390,6 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         }
       }
 
-      const totalCharged = selectedService ? serviceTotal : commitmentFee;
       const { data: inserted, error } = await supabase
         .from("reservations")
         .insert({
@@ -399,9 +398,9 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           reservation_date: selectedDateStr,
           start_time: slot.start_time,
           end_time: slot.end_time,
-          total_amount: totalCharged,
+          total_amount: serviceTotal || 0,
           service_total: selectedService ? serviceTotal : null,
-          commitment_fee_amount: commitmentFee,
+          payment_status: "pending",
           service_duration_minutes: selectedService?.duration_minutes ?? null,
         })
         .select("id")
@@ -469,43 +468,12 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       setPaymentStep(false);
       setServiceStep(false);
 
-      // ── PLACEHOLDER: mark payment as paid immediately (Fygaro not yet active) ─
-      if (commitmentFee > 0 && inserted?.id) {
-        await supabase
-          .from("reservations")
-          .update({ payment_status: "paid" })
-          .eq("id", inserted.id as string);
-      }
+      /* ── FYGARO PAYMENT REDIRECT (future integration hook) ──────────────────
+         When Fygaro is active, call initiatePayment(inserted.id) here.
+         See src/lib/payments.ts for the scaffold.
+      ── END FYGARO HOOK ──────────────────────────────────────────────────── */
 
-      /* ── FYGARO REDIRECT (uncomment when Fygaro account is active) ──────────
-      if (commitmentFee > 0 && inserted?.id) {
-        const reservationId = inserted.id as string;
-        const confirmedDetails = {
-          reservationId,
-          date: format(activeDateObj, "MMMM d, yyyy"),
-          startTime: slot.start_time.slice(0, 5),
-          endTime: slot.end_time.slice(0, 5),
-          ref: reservationId.split("-")[0].toUpperCase(),
-          storeName: store.name,
-          serviceName: selectedService?.name,
-          serviceTotal: selectedService ? serviceTotal : undefined,
-        };
-        try {
-          localStorage.setItem("booka_pending_payment", JSON.stringify(confirmedDetails));
-        } catch {}
-
-        const buttonId = import.meta.env.VITE_FYGARO_BUTTON_ID ?? "";
-        const note = encodeURIComponent(`Booking at ${store.name}`);
-        const amount = commitmentFee.toFixed(2);
-        const fygaroUrl =
-          `https://www.fygaro.com/en/pb/${buttonId}` +
-          `?amount=${amount}&client_note=${note}&client_reference=${reservationId}`;
-        window.location.href = fygaroUrl;
-        return;
-      }
-      ── END FYGARO REDIRECT ──────────────────────────────────────────────── */
-
-      // Show confirmation immediately (placeholder + no-fee path)
+      // Show confirmation immediately (payment_status = 'pending', pay at appointment)
       setConfirmed({
         date: format(activeDateObj, "MMMM d, yyyy"),
         startTime: slot.start_time.slice(0, 5),
@@ -549,25 +517,18 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                 <p className="text-sm font-semibold text-foreground mt-0.5">{confirmed.serviceName}</p>
               </div>
             )}
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Payment</p>
-              {confirmed.serviceTotal != null && (
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Service subtotal</span>
-                  <span>{fmt(confirmed.serviceTotal)}</span>
+            {confirmed.serviceTotal != null && confirmed.serviceTotal > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Price</p>
+                <div className="flex justify-between items-center pt-1 border-t border-border">
+                  <span className="text-xs font-bold text-foreground">Service total</span>
+                  <span className="text-xl font-extrabold text-primary">{fmt(confirmed.serviceTotal)}</span>
                 </div>
-              )}
-              <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400">
-                <span>Commitment deposit (25%)</span>
-                <span>{fmt(commitmentFee)}</span>
+                <div className="flex items-center gap-1.5 pt-1">
+                  <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">💳 Payment due at your appointment</span>
+                </div>
               </div>
-              <div className="flex justify-between items-center pt-1 border-t border-border">
-                <span className="text-xs font-bold text-foreground">Total charged today</span>
-                <span className="text-xl font-extrabold text-primary">
-                  {fmt(confirmed.serviceTotal ?? commitmentFee)}
-                </span>
-              </div>
-            </div>
+            )}
             <div>
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Date</p>
               <p className="text-sm font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
@@ -720,7 +681,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             onClick={() => { setSelectedServiceId(null); setSelectedItems({}); setServiceStep(false); setPaymentStep(true); }}
             className="w-full py-3 text-xs text-muted-foreground hover:text-foreground transition-colors text-center"
           >
-            Skip service selection → proceed with deposit only
+            Continue without selecting a service
           </button>
         </div>
 
@@ -742,7 +703,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                 ? "Select a service above"
                 : !requiredGroupsFilled
                 ? "Complete required selections"
-                : `Review & Pay — ${fmt(serviceTotal)}`}
+                : `Review Booking — ${fmt(serviceTotal)}`}
             </Button>
           </div>
         </div>
@@ -750,19 +711,18 @@ const CustomerBooking = ({ store, onBack }: Props) => {
     );
   }
 
-  // ── Payment confirmation step ────────────────────────────────────────────
+  // ── Review & Confirm step ────────────────────────────────────────────────
   if (paymentStep && selectedSlotObj) {
-    const showService = !!selectedService;
     return (
       <div className="absolute inset-x-0 top-0 bg-background overflow-y-auto" style={{ bottom: 56, zIndex: 410 }}>
         <div className="flex flex-col items-center justify-start px-6 pt-8 pb-32">
           <div className="w-full max-w-xs space-y-5">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-              <CreditCard size={30} className="text-primary" />
+              <Calendar size={30} className="text-primary" />
             </div>
             <div className="text-center">
-              <h1 className="text-xl font-bold text-foreground">Confirm Your Booking</h1>
-              <p className="text-sm text-muted-foreground mt-1">Review everything below</p>
+              <h1 className="text-xl font-bold text-foreground">Review Your Booking</h1>
+              <p className="text-sm text-muted-foreground mt-1">Almost done — confirm your spot</p>
             </div>
 
             <div className="p-5 rounded-2xl bg-card booka-shadow text-left space-y-3 w-full">
@@ -777,14 +737,14 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                 </p>
               </div>
 
-              {showService ? (
+              {selectedService && (
                 <div className="pt-2 border-t border-border space-y-2">
                   <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Price Breakdown</p>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-foreground">{selectedService!.name}</span>
-                    <span className="text-sm font-semibold text-foreground">{fmt(selectedService!.base_price)}</span>
+                    <span className="text-sm font-semibold text-foreground">{selectedService.name}</span>
+                    <span className="text-sm font-semibold text-foreground">{fmt(selectedService.base_price)}</span>
                   </div>
-                  {selectedService!.service_option_groups.map((g) => {
+                  {selectedService.service_option_groups.map((g) => {
                     const pickedIds = selectedItems[g.id] ?? [];
                     return pickedIds.map((itemId) => {
                       const item = g.service_option_items.find((i) => i.id === itemId);
@@ -801,41 +761,22 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                       );
                     });
                   })}
-                  <div className="flex items-center justify-between pt-1.5 border-t border-border/50 text-xs font-semibold text-foreground">
-                    <span>Service subtotal</span>
-                    <span>{fmt(serviceTotal)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400">
-                    <span>Commitment deposit (25%)</span>
-                    <span>{fmt(commitmentFee)}</span>
-                  </div>
                   <div className="flex items-center justify-between pt-2 border-t border-border">
-                    <span className="text-sm font-bold text-foreground">Total charged today</span>
+                    <span className="text-sm font-bold text-foreground">Total</span>
                     <span className="text-2xl font-extrabold text-primary">{fmt(serviceTotal)}</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="pt-2 border-t border-border space-y-1.5">
-                  <div className="flex items-center justify-between text-xs text-amber-600 dark:text-amber-400">
-                    <span>Commitment deposit (25%)</span>
-                    <span>{fmt(commitmentFee)}</span>
-                  </div>
-                  <div className="flex items-center justify-between pt-1.5 border-t border-border">
-                    <span className="text-sm font-bold text-foreground">Total charged today</span>
-                    <span className="text-2xl font-extrabold text-primary">{fmt(commitmentFee)}</span>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
-              <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
-                Your 25% deposit of <strong>{fmt(commitmentFee)}</strong> is held until your appointment is completed. If you do not show up, this deposit is retained by the store and the remainder is refunded.
+            <div className="px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+              <p className="text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
+                💳 <strong>No payment required now.</strong> Your booking is confirmed instantly. Pay at your appointment.
               </p>
             </div>
 
             <Button
-              data-testid="button-confirm-pay"
+              data-testid="button-confirm-booking"
               className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
               onClick={handleBook}
               disabled={booking}
@@ -843,17 +784,17 @@ const CustomerBooking = ({ store, onBack }: Props) => {
               {booking ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Processing…
+                  Confirming…
                 </span>
               ) : (
                 <span className="flex items-center justify-center gap-2">
-                  <CreditCard size={16} />
-                  Pay {fmt(selectedService ? serviceTotal : commitmentFee)} · Confirm Booking
+                  <CheckCircle2 size={16} />
+                  Confirm Booking
                 </span>
               )}
             </Button>
             <p className="text-[11px] text-muted-foreground text-center">
-              🔒 Secure payment coming soon
+              Your spot is held — no charge until you arrive
             </p>
             <button
               onClick={() => { setPaymentStep(false); if (hasServices && selectedServiceId) setServiceStep(true); }}
@@ -1062,10 +1003,10 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             ) : (
               <Button
                 data-testid="button-confirm-booking"
-                className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
+                className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0 flex items-center justify-center gap-2"
                 onClick={() => setPaymentStep(true)}
               >
-                Confirm Reservation — {fmt(commitmentFee)}
+                <CheckCircle2 size={16} /> Review & Confirm
               </Button>
             )}
           </div>
