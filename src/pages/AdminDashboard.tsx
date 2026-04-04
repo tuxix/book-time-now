@@ -284,7 +284,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     else if (activeTab === "moderation") fetchModerationData();
     else if (activeTab === "communication") fetchCommunicationData();
     else if (activeTab === "financial") fetchFinancialData();
-    else if (activeTab === "promotions") { fetchPromotions(); fetchPromoImpact(); }
+    else if (activeTab === "promotions") { fetchPromotions(); fetchPromoImpact(); if (stores.length === 0) fetchStores(); }
   }, [activeTab]);
 
   // ── Fetch stats ───────────────────────────────────────────────────────────
