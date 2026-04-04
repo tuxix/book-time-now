@@ -127,6 +127,11 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const [calendarDate, setCalendarDate] = useState<string | null>(null);
   const [paymentStep, setPaymentStep] = useState(false);
 
+  // Terms acceptance
+  const [termsAccepted, setTermsAccepted] = useState<boolean | null>(null);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [acceptingTerms, setAcceptingTerms] = useState(false);
+
   // Service customizer state
   const [services, setServices] = useState<StoreService[]>([]);
   const [serviceStep, setServiceStep] = useState(false);
@@ -154,6 +159,30 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const getWaitCount = (slot: TimeSlot) => {
     const slotStart = timeToMins(slot.start_time);
     return existingBookings.filter((b) => timeToMins(b.start_time) < slotStart).length;
+  };
+
+  // Check if customer has accepted platform terms
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("profiles")
+      .select("customer_terms_accepted_at")
+      .eq("id", user.id)
+      .single()
+      .then(({ data }) => {
+        setTermsAccepted(!!(data as any)?.customer_terms_accepted_at);
+      });
+  }, [user]);
+
+  const acceptTermsAndBook = async () => {
+    if (!user) return;
+    setAcceptingTerms(true);
+    await supabase.from("profiles")
+      .update({ customer_terms_accepted_at: new Date().toISOString() })
+      .eq("id", user.id);
+    setTermsAccepted(true);
+    setShowTermsModal(false);
+    setAcceptingTerms(false);
+    handleBook();
   };
 
   // Fetch services and store_hours on mount
@@ -390,6 +419,10 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         }
       }
 
+      const bookingTotal = serviceTotal || 0;
+      const commissionAmount = Math.round(bookingTotal * 0.10);
+      const storeEarnings = bookingTotal - commissionAmount;
+
       const { data: inserted, error } = await supabase
         .from("reservations")
         .insert({
@@ -398,10 +431,13 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           reservation_date: selectedDateStr,
           start_time: slot.start_time,
           end_time: slot.end_time,
-          total_amount: serviceTotal || 0,
+          total_amount: bookingTotal,
           service_total: selectedService ? serviceTotal : null,
           payment_status: "pending",
           service_duration_minutes: selectedService?.duration_minutes ?? null,
+          commission_amount: bookingTotal > 0 ? commissionAmount : null,
+          store_earnings: bookingTotal > 0 ? storeEarnings : null,
+          payout_status: "unpaid",
         })
         .select("id")
         .single();
@@ -778,7 +814,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             <Button
               data-testid="button-confirm-booking"
               className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
-              onClick={handleBook}
+              onClick={() => { if (termsAccepted === false) setShowTermsModal(true); else handleBook(); }}
               disabled={booking}
             >
               {booking ? (
@@ -1025,6 +1061,65 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           }}
           onClose={() => setCalendarOpen(false)}
         />
+      )}
+
+      {/* ── Terms of Service Gate ──────────────────────────────────────────── */}
+      {showTermsModal && (
+        <div className="fixed inset-0 z-[600] flex flex-col bg-background">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
+            <button onClick={() => setShowTermsModal(false)} className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-muted transition-colors">
+              <ArrowLeft size={20} />
+            </button>
+            <h2 className="font-bold text-base text-foreground">Rezo Platform Terms</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 text-sm text-foreground/80 leading-relaxed">
+            <p className="font-bold text-foreground text-base">Before your first booking, please read and accept the Rezo User Terms.</p>
+
+            <div className="space-y-3">
+              <h3 className="font-bold text-foreground">1. Booking Responsibility</h3>
+              <p>When you book through Rezo, you agree to attend your appointment at the scheduled date and time, or cancel at least 24 hours in advance. Repeated no-shows may result in account suspension.</p>
+
+              <h3 className="font-bold text-foreground">2. Pay at Appointment</h3>
+              <p>Payment for services is made directly to the store at the time of your appointment. Rezo does not process advance payments — you will never be charged a fee to book.</p>
+
+              <h3 className="font-bold text-foreground">3. Keep it on Rezo</h3>
+              <p>For your protection, all communication must remain within the Rezo platform. Never share your personal phone number, WhatsApp, or social media handle with stores via the chat. Violations may result in account action.</p>
+
+              <h3 className="font-bold text-foreground">4. Respect</h3>
+              <p>You agree to treat all service providers with respect. Abusive behaviour, threats, or harassment will result in permanent account suspension.</p>
+
+              <h3 className="font-bold text-foreground">5. Disputes</h3>
+              <p>If you have a problem with a service you received, you may file a dispute through Rezo. We will review all disputes fairly within 5 business days.</p>
+
+              <h3 className="font-bold text-foreground">6. Data & Privacy</h3>
+              <p>Rezo collects your name, phone number, and booking history to provide the service. We do not sell your data to third parties. Your data is stored securely in accordance with Jamaican data protection law.</p>
+
+              <h3 className="font-bold text-foreground">7. Platform Changes</h3>
+              <p>Rezo reserves the right to modify these terms at any time. Continued use of the platform constitutes acceptance of any updated terms.</p>
+            </div>
+
+            <p className="text-xs text-muted-foreground pt-2">By tapping "Accept & Book" you confirm you have read and agree to these terms. Rezo is a contractor marketplace — stores are independent businesses, not Rezo employees.</p>
+          </div>
+          <div className="shrink-0 p-4 border-t border-border">
+            <Button
+              data-testid="button-accept-terms"
+              className="w-full h-12 rounded-xl font-semibold booka-gradient booka-shadow-blue text-white border-0"
+              onClick={acceptTermsAndBook}
+              disabled={acceptingTerms}
+            >
+              {acceptingTerms ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Confirming…
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 size={16} /> Accept & Book
+                </span>
+              )}
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

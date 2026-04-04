@@ -33,6 +33,7 @@ interface CustomerRow {
   is_suspended: boolean; created_at: string; booking_count: number;
   total_spent: number; no_show_count: number; last_booking_date: string | null;
   email?: string; is_admin?: boolean;
+  warning_count?: number; trust_score?: number; suspension_reason?: string | null;
 }
 interface PlatformSetting { id: string; key: string; value: string; updated_at: string; }
 interface WordBlacklistItem { id: string; word: string; created_at: string; }
@@ -85,6 +86,7 @@ interface DisputeRow {
   reason: string; description: string; evidence_url?: string;
   status: string; admin_notes?: string; created_at: string;
   customer_name?: string; store_name?: string;
+  refund_amount?: number | null; refund_status?: string | null;
 }
 interface BugReportRow {
   id: string; user_id: string; description: string; screenshot_url?: string;
@@ -205,7 +207,9 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // Financial
   const [financialLoading, setFinancialLoading] = useState(false);
-  const [financialSubTab, setFinancialSubTab] = useState<"subscriptions" | "refunds">("subscriptions");
+  const [financialSubTab, setFinancialSubTab] = useState<"subscriptions" | "payouts" | "refunds">("subscriptions");
+  const [payoutRows, setPayoutRows] = useState<{ store_id: string; name: string; unpaid: number; total_commission: number; booking_count: number }[]>([]);
+  const [payoutsLoading, setPayoutsLoading] = useState(false);
   const [proStores, setProStores] = useState<StoreRow[]>([]);
   const [premiumStores, setPremiumStores] = useState<StoreRow[]>([]);
   const [freeStores, setFreeStores] = useState<StoreRow[]>([]);
@@ -228,6 +232,11 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [customerActionType, setCustomerActionType] = useState<"bookings" | "warning" | null>(null);
   const [customerBookings, setCustomerBookings] = useState<BookingRow[]>([]);
   const [customerBookingsLoading, setCustomerBookingsLoading] = useState(false);
+  const [suspendReasonTarget, setSuspendReasonTarget] = useState<CustomerRow | null>(null);
+  const [suspendReasonText, setSuspendReasonText] = useState("");
+  const [savingSuspend, setSavingSuspend] = useState(false);
+  // Dispute refund amounts (editable per dispute)
+  const [disputeRefundAmounts, setDisputeRefundAmounts] = useState<Record<string, string>>({});
 
   // Admin grant
   const [adminEmailInput, setAdminEmailInput] = useState("");
@@ -382,7 +391,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setCustomersLoading(true);
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, phone, is_suspended, created_at")
+      .select("id, full_name, phone, is_suspended, created_at, warning_count, trust_score, suspension_reason")
       .eq("role", "customer")
       .order("created_at", { ascending: false });
     if (data) {
@@ -594,11 +603,44 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   };
 
   const toggleCustomerSuspend = async (c: CustomerRow) => {
-    const next = !c.is_suspended;
-    const { error } = await supabase.from("profiles").update({ is_suspended: next }).eq("id", c.id);
-    if (error) { toast.error("Failed to update customer"); return; }
-    setCustomers((prev) => prev.map((x) => x.id === c.id ? { ...x, is_suspended: next } : x));
-    toast.success(next ? "Customer suspended" : "Customer reinstated");
+    if (!c.is_suspended) {
+      // Open suspension reason dialog instead of suspending immediately
+      setSuspendReasonTarget(c);
+      setSuspendReasonText("");
+      return;
+    }
+    // Reinstate immediately
+    const { error } = await supabase.from("profiles").update({ is_suspended: false, suspension_reason: null }).eq("id", c.id);
+    if (error) { toast.error("Failed to reinstate customer"); return; }
+    setCustomers((prev) => prev.map((x) => x.id === c.id ? { ...x, is_suspended: false, suspension_reason: null } : x));
+    toast.success("Customer reinstated");
+  };
+
+  const confirmSuspendCustomer = async () => {
+    if (!suspendReasonTarget) return;
+    setSavingSuspend(true);
+    const { error } = await supabase.from("profiles").update({
+      is_suspended: true,
+      suspension_reason: suspendReasonText.trim() || "Platform policy violation",
+    }).eq("id", suspendReasonTarget.id);
+    setSavingSuspend(false);
+    if (error) { toast.error("Failed to suspend customer"); return; }
+    setCustomers((prev) => prev.map((x) => x.id === suspendReasonTarget.id ? { ...x, is_suspended: true, suspension_reason: suspendReasonText.trim() || "Platform policy violation" } : x));
+    setSuspendReasonTarget(null);
+    setSuspendReasonText("");
+    toast.success("Customer suspended");
+  };
+
+  const issueWarning = async (c: CustomerRow) => {
+    const newWarningCount = (c.warning_count ?? 0) + 1;
+    const newTrustScore = Math.max(0, (c.trust_score ?? 100) - 10);
+    const { error } = await supabase.from("profiles").update({
+      warning_count: newWarningCount,
+      trust_score: newTrustScore,
+    }).eq("id", c.id);
+    if (error) { toast.error("Failed to issue warning"); return; }
+    setCustomers((prev) => prev.map((x) => x.id === c.id ? { ...x, warning_count: newWarningCount, trust_score: newTrustScore } : x));
+    toast.success(`Warning issued — trust score now ${newTrustScore}`);
   };
 
   const dismissReport = async (id: string) => {
@@ -647,18 +689,31 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p.full_name]));
       setDisputes(disputes.map((d) => ({ ...d, store_name: storeMap.get(d.store_id) ?? "Unknown", customer_name: profileMap.get(d.customer_id) ?? "Unknown" })));
       const initialNotes: Record<string, string> = {};
-      disputes.forEach((d) => { initialNotes[d.id] = d.admin_notes ?? ""; });
+      const initialRefunds: Record<string, string> = {};
+      disputes.forEach((d) => {
+        initialNotes[d.id] = d.admin_notes ?? "";
+        initialRefunds[d.id] = d.refund_amount != null ? String(d.refund_amount) : "";
+      });
       setDisputeNotes(initialNotes);
+      setDisputeRefundAmounts(initialRefunds);
     }
     setDisputesLoading(false);
   };
 
   const updateDisputeStatus = async (id: string, status: string) => {
     const notes = disputeNotes[id] ?? "";
+    const refundAmtStr = disputeRefundAmounts[id] ?? "";
+    const refundAmount = refundAmtStr ? parseFloat(refundAmtStr) : null;
+    const refundStatus = status === "resolved" && refundAmount != null ? "approved" : status === "rejected" ? "denied" : null;
     setSavingDisputeId(id);
-    await supabase.from("disputes").update({ status, admin_notes: notes }).eq("id", id);
+    await supabase.from("disputes").update({
+      status,
+      admin_notes: notes,
+      ...(refundAmount != null && { refund_amount: refundAmount }),
+      ...(refundStatus && { refund_status: refundStatus }),
+    }).eq("id", id);
     setSavingDisputeId(null);
-    setDisputes((prev) => prev.map((d) => d.id === id ? { ...d, status, admin_notes: notes } : d));
+    setDisputes((prev) => prev.map((d) => d.id === id ? { ...d, status, admin_notes: notes, refund_amount: refundAmount, refund_status: refundStatus } : d));
     toast.success(`Dispute ${status}`);
   };
 
@@ -803,6 +858,34 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       setFreeStores(all.filter((s) => !s.subscription_tier || s.subscription_tier === "free"));
     }
     setFinancialLoading(false);
+  };
+
+  const fetchPayoutsData = async () => {
+    setPayoutsLoading(true);
+    const { data } = await supabase
+      .from("reservations")
+      .select("store_id, store_earnings, commission_amount, total_amount, payout_status, stores(name)")
+      .eq("status", "completed");
+    if (data) {
+      const storeMap: Record<string, { name: string; unpaid: number; total_commission: number; booking_count: number }> = {};
+      (data as any[]).forEach((r) => {
+        if (!r.store_id) return;
+        if (!storeMap[r.store_id]) storeMap[r.store_id] = { name: r.stores?.name ?? "Store", unpaid: 0, total_commission: 0, booking_count: 0 };
+        const earnings = r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0);
+        const commission = r.commission_amount ?? (r.total_amount ? Math.round(r.total_amount * 0.1) : 0);
+        storeMap[r.store_id].booking_count += 1;
+        storeMap[r.store_id].total_commission += commission;
+        if (r.payout_status === "unpaid" || !r.payout_status) {
+          storeMap[r.store_id].unpaid += earnings;
+        }
+      });
+      const rows = Object.entries(storeMap)
+        .map(([store_id, v]) => ({ store_id, ...v }))
+        .filter((r) => r.unpaid > 0)
+        .sort((a, b) => b.unpaid - a.unpaid);
+      setPayoutRows(rows);
+    }
+    setPayoutsLoading(false);
   };
 
   // ── Store admin actions ────────────────────────────────────────────────────
@@ -1216,20 +1299,33 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                     <p className="font-bold text-slate-900 text-sm">{c.full_name || "Anonymous"}</p>
                     {c.is_suspended && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">SUSPENDED</span>}
                     {inactive && c.booking_count > 0 && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">INACTIVE</span>}
+                    {(c.warning_count ?? 0) >= 3 && <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">HIGH RISK</span>}
                   </div>
                   {c.phone && <p className="text-xs text-slate-500 mt-0.5">{c.phone}</p>}
+                  {c.is_suspended && c.suspension_reason && (
+                    <p className="text-[11px] text-red-600 mt-0.5 italic">Reason: {c.suspension_reason}</p>
+                  )}
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                     <p className="text-[11px] text-slate-400">{c.booking_count} bookings</p>
                     <p className="text-[11px] text-slate-400">Spent: {fmtJ(c.total_spent)}</p>
                     <p className={`text-[11px] font-semibold ${flagNoShow ? "text-red-500" : "text-slate-400"}`}>No-shows: {c.no_show_count}</p>
                     <p className="text-[11px] text-slate-400">Last: {c.last_booking_date ? format(parseISO(c.last_booking_date), "MMM d, yyyy") : "Never"}</p>
                     <p className="text-[11px] text-slate-400">Joined {format(new Date(c.created_at), "MMM d, yyyy")}</p>
+                    {c.warning_count != null && c.warning_count > 0 && (
+                      <p className={`text-[11px] font-semibold ${c.warning_count >= 3 ? "text-orange-500" : "text-amber-500"}`}>⚠️ {c.warning_count} warning{c.warning_count !== 1 ? "s" : ""}</p>
+                    )}
+                    {c.trust_score != null && (
+                      <p className={`text-[11px] font-semibold ${c.trust_score < 60 ? "text-red-500" : c.trust_score < 80 ? "text-amber-500" : "text-green-600"}`}>Trust: {c.trust_score}</p>
+                    )}
                   </div>
                 </div>
               </div>
               <div className="flex gap-1.5 flex-wrap">
                 <button onClick={() => toggleCustomerSuspend(c)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${c.is_suspended ? "border-green-200 text-green-700 hover:bg-green-50" : "border-red-200 text-red-600 hover:bg-red-50"}`}>
                   <Ban size={11} />{c.is_suspended ? "Reinstate" : "Suspend"}
+                </button>
+                <button onClick={() => issueWarning(c)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-orange-200 text-orange-600 hover:bg-orange-50 transition-all active:scale-95">
+                  <AlertCircle size={11}/> Warn
                 </button>
                 <button onClick={() => viewCustomerBookings(c)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
                   <Calendar size={11}/> Bookings
@@ -1557,6 +1653,23 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                 <a href={d.evidence_url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">View Evidence</a>
               )}
               <div>
+                <p className="text-xs font-semibold text-slate-500 mb-1">Refund Amount (J$)</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={disputeRefundAmounts[d.id] ?? ""}
+                    onChange={(e) => setDisputeRefundAmounts((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                    className="rounded-xl text-xs h-8 flex-1"
+                  />
+                  {d.refund_status && (
+                    <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${d.refund_status === "approved" ? "bg-green-100 text-green-700" : d.refund_status === "denied" ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-500"}`}>
+                      {d.refund_status}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div>
                 <p className="text-xs font-semibold text-slate-500 mb-1">Admin Notes</p>
                 <textarea
                   value={disputeNotes[d.id] ?? ""}
@@ -1677,9 +1790,9 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const renderFinancial = () => (
     <div className="p-4 space-y-3">
       <div className="flex gap-2 mb-3">
-        {(["subscriptions","refunds"] as const).map(t=>(
-          <button key={t} onClick={()=>setFinancialSubTab(t)} className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${financialSubTab===t?"bg-slate-800 text-white border-slate-800":"bg-white border-slate-200 text-slate-600"}`}>
-            {t==="subscriptions"?"Subscriptions":"Pending Refunds"}
+        {(["subscriptions","payouts","refunds"] as const).map(t=>(
+          <button key={t} onClick={()=>{ setFinancialSubTab(t); if(t==="payouts") fetchPayoutsData(); }} className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${financialSubTab===t?"bg-slate-800 text-white border-slate-800":"bg-white border-slate-200 text-slate-600"}`}>
+            {t==="subscriptions"?"Plans":t==="payouts"?"Payouts":"Refunds"}
           </button>
         ))}
       </div>
@@ -1702,10 +1815,53 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             </div>
           ))}
         </div>
+      ) : financialSubTab === "payouts" ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Pending Store Payouts</p>
+            <button onClick={fetchPayoutsData} className="p-1.5 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50"><RefreshCw size={13}/></button>
+          </div>
+          {payoutsLoading ? (
+            <div className="space-y-2">{[1,2,3].map(i=><div key={i} className="h-16 rounded-2xl booka-shimmer"/>)}</div>
+          ) : payoutRows.length === 0 ? (
+            <div className="text-center py-16 text-slate-400">
+              <DollarSign size={36} className="mx-auto mb-3 opacity-30"/>
+              <p className="text-sm">No pending payouts</p>
+            </div>
+          ) : (
+            <>
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Total Pending</p>
+                  <p className="text-lg font-extrabold text-slate-900">{fmtJ(payoutRows.reduce((s, r) => s + r.unpaid, 0))}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Rezo Commission</p>
+                  <p className="text-lg font-extrabold text-green-700">{fmtJ(payoutRows.reduce((s, r) => s + r.total_commission, 0))}</p>
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
+                {payoutRows.map(r => (
+                  <div key={r.store_id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{r.name}</p>
+                      <p className="text-[11px] text-slate-400">{r.booking_count} completed bookings · commission {fmtJ(r.total_commission)}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-amber-700">{fmtJ(r.unpaid)}</p>
+                      <p className="text-[10px] text-slate-400">unpaid</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 text-center">Weekly payouts processed every Monday. Mark reservations as paid in the Bookings tab once processed.</p>
+            </>
+          )}
+        </div>
       ) : (
         <div className="text-center py-16 text-slate-400">
           <DollarSign size={36} className="mx-auto mb-3 opacity-30"/>
-          <p className="text-sm">Refund management — connect to Fygaro to process refunds</p>
+          <p className="text-sm">Refund management — connect to payment provider to process refunds</p>
         </div>
       )}
     </div>
@@ -1991,6 +2147,36 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
         </div>
       )}
+      {/* Suspension reason dialog */}
+      {suspendReasonTarget && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center px-6" onClick={() => setSuspendReasonTarget(null)}>
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="font-bold text-slate-900 text-base">Suspend Customer</p>
+              <button onClick={() => setSuspendReasonTarget(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"><X size={16}/></button>
+            </div>
+            <p className="text-sm text-slate-600">Suspending <span className="font-semibold">{suspendReasonTarget.full_name || "this customer"}</span>. They will be unable to make new bookings.</p>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1">Reason for suspension</label>
+              <textarea
+                value={suspendReasonText}
+                onChange={(e) => setSuspendReasonText(e.target.value)}
+                placeholder="e.g. Repeated no-shows, abusive behaviour…"
+                rows={3}
+                className="w-full text-sm rounded-xl border border-slate-200 p-3 resize-none focus:outline-none focus:ring-1 focus:ring-red-400"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setSuspendReasonTarget(null)} className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-all">Cancel</button>
+              <button onClick={confirmSuspendCustomer} disabled={savingSuspend} className="flex-1 h-10 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-all active:scale-95 disabled:opacity-60">
+                {savingSuspend ? "Suspending…" : "Confirm Suspend"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Store admin action dialog */}
       {renderStoreActionDialog()}
 

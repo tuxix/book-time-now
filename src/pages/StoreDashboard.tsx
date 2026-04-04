@@ -38,6 +38,9 @@ interface Reservation {
   refund_amount?: number;
   retained_amount?: number;
   commitment_fee_amount?: number;
+  commission_amount?: number;
+  store_earnings?: number;
+  payout_status?: string;
   customer_id: string;
   customer_label: string;
   customer_name?: string;
@@ -90,6 +93,8 @@ interface StoreData {
   category_locked_until?: string | null;
   primary_category?: string | null;
   onboarding_completed?: boolean;
+  store_agreement_accepted?: boolean;
+  store_agreement_accepted_at?: string | null;
 }
 
 interface ServiceOptionItem {
@@ -403,6 +408,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [storeReviews, setStoreReviews] = useState<StoreReview[]>([]);
   const [loadingStore, setLoadingStore] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [showAgreementGate, setShowAgreementGate] = useState(false);
+  const [acceptingAgreement, setAcceptingAgreement] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
   const [acceptingBookings, setAcceptingBookings] = useState(true);
@@ -583,6 +590,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         const s = data as StoreData;
         setStore(s);
         setNeedsSetup(!s.category?.trim());
+        if (s.category?.trim() && !s.store_agreement_accepted) setShowAgreementGate(true);
         setEditName(s.name || "");
         setEditDesc(s.description || "");
         setEditAddr(s.address || "");
@@ -607,7 +615,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     const [resRes, slotsRes, reviewsRes] = await Promise.all([
       supabase
         .from("reservations")
-        .select("id, reservation_date, start_time, end_time, status, fee, payment_status, total_amount, refund_amount, retained_amount, commitment_fee_amount, customer_id, checkin_code, cancelled_by, is_walk_in, walk_in_name, reservation_services(*)")
+        .select("id, reservation_date, start_time, end_time, status, fee, payment_status, total_amount, refund_amount, retained_amount, commitment_fee_amount, commission_amount, store_earnings, payout_status, customer_id, checkin_code, cancelled_by, is_walk_in, walk_in_name, reservation_services(*)")
         .eq("store_id", store.id)
         .order("reservation_date", { ascending: false }),
       supabase
@@ -1451,6 +1459,20 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     setSaving(false);
   };
 
+  // ── Contractor Agreement Acceptance ────────────────────────────────────
+  const acceptAgreement = async () => {
+    if (!store) return;
+    setAcceptingAgreement(true);
+    await supabase.from("stores").update({
+      store_agreement_accepted: true,
+      store_agreement_accepted_at: new Date().toISOString(),
+    }).eq("id", store.id);
+    setStore((prev) => prev ? { ...prev, store_agreement_accepted: true, store_agreement_accepted_at: new Date().toISOString() } : prev);
+    setShowAgreementGate(false);
+    setAcceptingAgreement(false);
+    toast.success("Agreement accepted — welcome to Rezo!");
+  };
+
   // ── Loading ────────────────────────────────────────────────────────────
   if (loadingStore) {
     return (
@@ -1472,8 +1494,69 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           setEditCategory(updated.category);
           setSlots(defaultSlots);
           setNeedsSetup(false);
+          // Show agreement gate for new stores completing setup
+          setShowAgreementGate(true);
         }}
       />
+    );
+  }
+
+  if (showAgreementGate && store) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
+          <div className="w-8 h-8 rounded-xl booka-gradient flex items-center justify-center">
+            <Store size={16} className="text-white" />
+          </div>
+          <h2 className="font-bold text-base text-foreground">Rezo Partner Agreement</h2>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 text-sm text-foreground/80 leading-relaxed">
+          <p className="font-bold text-foreground text-base">Before accessing your dashboard, please read and accept the Rezo Partner Agreement.</p>
+
+          <div className="space-y-3">
+            <h3 className="font-bold text-foreground">1. Independent Contractor Status</h3>
+            <p>You operate as an independent contractor on the Rezo platform. You are not an employee of Rezo. You are solely responsible for the services you provide, including quality, safety, and compliance with Jamaican law.</p>
+
+            <h3 className="font-bold text-foreground">2. Commission Structure</h3>
+            <p>Rezo charges a 10% commission on the total value of completed bookings. Your earnings (90% of each booking) will be tracked in your dashboard and disbursed on a weekly basis.</p>
+
+            <h3 className="font-bold text-foreground">3. Payment Collection</h3>
+            <p>You collect payment directly from customers at the time of service. You are responsible for maintaining accurate service prices and collecting the correct amount.</p>
+
+            <h3 className="font-bold text-foreground">4. Conduct & Platform Rules</h3>
+            <p>You agree to maintain professional conduct at all times. Stores that receive repeated complaints, bypass platform communication rules, or encourage customers to book outside of Rezo will face suspension or permanent removal.</p>
+
+            <h3 className="font-bold text-foreground">5. Cancellations & No-Shows</h3>
+            <p>You may cancel customer bookings with reasonable notice. Repeated unjustified cancellations will negatively affect your store's standing on the platform.</p>
+
+            <h3 className="font-bold text-foreground">6. Accurate Information</h3>
+            <p>You agree to maintain accurate store information, including category, services, pricing, and operating hours. Misleading information may result in account suspension.</p>
+
+            <h3 className="font-bold text-foreground">7. Disputes</h3>
+            <p>Customer disputes will be reviewed by Rezo. You agree to cooperate fully with any dispute investigation. Rezo's decision on dispute outcomes is final.</p>
+          </div>
+
+          <p className="text-xs text-muted-foreground pt-2">By tapping "Accept & Enter Dashboard" you confirm you have read and agree to the Rezo Partner Agreement. This agreement is subject to change with 7 days' notice.</p>
+        </div>
+        <div className="shrink-0 p-4 border-t border-border">
+          <Button
+            className="w-full h-12 rounded-xl font-semibold booka-gradient text-white border-0"
+            onClick={acceptAgreement}
+            disabled={acceptingAgreement}
+          >
+            {acceptingAgreement ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Accepting…
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <CheckCircle2 size={16} /> Accept & Enter Dashboard
+              </span>
+            )}
+          </Button>
+        </div>
+      </div>
     );
   }
 
@@ -1957,6 +2040,53 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
 
           <AnalyticsSection reservations={reservations} reviews={storeReviews} />
+
+          {/* ── EARNINGS SUMMARY ──────────────────────────────── */}
+          {(() => {
+            const weekStart = format(startOfWeek(new Date()), "yyyy-MM-dd");
+            const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
+            const completedThisWeek = reservations.filter((r) => r.status === "completed" && r.reservation_date >= weekStart);
+            const completedThisMonth = reservations.filter((r) => r.status === "completed" && r.reservation_date >= monthStart);
+            const weekEarnings = completedThisWeek.reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
+            const monthEarnings = completedThisMonth.reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
+            const unpaidEarnings = reservations.filter((r) => r.status === "completed" && r.payout_status === "unpaid").reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
+            const weekCommission = completedThisWeek.reduce((s, r) => s + (r.commission_amount ?? (r.total_amount ? Math.round(r.total_amount * 0.10) : 0)), 0);
+            const fmtJ = (n: number) => `J$${n.toLocaleString()}`;
+            if (completedThisMonth.length === 0) return null;
+            return (
+              <div className="mb-5 rounded-2xl border border-border bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">My Earnings</p>
+                  <TrendingUp size={14} className="text-green-500" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-3">
+                    <p className="text-[10px] text-green-700 dark:text-green-300 font-semibold uppercase tracking-wide">This Week</p>
+                    <p className="text-lg font-extrabold text-green-800 dark:text-green-200">{fmtJ(weekEarnings)}</p>
+                    <p className="text-[10px] text-green-600 dark:text-green-400">{completedThisWeek.length} booking{completedThisWeek.length !== 1 ? "s" : ""}</p>
+                  </div>
+                  <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3">
+                    <p className="text-[10px] text-blue-700 dark:text-blue-300 font-semibold uppercase tracking-wide">This Month</p>
+                    <p className="text-lg font-extrabold text-blue-800 dark:text-blue-200">{fmtJ(monthEarnings)}</p>
+                    <p className="text-[10px] text-blue-600 dark:text-blue-400">{completedThisMonth.length} booking{completedThisMonth.length !== 1 ? "s" : ""}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between px-1">
+                  <div className="text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Rezo Commission</p>
+                    <p className="text-sm font-bold text-foreground">{fmtJ(weekCommission)}</p>
+                    <p className="text-[10px] text-muted-foreground">this week (10%)</p>
+                  </div>
+                  <div className="h-8 w-px bg-border" />
+                  <div className="text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Pending Payout</p>
+                    <p className="text-sm font-bold text-amber-600">{fmtJ(unpaidEarnings)}</p>
+                    <p className="text-[10px] text-muted-foreground">weekly disbursement</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── TODAY ─────────────────────────────────────────── */}
           <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Today</h2>
