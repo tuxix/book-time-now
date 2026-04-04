@@ -5,7 +5,7 @@ import { useTheme } from "@/hooks/useTheme";
 import {
   Search, Calendar, User, MapPin, ChevronRight, Star,
   X, Briefcase, Settings, HelpCircle, LogOut, Heart, Mic, Sun, Moon, CheckCircle2, CreditCard, Clock,
-  Bell, Download, MessageSquare, Shield,
+  Bell, Download, MessageSquare, Shield, Megaphone,
 } from "lucide-react";
 import { CATEGORIES, distanceKm, getCategoryEmoji } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
@@ -730,24 +730,58 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
         </div>
       )}
 
-      {/* ── Announcement banner ────────────────────────────────────────────── */}
+      {/* ── Announcement modal pop-up ───────────────────────────────────────── */}
       {announcement && (
-        <div className="absolute inset-x-0 top-0 z-[690] flex items-start gap-2 px-3 py-2.5" style={{ background: "linear-gradient(135deg, hsl(220 85% 16%) 0%, hsl(213 82% 28%) 100%)" }}>
-          <Bell size={13} className="text-blue-200 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-xs font-bold leading-tight">{announcement.title}</p>
-            <p className="text-blue-100 text-[11px] leading-snug mt-0.5 line-clamp-2">{announcement.message}</p>
-          </div>
-          <button
+        <div className="fixed inset-0 z-[900] flex items-center justify-center px-6">
+          <div
+            className="absolute inset-0 bg-black/60"
             onClick={() => {
               const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
               localStorage.setItem("booka_dismissed_ann", JSON.stringify([...dismissed, announcement.id]));
               setAnnouncement(null);
             }}
-            className="w-5 h-5 flex items-center justify-center text-blue-200 hover:text-white active:scale-90 transition-all shrink-0 mt-0.5"
-          >
-            <X size={13} />
-          </button>
+          />
+          <div className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl" style={{ background: "linear-gradient(160deg, hsl(220 85% 14%) 0%, hsl(213 80% 24%) 100%)" }}>
+            {/* Close button */}
+            <button
+              onClick={() => {
+                const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
+                localStorage.setItem("booka_dismissed_ann", JSON.stringify([...dismissed, announcement.id]));
+                setAnnouncement(null);
+              }}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white transition-all active:scale-90 z-10"
+            >
+              <X size={16} />
+            </button>
+
+            {/* Icon header */}
+            <div className="flex flex-col items-center pt-8 pb-4 px-6">
+              <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center mb-3">
+                <Megaphone size={28} className="text-white" />
+              </div>
+              <p className="text-[11px] font-bold text-blue-300 uppercase tracking-widest">From Rezo</p>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 pb-6 space-y-2 text-center">
+              <p className="text-white text-lg font-extrabold leading-snug">{announcement.title}</p>
+              <p className="text-blue-100 text-sm leading-relaxed">{announcement.message}</p>
+            </div>
+
+            {/* Dismiss button */}
+            <div className="px-6 pb-7">
+              <button
+                onClick={() => {
+                  const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
+                  localStorage.setItem("booka_dismissed_ann", JSON.stringify([...dismissed, announcement.id]));
+                  setAnnouncement(null);
+                }}
+                className="w-full h-11 rounded-2xl bg-white text-slate-900 text-sm font-bold active:scale-95 transition-all hover:bg-blue-50"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
