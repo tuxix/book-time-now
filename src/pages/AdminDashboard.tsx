@@ -1181,10 +1181,10 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // ── Render overview ───────────────────────────────────────────────────────
   const StatCard = ({ label, value, sub, highlight }: { label: string; value: string | number; sub?: string; highlight?: "amber" | "red" }) => (
-    <div className={`rounded-2xl p-4 shadow-sm border ${highlight === "red" ? "bg-red-50 border-red-200" : highlight === "amber" ? "bg-amber-50 border-amber-200" : "bg-white border-slate-100"}`}>
-      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{label}</p>
-      <p className={`text-2xl font-extrabold ${highlight === "red" ? "text-red-700" : highlight === "amber" ? "text-amber-700" : "text-slate-900"}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+    <div className={`rounded-2xl p-4 shadow-sm border ${highlight === "red" ? "bg-red-50 border-red-200" : highlight === "amber" ? "bg-amber-50 border-amber-200" : "bg-card border-border"}`}>
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+      <p className={`text-2xl font-extrabold ${highlight === "red" ? "text-red-700" : highlight === "amber" ? "text-amber-700" : "text-foreground"}`}>{value}</p>
+      {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   );
 
@@ -1204,7 +1204,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       ) : (
         <>
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Platform Summary</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Platform Summary</p>
             <div className="grid grid-cols-2 gap-3">
               <StatCard label="Total Stores" value={stats.totalStores} />
               <StatCard label="Customers" value={stats.totalCustomers} />
@@ -1224,21 +1224,21 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
 
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Insights</p>
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Insights</p>
+            <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border">
               <div className="flex items-center justify-between px-4 py-3.5">
-                <div className="flex items-center gap-2"><TrendingUp size={16} className="text-primary" /><span className="text-sm font-medium text-slate-700">Popular Category</span></div>
-                <span className="text-sm font-bold text-slate-900">{stats.popularCategory}</span>
+                <div className="flex items-center gap-2"><TrendingUp size={16} className="text-primary" /><span className="text-sm font-medium text-foreground">Popular Category</span></div>
+                <span className="text-sm font-bold text-foreground">{stats.popularCategory}</span>
               </div>
               <div className="flex items-center justify-between px-4 py-3.5">
-                <div className="flex items-center gap-2"><Star size={16} className="text-amber-400" /><span className="text-sm font-medium text-slate-700">Most Active Store</span></div>
-                <span className="text-sm font-bold text-slate-900 text-right max-w-[140px] truncate">{stats.mostActiveStore}</span>
+                <div className="flex items-center gap-2"><Star size={16} className="text-amber-400" /><span className="text-sm font-medium text-foreground">Most Active Store</span></div>
+                <span className="text-sm font-bold text-foreground text-right max-w-[140px] truncate">{stats.mostActiveStore}</span>
               </div>
             </div>
           </div>
 
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Platform Health</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Platform Health</p>
             <div className="grid grid-cols-2 gap-3">
               <StatCard label="Suspended Stores" value={String(stats.suspendedStores)} sub={`of ${stats.totalStores} total`} />
               <StatCard label="Suspended Users" value={String(stats.suspendedCustomers)} sub={`of ${stats.totalCustomers} total`} />
@@ -1249,17 +1249,17 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
           {stats.categoryBreakdown.length > 0 && (
             <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Stores by Category</p>
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Stores by Category</p>
+              <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
                 {stats.categoryBreakdown.map((c, i) => {
                   const maxCount = stats.categoryBreakdown[0]?.count ?? 1;
                   return (
                     <div key={c.cat} className={`px-4 py-3 ${i > 0 ? "border-t border-slate-50" : ""}`}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-medium text-slate-700">{c.cat}</span>
-                        <span className="text-xs font-bold text-slate-900">{c.count}</span>
+                        <span className="text-xs font-medium text-foreground">{c.cat}</span>
+                        <span className="text-xs font-bold text-foreground">{c.count}</span>
                       </div>
-                      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                      <div className="w-full bg-secondary rounded-full h-1.5 overflow-hidden">
                         <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${(c.count / maxCount) * 100}%` }}/>
                       </div>
                     </div>
@@ -1270,21 +1270,21 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           )}
 
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Recent Activity</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Recent Activity</p>
             {activityLoading ? (
               <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 rounded-xl booka-shimmer" />)}</div>
             ) : activity.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-6">No recent activity</p>
+              <p className="text-sm text-muted-foreground text-center py-6">No recent activity</p>
             ) : (
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
+              <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border">
                 {activity.map((item) => (
                   <div key={item.id} className="flex items-start gap-3 px-4 py-3">
-                    <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-0.5">
                       {activityIcon(item.type)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-slate-700 leading-snug">{item.description}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{format(new Date(item.timestamp), "MMM d, yyyy h:mm a")}</p>
+                      <p className="text-xs text-muted-foreground leading-snug">{item.description}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{format(new Date(item.timestamp), "MMM d, yyyy h:mm a")}</p>
                     </div>
                   </div>
                 ))}
@@ -1293,9 +1293,9 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
 
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Admin Access</p>
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
-              <p className="text-xs text-slate-500">Enter an email to generate the SQL to grant admin access</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Admin Access</p>
+            <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">Enter an email to generate the SQL to grant admin access</p>
               <div className="flex gap-2">
                 <Input placeholder="user@example.com" value={adminEmailInput} onChange={(e) => setAdminEmailInput(e.target.value)} className="flex-1 h-10 rounded-xl text-sm" />
                 <Button onClick={grantAdmin} disabled={grantingAdmin || !adminEmailInput.trim()} size="sm" className="rounded-xl px-3 h-10">
@@ -1316,7 +1316,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       <div className="p-4 space-y-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Search stores…" value={storeSearch} onChange={(e) => setStoreSearch(e.target.value)} className="pl-9 rounded-xl h-10 text-sm" />
           </div>
           <Button onClick={exportStoresCSV} variant="outline" size="sm" className="rounded-xl h-10 px-3 shrink-0">
@@ -1326,33 +1326,33 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         {storesLoading ? (
           <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-40 rounded-2xl booka-shimmer" />)}</div>
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-8">No stores found</p>
+          <p className="text-sm text-muted-foreground text-center py-8">No stores found</p>
         ) : filtered.map((s) => {
           const inactive = isInactive(s.last_booking_date, 30);
           const lockUntil = s.category_locked_until ? new Date(s.category_locked_until) : null;
           const isCatLocked = !!(lockUntil && lockUntil > new Date());
-          const tierColor = s.subscription_tier === "premium" ? "bg-purple-100 text-purple-700" : s.subscription_tier === "pro" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500";
+          const tierColor = s.subscription_tier === "premium" ? "bg-purple-100 text-purple-700" : s.subscription_tier === "pro" ? "bg-blue-100 text-blue-700" : "bg-secondary text-muted-foreground";
           return (
-                <div key={s.id} className={`rounded-2xl border shadow-sm p-4 space-y-3 ${inactive && s.booking_count > 0 ? "bg-amber-50 border-amber-200" : "bg-white border-slate-100"}`}>
+                <div key={s.id} className={`rounded-2xl border shadow-sm p-4 space-y-3 ${inactive && s.booking_count > 0 ? "bg-amber-50 border-amber-200" : "bg-card border-border"}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-bold text-slate-900 text-sm">{s.name}</p>
+                        <p className="font-bold text-foreground text-sm">{s.name}</p>
                         {s.is_suspended && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">SUSPENDED</span>}
                         {!s.is_approved && <span className="text-[10px] font-bold bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full">PENDING</span>}
                         {inactive && s.booking_count > 0 && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">INACTIVE</span>}
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${tierColor}`}>{s.subscription_tier ?? "free"}</span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">{s.category} · ★ {s.review_count > 0 ? s.rating.toFixed(1) : "New"}</p>
-                      {s.address && <p className="text-xs text-slate-500 mt-0.5 truncate">{s.address}</p>}
-                      {s.phone && <p className="text-xs text-slate-500">{s.phone}</p>}
+                      <p className="text-xs text-muted-foreground mt-0.5">{s.category} · ★ {s.review_count > 0 ? s.rating.toFixed(1) : "New"}</p>
+                      {s.address && <p className="text-xs text-muted-foreground mt-0.5 truncate">{s.address}</p>}
+                      {s.phone && <p className="text-xs text-muted-foreground">{s.phone}</p>}
                       {isCatLocked && <p className="text-[11px] text-orange-500 font-semibold mt-0.5">🔒 Category locked until {format(lockUntil!, "MMM d, yyyy")}</p>}
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                        <p className="text-[11px] text-slate-400">{s.booking_count} bookings</p>
-                        <p className="text-[11px] text-slate-400">{s.active_slots} slots</p>
-                        <p className="text-[11px] text-slate-400">Revenue: {fmtJ(s.total_revenue)}</p>
-                        <p className="text-[11px] text-slate-400">Last booking: {s.last_booking_date ? format(parseISO(s.last_booking_date), "MMM d, yyyy") : "Never"}</p>
-                        <p className="text-[11px] text-slate-400">Joined {format(new Date(s.created_at), "MMM d, yyyy")}</p>
+                        <p className="text-[11px] text-muted-foreground">{s.booking_count} bookings</p>
+                        <p className="text-[11px] text-muted-foreground">{s.active_slots} slots</p>
+                        <p className="text-[11px] text-muted-foreground">Revenue: {fmtJ(s.total_revenue)}</p>
+                        <p className="text-[11px] text-muted-foreground">Last booking: {s.last_booking_date ? format(parseISO(s.last_booking_date), "MMM d, yyyy") : "Never"}</p>
+                        <p className="text-[11px] text-muted-foreground">Joined {format(new Date(s.created_at), "MMM d, yyyy")}</p>
                       </div>
                     </div>
                   </div>
@@ -1360,7 +1360,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                     <button onClick={() => toggleStoreSuspend(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_suspended ? "border-green-200 text-green-700 hover:bg-green-50" : "border-red-200 text-red-600 hover:bg-red-50"}`}>
                       <Ban size={11} />{s.is_suspended ? "Reinstate" : "Suspend"}
                     </button>
-                    <button onClick={() => toggleStoreApprove(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_approved ? "border-slate-200 text-slate-500 hover:bg-slate-50" : "border-green-200 text-green-700 hover:bg-green-50"}`}>
+                    <button onClick={() => toggleStoreApprove(s)} className={`h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all active:scale-95 ${s.is_approved ? "border-border text-muted-foreground hover:bg-secondary" : "border-green-200 text-green-700 hover:bg-green-50"}`}>
                       <CheckCircle2 size={11} />{s.is_approved ? "Revoke" : "Approve"}
                     </button>
                     <button onClick={() => openStoreAction(s, "category")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-purple-200 text-purple-600 hover:bg-purple-50 transition-all active:scale-95">
@@ -1369,7 +1369,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                     <button onClick={() => openStoreAction(s, "tier")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all active:scale-95">
                       <CreditCard size={11} /> Tier
                     </button>
-                    <button onClick={() => openStoreAction(s, "edit")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
+                    <button onClick={() => openStoreAction(s, "edit")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-border text-muted-foreground hover:bg-secondary transition-all active:scale-95">
                       <Pencil size={11} /> Edit
                     </button>
                     {isCatLocked && (
@@ -1377,7 +1377,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                         <Clock size={11} /> Unlock Category
                       </button>
                     )}
-                    <button onClick={() => openStoreAction(s, "notes")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all active:scale-95">
+                    <button onClick={() => openStoreAction(s, "notes")} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-border text-muted-foreground hover:bg-secondary transition-all active:scale-95">
                       <Plus size={11} /> Note
                     </button>
                     {s.phone && (
@@ -1403,7 +1403,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       <div className="p-4 space-y-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Search customers…" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} className="pl-9 rounded-xl h-10 text-sm" />
           </div>
           <Button onClick={exportCustomersCSV} variant="outline" size="sm" className="rounded-xl h-10 px-3 shrink-0">
@@ -1413,30 +1413,30 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         {customersLoading ? (
           <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-28 rounded-2xl booka-shimmer" />)}</div>
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-8">No customers found</p>
+          <p className="text-sm text-muted-foreground text-center py-8">No customers found</p>
         ) : filtered.map((c) => {
           const inactive = isInactive(c.last_booking_date, 60);
           const flagNoShow = c.no_show_count >= 3;
           return (
-            <div key={c.id} className={`rounded-2xl border shadow-sm p-4 space-y-3 ${inactive && c.booking_count > 0 ? "bg-amber-50 border-amber-200" : "bg-white border-slate-100"}`}>
+            <div key={c.id} className={`rounded-2xl border shadow-sm p-4 space-y-3 ${inactive && c.booking_count > 0 ? "bg-amber-50 border-amber-200" : "bg-card border-border"}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-bold text-slate-900 text-sm">{c.full_name || "Anonymous"}</p>
+                    <p className="font-bold text-foreground text-sm">{c.full_name || "Anonymous"}</p>
                     {c.is_suspended && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">SUSPENDED</span>}
                     {inactive && c.booking_count > 0 && <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">INACTIVE</span>}
                     {(c.warning_count ?? 0) >= 3 && <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">HIGH RISK</span>}
                   </div>
-                  {c.phone && <p className="text-xs text-slate-500 mt-0.5">{c.phone}</p>}
+                  {c.phone && <p className="text-xs text-muted-foreground mt-0.5">{c.phone}</p>}
                   {c.is_suspended && c.suspension_reason && (
                     <p className="text-[11px] text-red-600 mt-0.5 italic">Reason: {c.suspension_reason}</p>
                   )}
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                    <p className="text-[11px] text-slate-400">{c.booking_count} bookings</p>
-                    <p className="text-[11px] text-slate-400">Spent: {fmtJ(c.total_spent)}</p>
-                    <p className={`text-[11px] font-semibold ${flagNoShow ? "text-red-500" : "text-slate-400"}`}>No-shows: {c.no_show_count}</p>
-                    <p className="text-[11px] text-slate-400">Last: {c.last_booking_date ? format(parseISO(c.last_booking_date), "MMM d, yyyy") : "Never"}</p>
-                    <p className="text-[11px] text-slate-400">Joined {format(new Date(c.created_at), "MMM d, yyyy")}</p>
+                    <p className="text-[11px] text-muted-foreground">{c.booking_count} bookings</p>
+                    <p className="text-[11px] text-muted-foreground">Spent: {fmtJ(c.total_spent)}</p>
+                    <p className={`text-[11px] font-semibold ${flagNoShow ? "text-red-500" : "text-muted-foreground"}`}>No-shows: {c.no_show_count}</p>
+                    <p className="text-[11px] text-muted-foreground">Last: {c.last_booking_date ? format(parseISO(c.last_booking_date), "MMM d, yyyy") : "Never"}</p>
+                    <p className="text-[11px] text-muted-foreground">Joined {format(new Date(c.created_at), "MMM d, yyyy")}</p>
                     {c.warning_count != null && c.warning_count > 0 && (
                       <p className={`text-[11px] font-semibold ${c.warning_count >= 3 ? "text-orange-500" : "text-amber-500"}`}>⚠️ {c.warning_count} warning{c.warning_count !== 1 ? "s" : ""}</p>
                     )}
@@ -1453,7 +1453,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                 <button onClick={() => issueWarning(c)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-orange-200 text-orange-600 hover:bg-orange-50 transition-all active:scale-95">
                   <AlertCircle size={11}/> Warn
                 </button>
-                <button onClick={() => viewCustomerBookings(c)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
+                <button onClick={() => viewCustomerBookings(c)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-border text-muted-foreground hover:bg-secondary transition-all active:scale-95">
                   <Calendar size={11}/> Bookings
                 </button>
                 <button onClick={() => sendPasswordReset(c.email)} className="h-8 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border border-amber-200 text-amber-600 hover:bg-amber-50 transition-all active:scale-95">
@@ -1478,24 +1478,24 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       {reportsLoading ? (
         <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-32 rounded-2xl booka-shimmer" />)}</div>
       ) : reports.length === 0 ? (
-        <div className="text-center py-12"><Flag size={36} className="mx-auto mb-3 text-slate-300" /><p className="text-sm text-slate-400">No reports yet</p></div>
+        <div className="text-center py-12"><Flag size={36} className="mx-auto mb-3 text-muted-foreground/50" /><p className="text-sm text-muted-foreground">No reports yet</p></div>
       ) : reports.map((r) => (
-        <div key={r.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+        <div key={r.id} className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <p className="font-bold text-slate-900 text-sm">{r.store_name}</p>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${r.status === "pending" ? "bg-amber-100 text-amber-700" : r.status === "reviewed" ? "bg-slate-100 text-slate-500" : "bg-red-100 text-red-600"}`}>
+                <p className="font-bold text-foreground text-sm">{r.store_name}</p>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${r.status === "pending" ? "bg-amber-100 text-amber-700" : r.status === "reviewed" ? "bg-secondary text-muted-foreground" : "bg-red-100 text-red-600"}`}>
                   {r.status.toUpperCase()}
                 </span>
               </div>
-              <p className="text-xs text-slate-600 mt-1 line-clamp-2">{r.reason}</p>
-              <p className="text-[11px] text-slate-400 mt-1">{format(new Date(r.created_at), "MMM d, yyyy h:mm a")}</p>
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{r.reason}</p>
+              <p className="text-[11px] text-muted-foreground mt-1">{format(new Date(r.created_at), "MMM d, yyyy h:mm a")}</p>
             </div>
           </div>
           {r.status === "pending" && (
             <div className="flex gap-2">
-              <button onClick={() => dismissReport(r.id)} className="flex-1 h-8 rounded-xl text-xs font-semibold border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center gap-1 active:scale-95 transition-all">
+              <button onClick={() => dismissReport(r.id)} className="flex-1 h-8 rounded-xl text-xs font-semibold border border-border text-muted-foreground hover:bg-secondary flex items-center justify-center gap-1 active:scale-95 transition-all">
                 <X size={12} /> Dismiss
               </button>
               <button onClick={() => suspendStoreFromReport(r)} className="flex-1 h-8 rounded-xl text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center gap-1 active:scale-95 transition-all">
@@ -1512,7 +1512,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const statusColors: Record<string, string> = {
     scheduled: "bg-blue-100 text-blue-700", completed: "bg-green-100 text-green-700",
     cancelled: "bg-red-100 text-red-600", arrived: "bg-purple-100 text-purple-700",
-    in_progress: "bg-orange-100 text-orange-700", no_show: "bg-slate-100 text-slate-600",
+    in_progress: "bg-orange-100 text-orange-700", no_show: "bg-secondary text-muted-foreground",
   };
 
   const renderBookings = () => (
@@ -1538,26 +1538,26 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       {bookingsLoading ? (
         <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-28 rounded-2xl booka-shimmer" />)}</div>
       ) : bookings.length === 0 ? (
-        <p className="text-sm text-slate-400 text-center py-8">No bookings found</p>
+        <p className="text-sm text-muted-foreground text-center py-8">No bookings found</p>
       ) : bookings.map((b) => (
-        <div key={b.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-1.5">
+        <div key={b.id} className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-1.5">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-bold text-slate-900 text-sm truncate">{b.store_name}</p>
-              <p className="text-xs text-slate-500">{b.customer_name} · {b.store_category}</p>
-              {b.service_names && b.service_names !== "—" && <p className="text-xs text-slate-500 mt-0.5 truncate">{b.service_names}</p>}
+              <p className="font-bold text-foreground text-sm truncate">{b.store_name}</p>
+              <p className="text-xs text-muted-foreground">{b.customer_name} · {b.store_category}</p>
+              {b.service_names && b.service_names !== "—" && <p className="text-xs text-muted-foreground mt-0.5 truncate">{b.service_names}</p>}
             </div>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${statusColors[b.status] ?? "bg-slate-100 text-slate-600"}`}>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${statusColors[b.status] ?? "bg-secondary text-muted-foreground"}`}>
               {b.status.replace("_", " ").toUpperCase()}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500">{b.reservation_date} · {b.start_time?.slice(0, 5)}</p>
-            {b.total_amount != null && <p className="text-xs font-bold text-slate-900">{fmtJ(b.total_amount)}</p>}
+            <p className="text-xs text-muted-foreground">{b.reservation_date} · {b.start_time?.slice(0, 5)}</p>
+            {b.total_amount != null && <p className="text-xs font-bold text-foreground">{fmtJ(b.total_amount)}</p>}
           </div>
           <div className="flex items-center justify-between">
-            {b.commitment_fee_amount != null && <p className="text-[11px] text-slate-400">Deposit: {fmtJ(b.commitment_fee_amount)}</p>}
-            {b.payment_status && <p className="text-[11px] text-slate-400">Payment: {b.payment_status}</p>}
+            {b.commitment_fee_amount != null && <p className="text-[11px] text-muted-foreground">Deposit: {fmtJ(b.commitment_fee_amount)}</p>}
+            {b.payment_status && <p className="text-[11px] text-muted-foreground">Payment: {b.payment_status}</p>}
           </div>
         </div>
       ))}
@@ -1572,7 +1572,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       ) : (
         <>
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Revenue Summary</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Revenue Summary</p>
             <div className="grid grid-cols-2 gap-3">
               <StatCard label="All Time" value={fmtJ(revenueData.allTime)} sub="completed bookings" />
               <StatCard label="This Month" value={fmtJ(revenueData.thisMonth)} />
@@ -1582,8 +1582,8 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
 
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Monthly Revenue — Last 12 Months</p>
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Monthly Revenue — Last 12 Months</p>
+            <div className="bg-card rounded-2xl border border-border shadow-sm p-4">
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={revenueData.monthly} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1597,17 +1597,17 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
 
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">By Category</p>
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">By Category</p>
+            <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border">
               {revenueData.byCategory.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-6">No data</p>
+                <p className="text-sm text-muted-foreground text-center py-6">No data</p>
               ) : revenueData.byCategory.map((cat) => (
                 <div key={cat.category} className="flex items-center justify-between px-4 py-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">{cat.category}</p>
-                    <p className="text-[11px] text-slate-400">{cat.bookings} bookings</p>
+                    <p className="text-sm font-semibold text-foreground">{cat.category}</p>
+                    <p className="text-[11px] text-muted-foreground">{cat.bookings} bookings</p>
                   </div>
-                  <p className="text-sm font-bold text-slate-900">{fmtJ(cat.revenue)}</p>
+                  <p className="text-sm font-bold text-foreground">{fmtJ(cat.revenue)}</p>
                 </div>
               ))}
             </div>
@@ -1615,48 +1615,48 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
           {/* ── Promotions Impact ── */}
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Promotions Impact</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Promotions Impact</p>
             {promoImpact ? (
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
-                  <p className="text-[11px] text-slate-400">Discount Absorbed (Month)</p>
+                <div className="bg-card rounded-2xl border border-border shadow-sm p-3">
+                  <p className="text-[11px] text-muted-foreground">Discount Absorbed (Month)</p>
                   <p className="text-xl font-extrabold text-green-600">J${promoImpact.monthDiscount.toLocaleString()}</p>
                 </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
-                  <p className="text-[11px] text-slate-400">Discount Absorbed (All Time)</p>
+                <div className="bg-card rounded-2xl border border-border shadow-sm p-3">
+                  <p className="text-[11px] text-muted-foreground">Discount Absorbed (All Time)</p>
                   <p className="text-xl font-extrabold text-green-600">J${promoImpact.allTimeDiscount.toLocaleString()}</p>
                 </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
-                  <p className="text-[11px] text-slate-400">Promo Bookings (Month)</p>
-                  <p className="text-xl font-extrabold text-slate-800">{promoImpact.monthBookings}</p>
+                <div className="bg-card rounded-2xl border border-border shadow-sm p-3">
+                  <p className="text-[11px] text-muted-foreground">Promo Bookings (Month)</p>
+                  <p className="text-xl font-extrabold text-foreground">{promoImpact.monthBookings}</p>
                 </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
-                  <p className="text-[11px] text-slate-400">Avg Discount per Booking</p>
-                  <p className="text-xl font-extrabold text-slate-800">J${promoImpact.avgDiscount.toLocaleString()}</p>
+                <div className="bg-card rounded-2xl border border-border shadow-sm p-3">
+                  <p className="text-[11px] text-muted-foreground">Avg Discount per Booking</p>
+                  <p className="text-xl font-extrabold text-foreground">J${promoImpact.avgDiscount.toLocaleString()}</p>
                 </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 col-span-2">
-                  <p className="text-[11px] text-slate-400">Net Rezo Commission This Month (after discounts)</p>
+                <div className="bg-card rounded-2xl border border-border shadow-sm p-3 col-span-2">
+                  <p className="text-[11px] text-muted-foreground">Net Rezo Commission This Month (after discounts)</p>
                   <p className="text-2xl font-extrabold text-blue-900">J${promoImpact.netCommissionMonth.toLocaleString()}</p>
                 </div>
               </div>
             ) : (
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-center text-slate-400 text-sm">No promo data yet</div>
+              <div className="bg-card rounded-2xl border border-border shadow-sm p-4 text-center text-muted-foreground text-sm">No promo data yet</div>
             )}
           </div>
 
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Top 10 Stores by Revenue</p>
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Top 10 Stores by Revenue</p>
+            <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border">
               {revenueData.byStore.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-6">No data</p>
+                <p className="text-sm text-muted-foreground text-center py-6">No data</p>
               ) : revenueData.byStore.map((s, i) => (
                 <div key={s.name + i} className="flex items-center gap-3 px-4 py-3">
-                  <span className="text-xs font-bold text-slate-400 w-5 shrink-0">{i + 1}</span>
+                  <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">{i + 1}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{s.name}</p>
-                    <p className="text-[11px] text-slate-400">{s.bookings} bookings</p>
+                    <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
+                    <p className="text-[11px] text-muted-foreground">{s.bookings} bookings</p>
                   </div>
-                  <p className="text-sm font-bold text-slate-900 shrink-0">{fmtJ(s.revenue)}</p>
+                  <p className="text-sm font-bold text-foreground shrink-0">{fmtJ(s.revenue)}</p>
                 </div>
               ))}
             </div>
@@ -1670,8 +1670,8 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const renderAnnouncements = () => (
     <div className="p-4 space-y-6">
       <div>
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Compose Announcement</p>
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Compose Announcement</p>
+        <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
           <Input placeholder="Title" value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} className="rounded-xl text-sm" />
           <Textarea placeholder="Message…" value={annMessage} onChange={(e) => setAnnMessage(e.target.value)} className="rounded-xl text-sm resize-none" rows={3} />
           <select value={annAudience} onChange={(e) => setAnnAudience(e.target.value as any)} className="w-full rounded-xl h-10 text-sm border border-input bg-background px-3 focus:outline-none focus:ring-1 focus:ring-primary">
@@ -1687,25 +1687,25 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       </div>
 
       <div>
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Sent Announcements</p>
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Sent Announcements</p>
         {annLoading ? (
           <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-20 rounded-2xl booka-shimmer" />)}</div>
         ) : announcements.length === 0 ? (
-          <div className="text-center py-12"><Megaphone size={36} className="mx-auto mb-3 text-slate-300" /><p className="text-sm text-slate-400">No announcements sent yet</p></div>
+          <div className="text-center py-12"><Megaphone size={36} className="mx-auto mb-3 text-muted-foreground/50" /><p className="text-sm text-muted-foreground">No announcements sent yet</p></div>
         ) : announcements.map((a) => (
-          <div key={a.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-2 mb-3">
+          <div key={a.id} className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-2 mb-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <p className="font-bold text-slate-900 text-sm">{a.title}</p>
-                <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{a.message}</p>
+                <p className="font-bold text-foreground text-sm">{a.title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{a.message}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${a.audience === "all" ? "bg-blue-100 text-blue-700" : a.audience === "stores" ? "bg-purple-100 text-purple-700" : "bg-green-100 text-green-700"}`}>
                     {a.audience === "all" ? "All Users" : a.audience === "stores" ? "Stores" : "Customers"}
                   </span>
-                  <p className="text-[11px] text-slate-400">{format(new Date(a.created_at), "MMM d, yyyy h:mm a")}</p>
+                  <p className="text-[11px] text-muted-foreground">{format(new Date(a.created_at), "MMM d, yyyy h:mm a")}</p>
                 </div>
               </div>
-              <button onClick={() => deleteAnnouncement(a.id)} className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all active:scale-90 shrink-0">
+              <button onClick={() => deleteAnnouncement(a.id)} className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-all active:scale-90 shrink-0">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -1720,13 +1720,13 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     if (selectedConv) {
       return (
         <div className="flex flex-col h-full">
-          <div className="px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-3">
-            <button onClick={() => { setSelectedConv(null); setThread([]); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100 active:scale-90 transition-all">
+          <div className="px-4 py-3 border-b border-border bg-card flex items-center gap-3">
+            <button onClick={() => { setSelectedConv(null); setThread([]); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary active:scale-90 transition-all">
               <ArrowLeft size={16} />
             </button>
             <div className="min-w-0 flex-1">
-              <p className="font-bold text-slate-900 text-sm truncate">{selectedConv.store_name}</p>
-              <p className="text-xs text-slate-500">{selectedConv.customer_name}</p>
+              <p className="font-bold text-foreground text-sm truncate">{selectedConv.store_name}</p>
+              <p className="text-xs text-muted-foreground">{selectedConv.customer_name}</p>
             </div>
             {selectedConv.has_report && <Flag size={16} className="text-red-500 shrink-0" />}
           </div>
@@ -1734,13 +1734,13 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             {threadLoading ? (
               <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className={`h-12 rounded-2xl booka-shimmer ${i % 2 === 0 ? "ml-8" : "mr-8"}`} />)}</div>
             ) : thread.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-8">No messages</p>
+              <p className="text-sm text-muted-foreground text-center py-8">No messages</p>
             ) : thread.map((msg) => (
               <div key={msg.id} className={`flex ${msg.sender_role === "store" ? "justify-start" : "justify-end"}`}>
-                <div className={`max-w-[80%] rounded-2xl px-3 py-2 ${msg.sender_role === "store" ? "bg-slate-100 text-slate-800" : "bg-[#1e3a8a] text-white"}`}>
+                <div className={`max-w-[80%] rounded-2xl px-3 py-2 ${msg.sender_role === "store" ? "bg-secondary text-foreground" : "bg-[#1e3a8a] text-white"}`}>
                   <p className="text-xs font-semibold mb-0.5 opacity-60">{msg.sender_role === "store" ? selectedConv.store_name : selectedConv.customer_name}</p>
                   <p className="text-sm">{msg.message}</p>
-                  <p className={`text-[10px] mt-1 ${msg.sender_role === "store" ? "text-slate-400" : "text-blue-200"}`}>{format(new Date(msg.created_at), "h:mm a")}</p>
+                  <p className={`text-[10px] mt-1 ${msg.sender_role === "store" ? "text-muted-foreground" : "text-blue-200"}`}>{format(new Date(msg.created_at), "h:mm a")}</p>
                 </div>
               </div>
             ))}
@@ -1753,28 +1753,28 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     return (
       <div className="p-4 space-y-3">
         <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search by store or customer…" value={msgSearch} onChange={(e) => setMsgSearch(e.target.value)} className="pl-9 rounded-xl h-10 text-sm" />
         </div>
         {msgsLoading ? (
           <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-16 rounded-2xl booka-shimmer" />)}</div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-12"><MessageSquare size={36} className="mx-auto mb-3 text-slate-300" /><p className="text-sm text-slate-400">No conversations yet</p></div>
+          <div className="text-center py-12"><MessageSquare size={36} className="mx-auto mb-3 text-muted-foreground/50" /><p className="text-sm text-muted-foreground">No conversations yet</p></div>
         ) : filtered.map((c) => (
-          <button key={c.key} onClick={() => { setSelectedConv(c); fetchThread(c.reservation_id); }} className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-left flex items-start gap-3 active:scale-[0.98] transition-all hover:bg-slate-50">
+          <button key={c.key} onClick={() => { setSelectedConv(c); fetchThread(c.reservation_id); }} className="w-full bg-card rounded-2xl border border-border shadow-sm p-4 text-left flex items-start gap-3 active:scale-[0.98] transition-all hover:bg-secondary">
             <div className="w-9 h-9 rounded-full bg-[#1e3a8a]/10 flex items-center justify-center shrink-0">
               <MessageSquare size={16} className="text-[#1e3a8a]" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
-                <p className="font-bold text-slate-900 text-sm truncate">{c.store_name}</p>
+                <p className="font-bold text-foreground text-sm truncate">{c.store_name}</p>
                 <div className="flex items-center gap-1 shrink-0">
                   {c.has_report && <Flag size={12} className="text-red-500" />}
-                  <p className="text-[11px] text-slate-400">{format(new Date(c.last_message_at), "MMM d")}</p>
+                  <p className="text-[11px] text-muted-foreground">{format(new Date(c.last_message_at), "MMM d")}</p>
                 </div>
               </div>
-              <p className="text-xs text-slate-500">{c.customer_name}</p>
-              <p className="text-xs text-slate-400 truncate mt-0.5">{c.last_message}</p>
+              <p className="text-xs text-muted-foreground">{c.customer_name}</p>
+              <p className="text-xs text-muted-foreground truncate mt-0.5">{c.last_message}</p>
             </div>
           </button>
         ))}
@@ -1785,11 +1785,11 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   // ── renderContent ─────────────────────────────────────────────────────────
   const renderDisputes = () => (
     <div className="p-4 space-y-3">
-      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Customer Disputes</p>
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">Customer Disputes</p>
       {disputesLoading ? (
         <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="h-24 rounded-2xl booka-shimmer" />)}</div>
       ) : disputes.length === 0 ? (
-        <div className="text-center py-16 text-slate-400">
+        <div className="text-center py-16 text-muted-foreground">
           <Shield size={36} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">No disputes filed yet</p>
         </div>
@@ -1797,20 +1797,20 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         disputes.map((d) => {
           const statusColors: Record<string, string> = { open: "bg-amber-100 text-amber-700", resolved: "bg-green-100 text-green-700", rejected: "bg-red-100 text-red-700" };
           return (
-            <div key={d.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+            <div key={d.id} className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-bold text-slate-900">{d.reason}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{d.customer_name} vs {d.store_name} · {format(new Date(d.created_at), "MMM d, yyyy")}</p>
+                  <p className="text-sm font-bold text-foreground">{d.reason}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{d.customer_name} vs {d.store_name} · {format(new Date(d.created_at), "MMM d, yyyy")}</p>
                 </div>
-                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColors[d.status] ?? "bg-slate-100 text-slate-600"}`}>{d.status}</span>
+                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColors[d.status] ?? "bg-secondary text-muted-foreground"}`}>{d.status}</span>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">{d.description}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{d.description}</p>
               {d.evidence_url && (
                 <a href={d.evidence_url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">View Evidence</a>
               )}
               <div>
-                <p className="text-xs font-semibold text-slate-500 mb-1">Refund Amount (J$)</p>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Refund Amount (J$)</p>
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
@@ -1820,19 +1820,19 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                     className="rounded-xl text-xs h-8 flex-1"
                   />
                   {d.refund_status && (
-                    <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${d.refund_status === "approved" ? "bg-green-100 text-green-700" : d.refund_status === "denied" ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-500"}`}>
+                    <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${d.refund_status === "approved" ? "bg-green-100 text-green-700" : d.refund_status === "denied" ? "bg-red-100 text-red-600" : "bg-secondary text-muted-foreground"}`}>
                       {d.refund_status}
                     </span>
                   )}
                 </div>
               </div>
               <div>
-                <p className="text-xs font-semibold text-slate-500 mb-1">Admin Notes</p>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Admin Notes</p>
                 <textarea
                   value={disputeNotes[d.id] ?? ""}
                   onChange={(e) => setDisputeNotes((prev) => ({ ...prev, [d.id]: e.target.value }))}
                   rows={2}
-                  className="w-full text-xs rounded-xl border border-slate-200 p-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full text-xs rounded-xl border border-input p-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 bg-background text-foreground"
                   placeholder="Add internal notes…"
                 />
               </div>
@@ -1855,22 +1855,22 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const renderBugReports = () => (
     <div className="p-4 space-y-3">
-      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Bug Reports ({bugReports.length})</p>
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">Bug Reports ({bugReports.length})</p>
       {bugsLoading ? (
         <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="h-20 rounded-2xl booka-shimmer" />)}</div>
       ) : bugReports.length === 0 ? (
-        <div className="text-center py-16 text-slate-400">
+        <div className="text-center py-16 text-muted-foreground">
           <AlertCircle size={36} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">No bug reports yet</p>
         </div>
       ) : (
         bugReports.map((r) => (
-          <div key={r.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-2">
+          <div key={r.id} className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-slate-600">{r.user_name}</p>
-              <p className="text-[11px] text-slate-400">{format(new Date(r.created_at), "MMM d, h:mm a")}</p>
+              <p className="text-xs font-semibold text-muted-foreground">{r.user_name}</p>
+              <p className="text-[11px] text-muted-foreground">{format(new Date(r.created_at), "MMM d, h:mm a")}</p>
             </div>
-            <p className="text-sm text-slate-800 leading-relaxed">{r.description}</p>
+            <p className="text-sm text-foreground leading-relaxed">{r.description}</p>
             {r.screenshot_url && (
               <a href={r.screenshot_url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">View Screenshot</a>
             )}
@@ -1889,18 +1889,18 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     return (
       <div className="p-4 space-y-4">
         {platformLoading ? <div className="space-y-3">{[1,2,3].map(i=><div key={i} className="h-16 rounded-2xl booka-shimmer"/>)}</div> : <>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Commission & Fees</p>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Commission & Fees</p>
           {numericKeys.map((key) => (
-            <div key={key} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-              <p className="text-sm font-semibold text-slate-800 mb-2 capitalize">{key.replace(/_/g," ")}</p>
+            <div key={key} className="bg-card rounded-2xl border border-border shadow-sm p-4">
+              <p className="text-sm font-semibold text-foreground mb-2 capitalize">{key.replace(/_/g," ")}</p>
               <div className="flex gap-2">
                 <Input type="number" value={platformEdits[key] ?? ""} onChange={e=>setPlatformEdits(p=>({...p,[key]:e.target.value}))} className="rounded-xl flex-1" />
                 <Button size="sm" className="rounded-xl" onClick={()=>savePlatformSetting(key)} disabled={savingPlatform}>Save</Button>
               </div>
             </div>
           ))}
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Maintenance Mode</p>
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-2">Maintenance Mode</p>
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Maintenance Mode</span>
               <button onClick={()=>{const v=platformEdits[maintenanceKey]==="true"?"false":"true";setPlatformEdits(p=>({...p,[maintenanceKey]:v}));savePlatformSetting(maintenanceKey);}}
@@ -1911,8 +1911,8 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             <Textarea value={platformEdits[maintenanceMsgKey]??""} onChange={e=>setPlatformEdits(p=>({...p,[maintenanceMsgKey]:e.target.value}))} rows={2} className="rounded-xl text-xs resize-none" placeholder="Maintenance message…"/>
             <Button size="sm" className="rounded-xl w-full" onClick={()=>savePlatformSetting(maintenanceMsgKey)} disabled={savingPlatform}>Save Message</Button>
           </div>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Feature Flags</p>
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-50">
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-2">Feature Flags</p>
+          <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border">
             {featureKeys.map((key)=>(
               <div key={key} className="flex items-center justify-between px-4 py-3">
                 <span className="text-sm font-medium capitalize">{key.replace(/_enabled/,"").replace(/_/g," ")}</span>
@@ -1923,8 +1923,8 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
               </div>
             ))}
           </div>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Word Blacklist</p>
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-2">Word Blacklist</p>
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
             <div className="flex gap-2">
               <Input value={newBlackWord} onChange={e=>setNewBlackWord(e.target.value)} placeholder="Add word or phrase…" className="rounded-xl flex-1 text-sm" onKeyDown={e=>{if(e.key==="Enter")addBlacklistWord();}}/>
               <Button size="sm" className="rounded-xl" onClick={addBlacklistWord}><Plus size={14}/></Button>
@@ -1948,7 +1948,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     <div className="p-4 space-y-3">
       <div className="flex gap-2 mb-3">
         {(["subscriptions","payouts","refunds"] as const).map(t=>(
-          <button key={t} onClick={()=>{ setFinancialSubTab(t); if(t==="payouts") fetchPayoutsData(); }} className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${financialSubTab===t?"bg-slate-800 text-white border-slate-800":"bg-white border-slate-200 text-slate-600"}`}>
+          <button key={t} onClick={()=>{ setFinancialSubTab(t); if(t==="payouts") fetchPayoutsData(); }} className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${financialSubTab===t?"bg-slate-800 text-white border-slate-800":"bg-card border-border text-muted-foreground"}`}>
             {t==="subscriptions"?"Plans":t==="payouts"?"Payouts":"Refunds"}
           </button>
         ))}
@@ -1957,15 +1957,15 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         <div className="space-y-4">
           {[{label:"Premium",stores:premiumStores,color:"amber"},{label:"Pro",stores:proStores,color:"blue"},{label:"Free",stores:freeStores,color:"slate"}].map(({label,stores,color})=>(
             <div key={label}>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">{label} ({stores.length})</p>
-              {stores.length===0?<p className="text-xs text-slate-400 text-center py-3">None</p>:stores.map(s=>(
-                <div key={s.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 mb-2">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">{label} ({stores.length})</p>
+              {stores.length===0?<p className="text-xs text-muted-foreground text-center py-3">None</p>:stores.map(s=>(
+                <div key={s.id} className="bg-card rounded-2xl border border-border shadow-sm p-3 mb-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{s.name}</p>
-                      <p className="text-xs text-slate-400">{s.category} · {s.booking_count} bookings · {fmtJ(s.total_revenue)}</p>
+                      <p className="text-sm font-semibold text-foreground">{s.name}</p>
+                      <p className="text-xs text-muted-foreground">{s.category} · {s.booking_count} bookings · {fmtJ(s.total_revenue)}</p>
                     </div>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${label==="Premium"?"bg-amber-100 text-amber-700":label==="Pro"?"bg-blue-100 text-blue-700":"bg-slate-100 text-slate-600"}`}>{label}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${label==="Premium"?"bg-amber-100 text-amber-700":label==="Pro"?"bg-blue-100 text-blue-700":"bg-secondary text-muted-foreground"}`}>{label}</span>
                   </div>
                 </div>
               ))}
@@ -1975,48 +1975,48 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       ) : financialSubTab === "payouts" ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Pending Store Payouts</p>
-            <button onClick={fetchPayoutsData} className="p-1.5 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50"><RefreshCw size={13}/></button>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Pending Store Payouts</p>
+            <button onClick={fetchPayoutsData} className="p-1.5 rounded-xl border border-border text-muted-foreground hover:bg-secondary"><RefreshCw size={13}/></button>
           </div>
           {payoutsLoading ? (
             <div className="space-y-2">{[1,2,3].map(i=><div key={i} className="h-16 rounded-2xl booka-shimmer"/>)}</div>
           ) : payoutRows.length === 0 ? (
-            <div className="text-center py-16 text-slate-400">
+            <div className="text-center py-16 text-muted-foreground">
               <DollarSign size={36} className="mx-auto mb-3 opacity-30"/>
               <p className="text-sm">No pending payouts</p>
             </div>
           ) : (
             <>
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 grid grid-cols-2 gap-3">
+              <div className="bg-card rounded-2xl border border-border shadow-sm p-4 grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Total Pending</p>
-                  <p className="text-lg font-extrabold text-slate-900">{fmtJ(payoutRows.reduce((s, r) => s + r.unpaid, 0))}</p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Total Pending</p>
+                  <p className="text-lg font-extrabold text-foreground">{fmtJ(payoutRows.reduce((s, r) => s + r.unpaid, 0))}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Rezo Commission</p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Rezo Commission</p>
                   <p className="text-lg font-extrabold text-green-700">{fmtJ(payoutRows.reduce((s, r) => s + r.total_commission, 0))}</p>
                 </div>
               </div>
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
+              <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border">
                 {payoutRows.map(r => (
                   <div key={r.store_id} className="flex items-center gap-3 px-4 py-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 truncate">{r.name}</p>
-                      <p className="text-[11px] text-slate-400">{r.booking_count} completed bookings · commission {fmtJ(r.total_commission)}</p>
+                      <p className="text-sm font-semibold text-foreground truncate">{r.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{r.booking_count} completed bookings · commission {fmtJ(r.total_commission)}</p>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-bold text-amber-700">{fmtJ(r.unpaid)}</p>
-                      <p className="text-[10px] text-slate-400">unpaid</p>
+                      <p className="text-[10px] text-muted-foreground">unpaid</p>
                     </div>
                   </div>
                 ))}
               </div>
-              <p className="text-[11px] text-slate-400 text-center">Weekly payouts processed every Monday. Mark reservations as paid in the Bookings tab once processed.</p>
+              <p className="text-[11px] text-muted-foreground text-center">Weekly payouts processed every Monday. Mark reservations as paid in the Bookings tab once processed.</p>
             </>
           )}
         </div>
       ) : (
-        <div className="text-center py-16 text-slate-400">
+        <div className="text-center py-16 text-muted-foreground">
           <DollarSign size={36} className="mx-auto mb-3 opacity-30"/>
           <p className="text-sm">Refund management — connect to payment provider to process refunds</p>
         </div>
@@ -2029,15 +2029,15 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     <div className="p-4 space-y-3">
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {(["photos","reviews","flagged","blacklist"] as const).map(t=>(
-          <button key={t} onClick={()=>setModerationSubTab(t)} className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${moderationSubTab===t?"bg-slate-800 text-white border-slate-800":"bg-white border-slate-200 text-slate-600"}`}>
+          <button key={t} onClick={()=>setModerationSubTab(t)} className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${moderationSubTab===t?"bg-slate-800 text-white border-slate-800":"bg-card border-border text-muted-foreground"}`}>
             {t==="photos"?"Photos":t==="reviews"?"Reviews":t==="flagged"?"Flagged":"Blacklist"}
           </button>
         ))}
-        <button onClick={fetchModerationData} className="shrink-0 p-1.5 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50"><RefreshCw size={13}/></button>
+        <button onClick={fetchModerationData} className="shrink-0 p-1.5 rounded-xl border border-border text-muted-foreground hover:bg-secondary"><RefreshCw size={13}/></button>
       </div>
       {moderationLoading ? <div className="space-y-2">{[1,2,3].map(i=><div key={i} className="h-20 rounded-2xl booka-shimmer"/>)}</div> :
         moderationSubTab==="photos" ? (
-          storePhotos.length===0 ? <p className="text-sm text-slate-400 text-center py-8">No photos yet</p> :
+          storePhotos.length===0 ? <p className="text-sm text-muted-foreground text-center py-8">No photos yet</p> :
           <div className="grid grid-cols-2 gap-2">
             {storePhotos.map(p=>(
               <div key={p.id} className="relative rounded-xl overflow-hidden border border-slate-100">
@@ -2050,31 +2050,31 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             ))}
           </div>
         ) : moderationSubTab==="reviews" ? (
-          storeReviews.length===0 ? <p className="text-sm text-slate-400 text-center py-8">No reviews yet</p> :
+          storeReviews.length===0 ? <p className="text-sm text-muted-foreground text-center py-8">No reviews yet</p> :
           storeReviews.map(r=>(
-            <div key={r.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-2">
+            <div key={r.id} className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">{r.store_name}</p>
-                  <p className="text-xs text-slate-400">{r.reviewer_name} · {"★".repeat(r.rating)}{"☆".repeat(5-r.rating)}</p>
+                  <p className="text-sm font-semibold text-foreground">{r.store_name}</p>
+                  <p className="text-xs text-muted-foreground">{r.reviewer_name} · {"★".repeat(r.rating)}{"☆".repeat(5-r.rating)}</p>
                 </div>
                 <button onClick={()=>deleteReview(r.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={13}/></button>
               </div>
-              <p className="text-xs text-slate-600">{r.comment}</p>
+              <p className="text-xs text-muted-foreground">{r.comment}</p>
             </div>
           ))
         ) : moderationSubTab==="flagged" ? (
-          flaggedMessages.length===0 ? <p className="text-sm text-slate-400 text-center py-8">No flagged messages</p> :
+          flaggedMessages.length===0 ? <p className="text-sm text-muted-foreground text-center py-8">No flagged messages</p> :
           flaggedMessages.map(f=>(
-            <div key={f.id} className="bg-white rounded-2xl border border-amber-200 shadow-sm p-4 space-y-2">
+            <div key={f.id} className="bg-card rounded-2xl border border-amber-200 shadow-sm p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">{f.store_name ?? "Unknown Store"}</p>
-                  <p className="text-xs text-slate-400">Keyword: <span className="font-bold text-red-500">{f.flagged_keyword}</span></p>
+                  <p className="text-sm font-semibold text-foreground">{f.store_name ?? "Unknown Store"}</p>
+                  <p className="text-xs text-muted-foreground">Keyword: <span className="font-bold text-red-500">{f.flagged_keyword}</span></p>
                 </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${f.status==="pending"?"bg-amber-100 text-amber-700":f.status==="dismissed"?"bg-slate-100 text-slate-500":"bg-green-100 text-green-700"}`}>{f.status}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${f.status==="pending"?"bg-amber-100 text-amber-700":f.status==="dismissed"?"bg-secondary text-muted-foreground":"bg-green-100 text-green-700"}`}>{f.status}</span>
               </div>
-              {f.message_content && <p className="text-xs text-slate-500 italic">"{f.message_content}"</p>}
+              {f.message_content && <p className="text-xs text-muted-foreground italic">"{f.message_content}"</p>}
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" className="flex-1 rounded-xl text-xs" onClick={()=>updateFlaggedStatus(f.id,"dismissed")}>Dismiss</Button>
                 <Button size="sm" className="flex-1 rounded-xl text-xs bg-red-600 hover:bg-red-700 text-white border-0" onClick={()=>updateFlaggedStatus(f.id,"actioned")}>Action</Button>
@@ -2082,7 +2082,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             </div>
           ))
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
             <div className="flex gap-2">
               <Input value={newBlackWord} onChange={e=>setNewBlackWord(e.target.value)} placeholder="Add word or phrase…" className="rounded-xl flex-1 text-sm" onKeyDown={e=>{if(e.key==="Enter")addBlacklistWord();}}/>
               <Button size="sm" className="rounded-xl" onClick={addBlacklistWord}><Plus size={14}/></Button>
@@ -2104,13 +2104,13 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   // ── Communication ──────────────────────────────────────────────────────────
   const renderCommunication = () => (
     <div className="p-4 space-y-4">
-      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Send Notification</p>
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Send Notification</p>
+      <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
         <Input value={notifTitle} onChange={e=>setNotifTitle(e.target.value)} placeholder="Title…" className="rounded-xl"/>
         <Textarea value={notifMessage} onChange={e=>setNotifMessage(e.target.value)} placeholder="Message body…" rows={3} className="rounded-xl resize-none"/>
         <div className="flex gap-1.5">
           {(["all","stores","customers"] as const).map(a=>(
-            <button key={a} onClick={()=>setNotifAudience(a)} className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${notifAudience===a?"bg-slate-800 text-white border-slate-800":"bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+            <button key={a} onClick={()=>setNotifAudience(a)} className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${notifAudience===a?"bg-slate-800 text-white border-slate-800":"bg-card border-border text-muted-foreground hover:bg-secondary"}`}>
               {a==="all"?"All Users":a==="stores"?"Stores Only":"Customers Only"}
             </button>
           ))}
@@ -2120,16 +2120,16 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         </Button>
       </div>
 
-      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Sent History</p>
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Sent History</p>
       {communicationLoading ? <div className="h-24 rounded-2xl booka-shimmer"/> :
-        scheduledNotifs.length===0 ? <p className="text-sm text-slate-400 text-center py-4">No notifications sent yet</p> :
+        scheduledNotifs.length===0 ? <p className="text-sm text-muted-foreground text-center py-4">No notifications sent yet</p> :
         scheduledNotifs.map(n=>(
-          <div key={n.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <div key={n.id} className="bg-card rounded-2xl border border-border shadow-sm p-4">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold text-slate-800">{n.title}</p>
-                <p className="text-xs text-slate-400">{n.message.slice(0,80)}{n.message.length>80?"…":""}</p>
-                <p className="text-[11px] text-slate-400 mt-1">{n.audience} · {n.sent_at ? format(new Date(n.sent_at),"MMM d, h:mm a") : format(new Date(n.created_at),"MMM d")}</p>
+                <p className="text-sm font-semibold text-foreground">{n.title}</p>
+                <p className="text-xs text-muted-foreground">{n.message.slice(0,80)}{n.message.length>80?"…":""}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">{n.audience} · {n.sent_at ? format(new Date(n.sent_at),"MMM d, h:mm a") : format(new Date(n.created_at),"MMM d")}</p>
               </div>
               <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${n.status==="sent"?"bg-green-100 text-green-700":n.status==="cancelled"?"bg-red-100 text-red-700":"bg-amber-100 text-amber-700"}`}>{n.status}</span>
             </div>
@@ -2150,13 +2150,13 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     return (
       <div className="fixed inset-0 z-[500] flex items-end justify-center" onClick={()=>{setStoreActionTarget(null);setStoreActionType(null);}}>
         <div className="absolute inset-0 bg-black/60"/>
-        <div className="relative bg-white rounded-t-3xl w-full max-w-lg p-6 pb-10 shadow-2xl space-y-4" onClick={e=>e.stopPropagation()}>
-          <p className="font-bold text-slate-900 text-base">{titleMap[storeActionType]} — {s.name}</p>
+        <div className="relative bg-card rounded-t-3xl w-full max-w-lg p-6 pb-10 shadow-2xl space-y-4" onClick={e=>e.stopPropagation()}>
+          <p className="font-bold text-foreground text-base">{titleMap[storeActionType]} — {s.name}</p>
           {storeActionType==="category" && (
             <div className="grid grid-cols-3 gap-2">
               {CATEGORIES.map(c=>(
                 <button key={c.label} onClick={()=>setStoreActionCategory(c.label)}
-                  className={`p-2 rounded-xl border text-xs font-semibold transition-all ${storeActionCategory===c.label?"bg-blue-600 text-white border-blue-600":"border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+                  className={`p-2 rounded-xl border text-xs font-semibold transition-all ${storeActionCategory===c.label?"bg-blue-600 text-white border-blue-600":"border-border text-muted-foreground hover:bg-secondary"}`}>
                   {c.emoji} {c.label}
                 </button>
               ))}
@@ -2165,7 +2165,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           {storeActionType==="tier" && (
             <div className="flex gap-2">
               {(["free","pro","premium"] as const).map(t=>(
-                <button key={t} onClick={()=>setStoreActionTier(t)} className={`flex-1 py-3 rounded-xl border text-sm font-semibold transition-all capitalize ${storeActionTier===t?"bg-slate-800 text-white border-slate-800":"border-slate-200 text-slate-600"}`}>{t}</button>
+                <button key={t} onClick={()=>setStoreActionTier(t)} className={`flex-1 py-3 rounded-xl border text-sm font-semibold transition-all capitalize ${storeActionTier===t?"bg-slate-800 text-white border-slate-800":"border-slate-200 text-muted-foreground"}`}>{t}</button>
               ))}
             </div>
           )}
@@ -2212,8 +2212,8 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     return (
       <div className="p-4 space-y-5 pb-24">
         {/* ── Create Promotion form ── */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
-          <p className="text-sm font-bold text-slate-800">Create Promotion</p>
+        <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
+          <p className="text-sm font-bold text-foreground">Create Promotion</p>
           <Input placeholder="Title (e.g. Weekend Flash Sale)" value={promoForm.title}
             onChange={(e) => setPromoForm((f) => ({ ...f, title: e.target.value }))} className="rounded-xl text-sm h-10" />
           <Textarea placeholder="Description (optional)" value={promoForm.description}
@@ -2222,7 +2222,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <p className="text-[11px] font-semibold text-slate-500 mb-1">Discount Type</p>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1">Discount Type</p>
               <select value={promoForm.discount_type}
                 onChange={(e) => setPromoForm((f) => ({ ...f, discount_type: e.target.value as "percentage" | "fixed" }))}
                 className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none">
@@ -2231,7 +2231,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
               </select>
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-slate-500 mb-1">
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1">
                 {promoForm.discount_type === "percentage" ? "Value (%)" : "Value (J$)"}
               </p>
               <Input type="number" placeholder="e.g. 10" value={promoForm.discount_value}
@@ -2242,13 +2242,13 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <p className="text-[11px] font-semibold text-slate-500 mb-1">Start Date</p>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1">Start Date</p>
               <Input type="datetime-local" value={promoForm.start_date}
                 onChange={(e) => setPromoForm((f) => ({ ...f, start_date: e.target.value }))}
                 className="rounded-xl text-xs h-10" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold text-slate-500 mb-1">End Date</p>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1">End Date</p>
               <Input type="datetime-local" value={promoForm.end_date}
                 onChange={(e) => setPromoForm((f) => ({ ...f, end_date: e.target.value }))}
                 className="rounded-xl text-xs h-10" />
@@ -2256,7 +2256,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold text-slate-500 mb-1">Applies To</p>
+            <p className="text-[11px] font-semibold text-muted-foreground mb-1">Applies To</p>
             <select value={promoForm.applies_to}
               onChange={(e) => setPromoForm((f) => ({ ...f, applies_to: e.target.value as "all" | "category" | "specific_stores" }))}
               className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none">
@@ -2268,7 +2268,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
           {promoForm.applies_to === "category" && (
             <div>
-              <p className="text-[11px] font-semibold text-slate-500 mb-1">Category</p>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1">Category</p>
               <select value={promoForm.category}
                 onChange={(e) => setPromoForm((f) => ({ ...f, category: e.target.value }))}
                 className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none">
@@ -2280,12 +2280,12 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
           {promoForm.applies_to === "specific_stores" && (
             <div>
-              <p className="text-[11px] font-semibold text-slate-500 mb-1">Select Stores</p>
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1">Select Stores</p>
               <Input placeholder="Search stores…" value={promoStoreSearch}
                 onChange={(e) => setPromoStoreSearch(e.target.value)} className="rounded-xl text-xs h-8 mb-1" />
-              <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+              <div className="max-h-32 overflow-y-auto border border-border rounded-xl divide-y divide-border">
                 {filteredStores.slice(0, 20).map((s) => (
-                  <label key={s.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50">
+                  <label key={s.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-secondary">
                     <input type="checkbox" checked={promoForm.store_ids.includes(s.id)}
                       onChange={(e) => {
                         setPromoForm((f) => ({
@@ -2295,10 +2295,10 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                             : f.store_ids.filter((id) => id !== s.id),
                         }));
                       }} className="rounded" />
-                    <span className="text-xs text-slate-700 truncate">{s.name}</span>
+                    <span className="text-xs text-foreground truncate">{s.name}</span>
                   </label>
                 ))}
-                {filteredStores.length === 0 && <p className="text-xs text-slate-400 text-center py-3">No stores found</p>}
+                {filteredStores.length === 0 && <p className="text-xs text-muted-foreground text-center py-3">No stores found</p>}
               </div>
               {promoForm.store_ids.length > 0 && (
                 <p className="text-[11px] text-blue-600 mt-1">{promoForm.store_ids.length} store{promoForm.store_ids.length !== 1 ? "s" : ""} selected</p>
@@ -2307,18 +2307,18 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           )}
 
           <div className="flex items-center gap-2 justify-between">
-            <span className="text-sm text-slate-600">Activate immediately</span>
+            <span className="text-sm text-muted-foreground">Activate immediately</span>
             <button
               onClick={() => setPromoForm((f) => ({ ...f, activate_immediately: !f.activate_immediately }))}
               className="transition-colors"
             >
               {promoForm.activate_immediately
                 ? <ToggleRight size={28} className="text-green-600" />
-                : <ToggleLeft size={28} className="text-slate-400" />}
+                : <ToggleLeft size={28} className="text-muted-foreground" />}
             </button>
           </div>
 
-          <div className="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2">
+          <div className="text-[11px] text-muted-foreground bg-secondary rounded-xl px-3 py-2">
             ⚡ Store earnings are always protected. Discounts come from Rezo&apos;s 10% commission only.
           </div>
 
@@ -2335,20 +2335,20 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           <>
             {activePromos.length > 0 && (
               <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Active ({activePromos.length})</p>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">Active ({activePromos.length})</p>
                 <div className="space-y-2">
                   {activePromos.map((p) => (
-                    <div key={p.id} className="bg-white rounded-2xl border border-green-200 shadow-sm p-4 space-y-2">
+                    <div key={p.id} className="bg-card rounded-2xl border border-green-200 shadow-sm p-4 space-y-2">
                       <div className="flex items-start gap-2 justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-bold text-slate-800">{p.title}</span>
+                            <span className="text-sm font-bold text-foreground">{p.title}</span>
                             <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">ACTIVE</span>
                           </div>
-                          {p.description && <p className="text-xs text-slate-500 mt-0.5">{p.description}</p>}
+                          {p.description && <p className="text-xs text-muted-foreground mt-0.5">{p.description}</p>}
                           <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                             <span className="text-[11px] font-bold text-green-700">{fmtDiscount(p)} off</span>
-                            <span className="text-[11px] text-slate-400">{fmtApplies(p)}</span>
+                            <span className="text-[11px] text-muted-foreground">{fmtApplies(p)}</span>
                             {p.end_date && <span className="text-[11px] text-amber-600">Ends {format(new Date(p.end_date), "MMM d, h:mm a")}</span>}
                           </div>
                         </div>
@@ -2372,17 +2372,17 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             {/* ── Past Promotions ── */}
             {pastPromos.length > 0 && (
               <div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Past / Inactive ({pastPromos.length})</p>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">Past / Inactive ({pastPromos.length})</p>
                 <div className="space-y-2">
                   {pastPromos.map((p) => (
-                    <div key={p.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-2 opacity-75">
+                    <div key={p.id} className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-2 opacity-75">
                       <div className="flex items-start gap-2 justify-between">
                         <div className="flex-1 min-w-0">
-                          <span className="text-sm font-semibold text-slate-700">{p.title}</span>
+                          <span className="text-sm font-semibold text-foreground">{p.title}</span>
                           <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                            <span className="text-[11px] font-semibold text-slate-500">{fmtDiscount(p)} off</span>
-                            <span className="text-[11px] text-slate-400">{fmtApplies(p)}</span>
-                            <span className="text-[11px] text-slate-400">Created {format(new Date(p.created_at), "MMM d, yyyy")}</span>
+                            <span className="text-[11px] font-semibold text-muted-foreground">{fmtDiscount(p)} off</span>
+                            <span className="text-[11px] text-muted-foreground">{fmtApplies(p)}</span>
+                            <span className="text-[11px] text-muted-foreground">Created {format(new Date(p.created_at), "MMM d, yyyy")}</span>
                           </div>
                         </div>
                       </div>
@@ -2403,7 +2403,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             )}
 
             {promotions.length === 0 && (
-              <div className="text-center py-16 text-slate-400">
+              <div className="text-center py-16 text-muted-foreground">
                 <Tag size={36} className="mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No promotions yet. Create your first one above.</p>
               </div>
@@ -2415,11 +2415,11 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         {promoDeleteConfirm && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center px-6" onClick={() => setPromoDeleteConfirm(null)}>
             <div className="absolute inset-0 bg-black/60" />
-            <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-              <p className="font-bold text-slate-900">Delete Promotion?</p>
-              <p className="text-sm text-slate-600">This cannot be undone. If the promotion is active, an announcement will be sent to users that it has ended.</p>
+            <div className="relative bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+              <p className="font-bold text-foreground">Delete Promotion?</p>
+              <p className="text-sm text-muted-foreground">This cannot be undone. If the promotion is active, an announcement will be sent to users that it has ended.</p>
               <div className="flex gap-2">
-                <button onClick={() => setPromoDeleteConfirm(null)} className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold">Cancel</button>
+                <button onClick={() => setPromoDeleteConfirm(null)} className="flex-1 h-10 rounded-xl border border-border text-muted-foreground text-sm font-semibold hover:bg-secondary">Cancel</button>
                 <button onClick={() => deletePromotion(promoDeleteConfirm)}
                   disabled={deletingPromoId === promoDeleteConfirm}
                   className="flex-1 h-10 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 active:scale-95 disabled:opacity-60">
@@ -2472,7 +2472,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // ── Main render ───────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 bg-slate-50 z-50 flex flex-col">
+    <div className="fixed inset-0 bg-background z-50 flex flex-col">
       {/* Header */}
       <div className="bg-[#1e3a8a] px-4 pt-4 pb-4 flex items-center gap-3 shrink-0">
         <button onClick={onBack} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 active:scale-90 transition-all">
@@ -2488,10 +2488,10 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       </div>
 
       {/* Tab bar */}
-      <div className="flex overflow-x-auto bg-white border-b border-slate-200 shrink-0 px-2 scrollbar-hide">
+      <div className="flex overflow-x-auto bg-card border-b border-border shrink-0 px-2 scrollbar-hide">
         {navItems.map((item) => (
           <button key={item.id} onClick={() => { setSelectedConv(null); setThread([]); setActiveTab(item.id); }}
-            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTab === item.id ? "border-[#1e3a8a] text-[#1e3a8a]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            className={`flex items-center gap-1.5 px-3 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTab === item.id ? "border-[#1e3a8a] text-[#1e3a8a]" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             <item.icon size={14} />{item.label}
           </button>
         ))}
@@ -2506,14 +2506,14 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       {contactTarget && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center px-6" onClick={() => setContactTarget(null)}>
           <div className="absolute inset-0 bg-black/50" />
-          <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <p className="font-bold text-slate-900 text-base">Contact Store</p>
-              <button onClick={() => setContactTarget(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+              <p className="font-bold text-foreground text-base">Contact Store</p>
+              <button onClick={() => setContactTarget(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary"><X size={16} /></button>
             </div>
-            <p className="text-sm text-slate-600">{contactTarget.name}</p>
-            <div className="bg-slate-50 rounded-xl px-4 py-3 flex items-center justify-between">
-              <p className="font-mono text-sm font-semibold text-slate-800">{contactTarget.phone}</p>
+            <p className="text-sm text-muted-foreground">{contactTarget.name}</p>
+            <div className="bg-secondary rounded-xl px-4 py-3 flex items-center justify-between">
+              <p className="font-mono text-sm font-semibold text-foreground">{contactTarget.phone}</p>
               <button onClick={() => { navigator.clipboard.writeText(contactTarget.phone); toast.success("Copied!"); }} className="text-xs text-blue-600 font-semibold">Copy</button>
             </div>
             <a href={`https://wa.me/${contactTarget.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full h-10 rounded-xl bg-green-500 text-white text-sm font-semibold active:scale-95 transition-all">
@@ -2527,14 +2527,14 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       {customerContactTarget && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center px-6" onClick={() => setCustomerContactTarget(null)}>
           <div className="absolute inset-0 bg-black/50" />
-          <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <p className="font-bold text-slate-900 text-base">Contact Customer</p>
-              <button onClick={() => setCustomerContactTarget(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+              <p className="font-bold text-foreground text-base">Contact Customer</p>
+              <button onClick={() => setCustomerContactTarget(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary"><X size={16} /></button>
             </div>
-            <p className="text-sm text-slate-600">{customerContactTarget.name}</p>
-            <div className="bg-slate-50 rounded-xl px-4 py-3 flex items-center justify-between">
-              <p className="font-mono text-sm font-semibold text-slate-800">{customerContactTarget.phone}</p>
+            <p className="text-sm text-muted-foreground">{customerContactTarget.name}</p>
+            <div className="bg-secondary rounded-xl px-4 py-3 flex items-center justify-between">
+              <p className="font-mono text-sm font-semibold text-foreground">{customerContactTarget.phone}</p>
               <button onClick={() => { navigator.clipboard.writeText(customerContactTarget.phone); toast.success("Copied!"); }} className="text-xs text-blue-600 font-semibold">Copy</button>
             </div>
             <a href={`https://wa.me/${customerContactTarget.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full h-10 rounded-xl bg-green-500 text-white text-sm font-semibold active:scale-95 transition-all">
@@ -2547,24 +2547,24 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       {suspendReasonTarget && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center px-6" onClick={() => setSuspendReasonTarget(null)}>
           <div className="absolute inset-0 bg-black/60" />
-          <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <p className="font-bold text-slate-900 text-base">Suspend Customer</p>
-              <button onClick={() => setSuspendReasonTarget(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"><X size={16}/></button>
+              <p className="font-bold text-foreground text-base">Suspend Customer</p>
+              <button onClick={() => setSuspendReasonTarget(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary"><X size={16}/></button>
             </div>
-            <p className="text-sm text-slate-600">Suspending <span className="font-semibold">{suspendReasonTarget.full_name || "this customer"}</span>. They will be unable to make new bookings.</p>
+            <p className="text-sm text-muted-foreground">Suspending <span className="font-semibold">{suspendReasonTarget.full_name || "this customer"}</span>. They will be unable to make new bookings.</p>
             <div>
-              <label className="text-xs font-semibold text-slate-500 block mb-1">Reason for suspension</label>
+              <label className="text-xs font-semibold text-muted-foreground block mb-1">Reason for suspension</label>
               <textarea
                 value={suspendReasonText}
                 onChange={(e) => setSuspendReasonText(e.target.value)}
                 placeholder="e.g. Repeated no-shows, abusive behaviour…"
                 rows={3}
-                className="w-full text-sm rounded-xl border border-slate-200 p-3 resize-none focus:outline-none focus:ring-1 focus:ring-red-400"
+                className="w-full text-sm rounded-xl border border-input p-3 resize-none focus:outline-none focus:ring-1 focus:ring-red-400 bg-background text-foreground"
               />
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setSuspendReasonTarget(null)} className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-all">Cancel</button>
+              <button onClick={() => setSuspendReasonTarget(null)} className="flex-1 h-10 rounded-xl border border-border text-muted-foreground text-sm font-semibold hover:bg-secondary transition-all">Cancel</button>
               <button onClick={confirmSuspendCustomer} disabled={savingSuspend} className="flex-1 h-10 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-all active:scale-95 disabled:opacity-60">
                 {savingSuspend ? "Suspending…" : "Confirm Suspend"}
               </button>
@@ -2580,25 +2580,25 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       {customerActionTarget && customerActionType === "bookings" && (
         <div className="fixed inset-0 z-[500] flex items-end justify-center" onClick={() => { setCustomerActionTarget(null); setCustomerActionType(null); }}>
           <div className="absolute inset-0 bg-black/60"/>
-          <div className="relative bg-white rounded-t-3xl w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-slate-100">
-              <p className="font-bold text-slate-900 text-base">Bookings — {customerActionTarget.full_name ?? "Customer"}</p>
-              <button onClick={() => { setCustomerActionTarget(null); setCustomerActionType(null); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"><X size={16}/></button>
+          <div className="relative bg-card rounded-t-3xl w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <p className="font-bold text-foreground text-base">Bookings — {customerActionTarget.full_name ?? "Customer"}</p>
+              <button onClick={() => { setCustomerActionTarget(null); setCustomerActionType(null); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary"><X size={16}/></button>
             </div>
             <div className="overflow-y-auto flex-1 p-4 space-y-2">
               {customerBookingsLoading ? (
                 <div className="space-y-2">{[1,2,3].map(i=><div key={i} className="h-16 rounded-2xl booka-shimmer"/>)}</div>
               ) : customerBookings.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-8">No bookings found</p>
+                <p className="text-sm text-muted-foreground text-center py-8">No bookings found</p>
               ) : customerBookings.map((b: any) => (
-                <div key={b.id} className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
+                <div key={b.id} className="bg-secondary rounded-2xl p-3 border border-slate-100">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{b.store_name}</p>
-                      <p className="text-xs text-slate-400">{format(parseISO(b.reservation_date), "MMM d, yyyy")} · {b.start_time?.slice(0,5)}</p>
+                      <p className="text-sm font-semibold text-foreground">{b.store_name}</p>
+                      <p className="text-xs text-muted-foreground">{format(parseISO(b.reservation_date), "MMM d, yyyy")} · {b.start_time?.slice(0,5)}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-bold text-slate-700">{fmtJ(b.total_amount)}</p>
+                      <p className="text-xs font-bold text-foreground">{fmtJ(b.total_amount)}</p>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${b.status==="completed"?"bg-green-100 text-green-700":b.status==="cancelled"?"bg-red-100 text-red-700":"bg-amber-100 text-amber-700"}`}>{b.status}</span>
                     </div>
                   </div>

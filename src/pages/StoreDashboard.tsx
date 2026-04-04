@@ -2960,7 +2960,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                 name: "Free",
                 price: "J$0",
                 icon: Store,
-                iconColor: "text-slate-500",
+                iconColor: "text-muted-foreground",
                 bg: "bg-secondary",
                 border: "border-border",
                 features: [
