@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   ArrowLeft, Star, MapPin, Clock, CheckCircle2, AlertCircle,
-  Calendar, ChevronDown, Users, Check, ShoppingBag, ChevronRight,
+  Calendar, ChevronDown, Users, Check, ShoppingBag, ChevronRight, Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, addDays } from "date-fns";
@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { type Store } from "@/components/StoreProfile";
 import CustomerCalendar from "@/components/CustomerCalendar";
 import { DAILY_LIMITS } from "@/lib/categories";
+import { getActivePromotion, applyPromotion, type Promotion, type PromoCalc } from "@/lib/promotions";
 
 interface TimeSlot {
   id: string;
@@ -59,6 +60,9 @@ interface ConfirmedDetails {
   serviceTotal?: number;
   spotNumber?: number;
   totalCapacity?: number;
+  promoTitle?: string;
+  discountAmount?: number;
+  finalPrice?: number;
 }
 
 interface StoreHour {
@@ -132,6 +136,10 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [acceptingTerms, setAcceptingTerms] = useState(false);
 
+  // Active promotion
+  const [activePromotion, setActivePromotion] = useState<Promotion | null>(null);
+  const [promoTooltip, setPromoTooltip] = useState(false);
+
   // Service customizer state
   const [services, setServices] = useState<StoreService[]>([]);
   const [serviceStep, setServiceStep] = useState(false);
@@ -172,6 +180,18 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         setTermsAccepted(!!(data as any)?.customer_terms_accepted_at);
       });
   }, [user]);
+
+  // Fetch active promotion for this store
+  useEffect(() => {
+    const primaryCategory = (store.categories?.[0]) ?? store.category ?? "";
+    getActivePromotion(store.id, primaryCategory).then(setActivePromotion);
+  }, [store.id, store.category]);
+
+  // Derived promo calculation (recalculates whenever serviceTotal or promotion changes)
+  const promoCalc: PromoCalc | null =
+    activePromotion && serviceTotal > 0
+      ? applyPromotion(serviceTotal, activePromotion)
+      : null;
 
   const acceptTermsAndBook = async () => {
     if (!user) return;
@@ -420,8 +440,17 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       }
 
       const bookingTotal = serviceTotal || 0;
+
+      // ── Promotion-aware price calculation ──────────────────────────────────
+      // Store earnings are ALWAYS based on original total (promoCalc guarantees this)
+      const calc = bookingTotal > 0 && activePromotion
+        ? applyPromotion(bookingTotal, activePromotion)
+        : null;
+
       const commissionAmount = Math.round(bookingTotal * 0.10);
       const storeEarnings = bookingTotal - commissionAmount;
+      const discountAmount = calc?.discountAmount ?? 0;
+      const finalPrice = calc?.finalPrice ?? bookingTotal;
 
       const { data: inserted, error } = await supabase
         .from("reservations")
@@ -438,6 +467,10 @@ const CustomerBooking = ({ store, onBack }: Props) => {
           commission_amount: bookingTotal > 0 ? commissionAmount : null,
           store_earnings: bookingTotal > 0 ? storeEarnings : null,
           payout_status: "unpaid",
+          // Promotion fields
+          discount_amount: discountAmount,
+          final_price: finalPrice,
+          promotion_id: activePromotion?.id ?? null,
         })
         .select("id")
         .single();
@@ -519,6 +552,9 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         serviceTotal: selectedService ? serviceTotal : undefined,
         spotNumber,
         totalCapacity: slot.capacity ?? 1,
+        promoTitle: calc ? activePromotion?.title : undefined,
+        discountAmount: calc?.discountAmount,
+        finalPrice: calc?.finalPrice,
       });
     } catch (err: any) {
       toast.error(err.message || "Booking failed. Please try again.");
@@ -556,10 +592,30 @@ const CustomerBooking = ({ store, onBack }: Props) => {
             {confirmed.serviceTotal != null && confirmed.serviceTotal > 0 && (
               <div className="space-y-1.5">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Price</p>
-                <div className="flex justify-between items-center pt-1 border-t border-border">
-                  <span className="text-xs font-bold text-foreground">Service total</span>
-                  <span className="text-xl font-extrabold text-primary">{fmt(confirmed.serviceTotal)}</span>
-                </div>
+                {confirmed.promoTitle && confirmed.discountAmount != null && confirmed.finalPrice != null ? (
+                  <>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground line-through">Original {fmt(confirmed.serviceTotal)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-green-600">Rezo Promo discount</span>
+                      <span className="text-xs font-bold text-green-600">−{fmt(confirmed.discountAmount)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-1 border-t border-border">
+                      <span className="text-sm font-bold text-foreground">You pay</span>
+                      <span className="text-xl font-extrabold text-primary">{fmt(confirmed.finalPrice)}</span>
+                    </div>
+                    <div className="rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-3 py-2">
+                      <p className="text-[11px] text-green-700 dark:text-green-300 font-medium">🎉 {confirmed.promoTitle} — saved {fmt(confirmed.discountAmount)}</p>
+                      <p className="text-[10px] text-green-600 dark:text-green-400 mt-0.5">Rezo funded this discount. The store receives their full earnings.</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex justify-between items-center pt-1 border-t border-border">
+                    <span className="text-xs font-bold text-foreground">Service total</span>
+                    <span className="text-xl font-extrabold text-primary">{fmt(confirmed.serviceTotal)}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-1.5 pt-1">
                   <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">💳 Payment due at your appointment</span>
                 </div>
@@ -797,10 +853,42 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                       );
                     });
                   })}
-                  <div className="flex items-center justify-between pt-2 border-t border-border">
-                    <span className="text-sm font-bold text-foreground">Total</span>
-                    <span className="text-2xl font-extrabold text-primary">{fmt(serviceTotal)}</span>
-                  </div>
+                  {promoCalc ? (
+                    <>
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-sm text-muted-foreground">Original price</span>
+                        <span className="text-sm text-muted-foreground line-through">{fmt(serviceTotal)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1 text-sm font-semibold text-green-600">
+                          {activePromotion!.discount_type === "percentage"
+                            ? `${activePromotion!.discount_value}% OFF`
+                            : `J$${activePromotion!.discount_value} OFF`} — Rezo Promo
+                          <button
+                            onClick={() => setPromoTooltip(!promoTooltip)}
+                            className="text-green-500 hover:text-green-700 transition-colors"
+                          >
+                            <Info size={13} />
+                          </button>
+                        </span>
+                        <span className="text-sm font-bold text-green-600">−{fmt(promoCalc.discountAmount)}</span>
+                      </div>
+                      {promoTooltip && (
+                        <div className="rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-3 py-2 text-[11px] text-green-700 dark:text-green-300">
+                          Rezo is funding this discount. The store receives their full earnings.
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between pt-2 border-t border-border">
+                        <span className="text-sm font-bold text-foreground">You pay</span>
+                        <span className="text-2xl font-extrabold text-primary">{fmt(promoCalc.finalPrice)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-between pt-2 border-t border-border">
+                      <span className="text-sm font-bold text-foreground">Total</span>
+                      <span className="text-2xl font-extrabold text-primary">{fmt(serviceTotal)}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

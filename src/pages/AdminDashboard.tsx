@@ -8,7 +8,7 @@ import {
   DollarSign, Megaphone, MessageSquare, Phone, AlertCircle,
   Download, Send, ArrowLeft, Clock, UserCheck, Loader2,
   Trash2, ChevronDown, ChevronUp, Settings2, CreditCard, Eye,
-  Bell as Bell2, Pencil, Plus, Image, RefreshCw,
+  Bell as Bell2, Pencil, Plus, Image, RefreshCw, Tag, ToggleLeft, ToggleRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 
-type AdminTab = "overview" | "stores" | "customers" | "reports" | "disputes" | "bugs" | "bookings" | "revenue" | "announcements" | "messages" | "platform" | "financial" | "moderation" | "communication";
+type AdminTab = "overview" | "stores" | "customers" | "reports" | "disputes" | "bugs" | "bookings" | "revenue" | "announcements" | "messages" | "platform" | "financial" | "moderation" | "communication" | "promotions";
 
 interface StoreRow {
   id: string; name: string; category: string; address?: string; phone?: string;
@@ -91,6 +91,13 @@ interface DisputeRow {
 interface BugReportRow {
   id: string; user_id: string; description: string; screenshot_url?: string;
   created_at: string; user_name?: string;
+}
+interface PromotionRow {
+  id: string; title: string; description?: string; discount_type: "percentage" | "fixed";
+  discount_value: number; is_active: boolean; start_date?: string; end_date?: string;
+  applies_to: "all" | "category" | "specific_stores"; category?: string; store_ids?: string[];
+  created_at: string;
+  usage_count?: number; total_discount_absorbed?: number;
 }
 interface RevenueState {
   allTime: number; thisMonth: number; thisWeek: number; avgBooking: number;
@@ -242,6 +249,25 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [adminEmailInput, setAdminEmailInput] = useState("");
   const [grantingAdmin, setGrantingAdmin] = useState(false);
 
+  // Promotions
+  const [promotions, setPromotions] = useState<PromotionRow[]>([]);
+  const [promotionsLoading, setPromotionsLoading] = useState(false);
+  const [promoForm, setPromoForm] = useState({
+    title: "", description: "", discount_type: "percentage" as "percentage" | "fixed",
+    discount_value: "", start_date: "", end_date: "",
+    applies_to: "all" as "all" | "category" | "specific_stores",
+    category: "", store_ids: [] as string[], activate_immediately: true,
+  });
+  const [creatingPromo, setCreatingPromo] = useState(false);
+  const [deletingPromoId, setDeletingPromoId] = useState<string | null>(null);
+  const [promoDeleteConfirm, setPromoDeleteConfirm] = useState<string | null>(null);
+  const [promoStoreSearch, setPromoStoreSearch] = useState("");
+  const [promoImpact, setPromoImpact] = useState<{
+    monthDiscount: number; allTimeDiscount: number;
+    monthBookings: number; avgDiscount: number;
+    netCommissionMonth: number; netCommissionAllTime: number;
+  } | null>(null);
+
   // ── Effects ──────────────────────────────────────────────────────────────────
   useEffect(() => { fetchStats(); fetchActivity(); fetchOverviewBugCount(); }, []);
   useEffect(() => {
@@ -258,6 +284,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     else if (activeTab === "moderation") fetchModerationData();
     else if (activeTab === "communication") fetchCommunicationData();
     else if (activeTab === "financial") fetchFinancialData();
+    else if (activeTab === "promotions") { fetchPromotions(); fetchPromoImpact(); }
   }, [activeTab]);
 
   // ── Fetch stats ───────────────────────────────────────────────────────────
@@ -888,6 +915,105 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setPayoutsLoading(false);
   };
 
+  // ── Promotions ─────────────────────────────────────────────────────────────
+  const fetchPromotions = async () => {
+    setPromotionsLoading(true);
+    const { data } = await supabase.from("promotions").select("*").order("created_at", { ascending: false });
+    if (data) setPromotions(data as PromotionRow[]);
+    setPromotionsLoading(false);
+  };
+
+  const fetchPromoImpact = async () => {
+    const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
+    const { data } = await supabase
+      .from("reservations")
+      .select("discount_amount, commission_amount, total_amount, reservation_date, promotion_id")
+      .not("promotion_id", "is", null);
+    if (data) {
+      const all = data as any[];
+      const thisMonth = all.filter((r) => r.reservation_date >= monthStart);
+      const monthDiscount = thisMonth.reduce((s, r) => s + (r.discount_amount ?? 0), 0);
+      const allTimeDiscount = all.reduce((s, r) => s + (r.discount_amount ?? 0), 0);
+      const monthCommission = thisMonth.reduce((s, r) => s + (r.commission_amount ?? (r.total_amount ? Math.round(r.total_amount * 0.1) : 0)), 0);
+      const allTimeCommission = all.reduce((s, r) => s + (r.commission_amount ?? (r.total_amount ? Math.round(r.total_amount * 0.1) : 0)), 0);
+      setPromoImpact({
+        monthDiscount,
+        allTimeDiscount,
+        monthBookings: thisMonth.length,
+        avgDiscount: all.length > 0 ? Math.round(allTimeDiscount / all.length) : 0,
+        netCommissionMonth: Math.max(0, monthCommission - monthDiscount),
+        netCommissionAllTime: Math.max(0, allTimeCommission - allTimeDiscount),
+      });
+    }
+  };
+
+  const triggerPromoAnnouncement = async (promo: PromotionRow, ended = false) => {
+    if (!user) return;
+    const label = promo.discount_type === "percentage"
+      ? `${promo.discount_value}% off`
+      : `J$${promo.discount_value} off`;
+    const applyStr = promo.applies_to === "category" && promo.category
+      ? ` on ${promo.category} services`
+      : promo.applies_to === "specific_stores" ? " at selected stores" : "";
+    const title = ended ? "Promo Ended" : "Rezo Promo Live 🎉";
+    const message = ended
+      ? `The Rezo promo has ended. Thank you to everyone who took advantage. Stay tuned for future promotions.`
+      : `Enjoy ${label} bookings${applyStr} for a limited time. Book now before it ends!`;
+    await supabase.from("announcements").insert({ title, message, audience: "all", sent_by: user.id });
+  };
+
+  const createPromotion = async () => {
+    if (!promoForm.title.trim() || !promoForm.discount_value) {
+      toast.error("Title and discount value are required"); return;
+    }
+    setCreatingPromo(true);
+    const payload: any = {
+      title: promoForm.title.trim(),
+      description: promoForm.description.trim() || null,
+      discount_type: promoForm.discount_type,
+      discount_value: parseFloat(promoForm.discount_value),
+      is_active: promoForm.activate_immediately,
+      applies_to: promoForm.applies_to,
+      category: promoForm.applies_to === "category" ? promoForm.category || null : null,
+      store_ids: promoForm.applies_to === "specific_stores" ? promoForm.store_ids : null,
+      start_date: promoForm.start_date ? new Date(promoForm.start_date).toISOString() : null,
+      end_date: promoForm.end_date ? new Date(promoForm.end_date).toISOString() : null,
+    };
+    const { data, error } = await supabase.from("promotions").insert(payload).select().single();
+    setCreatingPromo(false);
+    if (error) { toast.error("Failed to create promotion"); return; }
+    setPromotions((prev) => [data as PromotionRow, ...prev]);
+    if (promoForm.activate_immediately) await triggerPromoAnnouncement(data as PromotionRow);
+    setPromoForm({
+      title: "", description: "", discount_type: "percentage", discount_value: "",
+      start_date: "", end_date: "", applies_to: "all", category: "",
+      store_ids: [], activate_immediately: true,
+    });
+    toast.success("Promotion created!");
+  };
+
+  const togglePromotion = async (promo: PromotionRow) => {
+    const next = !promo.is_active;
+    const { error } = await supabase.from("promotions").update({ is_active: next }).eq("id", promo.id);
+    if (error) { toast.error("Failed to update promotion"); return; }
+    setPromotions((prev) => prev.map((p) => p.id === promo.id ? { ...p, is_active: next } : p));
+    if (next) await triggerPromoAnnouncement(promo);
+    else await triggerPromoAnnouncement(promo, true);
+    toast.success(next ? "Promotion activated" : "Promotion deactivated");
+  };
+
+  const deletePromotion = async (id: string) => {
+    const promo = promotions.find((p) => p.id === id);
+    setDeletingPromoId(id);
+    if (promo?.is_active) await triggerPromoAnnouncement(promo, true);
+    const { error } = await supabase.from("promotions").delete().eq("id", id);
+    setDeletingPromoId(null);
+    if (error) { toast.error("Failed to delete promotion"); return; }
+    setPromotions((prev) => prev.filter((p) => p.id !== id));
+    setPromoDeleteConfirm(null);
+    toast.success("Promotion deleted");
+  };
+
   // ── Store admin actions ────────────────────────────────────────────────────
   const openStoreAction = (s: StoreRow, type: typeof storeActionType) => {
     setStoreActionTarget(s);
@@ -1487,6 +1613,37 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             </div>
           </div>
 
+          {/* ── Promotions Impact ── */}
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Promotions Impact</p>
+            {promoImpact ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
+                  <p className="text-[11px] text-slate-400">Discount Absorbed (Month)</p>
+                  <p className="text-xl font-extrabold text-green-600">J${promoImpact.monthDiscount.toLocaleString()}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
+                  <p className="text-[11px] text-slate-400">Discount Absorbed (All Time)</p>
+                  <p className="text-xl font-extrabold text-green-600">J${promoImpact.allTimeDiscount.toLocaleString()}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
+                  <p className="text-[11px] text-slate-400">Promo Bookings (Month)</p>
+                  <p className="text-xl font-extrabold text-slate-800">{promoImpact.monthBookings}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
+                  <p className="text-[11px] text-slate-400">Avg Discount per Booking</p>
+                  <p className="text-xl font-extrabold text-slate-800">J${promoImpact.avgDiscount.toLocaleString()}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 col-span-2">
+                  <p className="text-[11px] text-slate-400">Net Rezo Commission This Month (after discounts)</p>
+                  <p className="text-2xl font-extrabold text-blue-900">J${promoImpact.netCommissionMonth.toLocaleString()}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 text-center text-slate-400 text-sm">No promo data yet</div>
+            )}
+          </div>
+
           <div>
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Top 10 Stores by Revenue</p>
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
@@ -2039,6 +2196,243 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     );
   };
 
+  // ── Render Promotions ─────────────────────────────────────────────────────
+  const renderPromotions = () => {
+    const fmtDiscount = (p: PromotionRow) =>
+      p.discount_type === "percentage" ? `${p.discount_value}%` : `J$${p.discount_value}`;
+    const fmtApplies = (p: PromotionRow) =>
+      p.applies_to === "all" ? "All Stores" : p.applies_to === "category" ? `Category: ${p.category}` : `${(p.store_ids ?? []).length} stores`;
+    const activePromos = promotions.filter((p) => p.is_active);
+    const pastPromos = promotions.filter((p) => !p.is_active);
+    const allStores = stores.length > 0 ? stores : [];
+    const filteredStores = allStores.filter((s) =>
+      s.name.toLowerCase().includes(promoStoreSearch.toLowerCase())
+    );
+
+    return (
+      <div className="p-4 space-y-5 pb-24">
+        {/* ── Create Promotion form ── */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
+          <p className="text-sm font-bold text-slate-800">Create Promotion</p>
+          <Input placeholder="Title (e.g. Weekend Flash Sale)" value={promoForm.title}
+            onChange={(e) => setPromoForm((f) => ({ ...f, title: e.target.value }))} className="rounded-xl text-sm h-10" />
+          <Textarea placeholder="Description (optional)" value={promoForm.description}
+            onChange={(e) => setPromoForm((f) => ({ ...f, description: e.target.value }))}
+            rows={2} className="rounded-xl text-sm resize-none" />
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 mb-1">Discount Type</p>
+              <select value={promoForm.discount_type}
+                onChange={(e) => setPromoForm((f) => ({ ...f, discount_type: e.target.value as "percentage" | "fixed" }))}
+                className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none">
+                <option value="percentage">Percentage (%)</option>
+                <option value="fixed">Fixed Amount (J$)</option>
+              </select>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 mb-1">
+                {promoForm.discount_type === "percentage" ? "Value (%)" : "Value (J$)"}
+              </p>
+              <Input type="number" placeholder="e.g. 10" value={promoForm.discount_value}
+                onChange={(e) => setPromoForm((f) => ({ ...f, discount_value: e.target.value }))}
+                className="rounded-xl text-sm h-10" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 mb-1">Start Date</p>
+              <Input type="datetime-local" value={promoForm.start_date}
+                onChange={(e) => setPromoForm((f) => ({ ...f, start_date: e.target.value }))}
+                className="rounded-xl text-xs h-10" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 mb-1">End Date</p>
+              <Input type="datetime-local" value={promoForm.end_date}
+                onChange={(e) => setPromoForm((f) => ({ ...f, end_date: e.target.value }))}
+                className="rounded-xl text-xs h-10" />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-semibold text-slate-500 mb-1">Applies To</p>
+            <select value={promoForm.applies_to}
+              onChange={(e) => setPromoForm((f) => ({ ...f, applies_to: e.target.value as "all" | "category" | "specific_stores" }))}
+              className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none">
+              <option value="all">All Stores</option>
+              <option value="category">Specific Category</option>
+              <option value="specific_stores">Specific Stores</option>
+            </select>
+          </div>
+
+          {promoForm.applies_to === "category" && (
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 mb-1">Category</p>
+              <select value={promoForm.category}
+                onChange={(e) => setPromoForm((f) => ({ ...f, category: e.target.value }))}
+                className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm focus:outline-none">
+                <option value="">Select category…</option>
+                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
+
+          {promoForm.applies_to === "specific_stores" && (
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 mb-1">Select Stores</p>
+              <Input placeholder="Search stores…" value={promoStoreSearch}
+                onChange={(e) => setPromoStoreSearch(e.target.value)} className="rounded-xl text-xs h-8 mb-1" />
+              <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+                {filteredStores.slice(0, 20).map((s) => (
+                  <label key={s.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" checked={promoForm.store_ids.includes(s.id)}
+                      onChange={(e) => {
+                        setPromoForm((f) => ({
+                          ...f,
+                          store_ids: e.target.checked
+                            ? [...f.store_ids, s.id]
+                            : f.store_ids.filter((id) => id !== s.id),
+                        }));
+                      }} className="rounded" />
+                    <span className="text-xs text-slate-700 truncate">{s.name}</span>
+                  </label>
+                ))}
+                {filteredStores.length === 0 && <p className="text-xs text-slate-400 text-center py-3">No stores found</p>}
+              </div>
+              {promoForm.store_ids.length > 0 && (
+                <p className="text-[11px] text-blue-600 mt-1">{promoForm.store_ids.length} store{promoForm.store_ids.length !== 1 ? "s" : ""} selected</p>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 justify-between">
+            <span className="text-sm text-slate-600">Activate immediately</span>
+            <button
+              onClick={() => setPromoForm((f) => ({ ...f, activate_immediately: !f.activate_immediately }))}
+              className="transition-colors"
+            >
+              {promoForm.activate_immediately
+                ? <ToggleRight size={28} className="text-green-600" />
+                : <ToggleLeft size={28} className="text-slate-400" />}
+            </button>
+          </div>
+
+          <div className="text-[11px] text-slate-400 bg-slate-50 rounded-xl px-3 py-2">
+            ⚡ Store earnings are always protected. Discounts come from Rezo&apos;s 10% commission only.
+          </div>
+
+          <Button onClick={createPromotion} disabled={creatingPromo || !promoForm.title.trim() || !promoForm.discount_value}
+            className="w-full rounded-xl h-10 booka-gradient text-white border-0">
+            {creatingPromo ? "Creating…" : "Create Promotion"}
+          </Button>
+        </div>
+
+        {/* ── Active Promotions ── */}
+        {promotionsLoading ? (
+          <div className="space-y-2">{[1,2].map(i=><div key={i} className="h-20 rounded-2xl booka-shimmer"/>)}</div>
+        ) : (
+          <>
+            {activePromos.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Active ({activePromos.length})</p>
+                <div className="space-y-2">
+                  {activePromos.map((p) => (
+                    <div key={p.id} className="bg-white rounded-2xl border border-green-200 shadow-sm p-4 space-y-2">
+                      <div className="flex items-start gap-2 justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-slate-800">{p.title}</span>
+                            <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">ACTIVE</span>
+                          </div>
+                          {p.description && <p className="text-xs text-slate-500 mt-0.5">{p.description}</p>}
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                            <span className="text-[11px] font-bold text-green-700">{fmtDiscount(p)} off</span>
+                            <span className="text-[11px] text-slate-400">{fmtApplies(p)}</span>
+                            {p.end_date && <span className="text-[11px] text-amber-600">Ends {format(new Date(p.end_date), "MMM d, h:mm a")}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => togglePromotion(p)}
+                          className="flex-1 h-8 rounded-xl text-xs font-semibold border border-amber-200 text-amber-600 hover:bg-amber-50 transition-all active:scale-95">
+                          Deactivate
+                        </button>
+                        <button onClick={() => setPromoDeleteConfirm(p.id)}
+                          className="h-8 px-3 rounded-xl text-xs font-semibold border border-red-200 text-red-500 hover:bg-red-50 transition-all active:scale-95">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Past Promotions ── */}
+            {pastPromos.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Past / Inactive ({pastPromos.length})</p>
+                <div className="space-y-2">
+                  {pastPromos.map((p) => (
+                    <div key={p.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-2 opacity-75">
+                      <div className="flex items-start gap-2 justify-between">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-semibold text-slate-700">{p.title}</span>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                            <span className="text-[11px] font-semibold text-slate-500">{fmtDiscount(p)} off</span>
+                            <span className="text-[11px] text-slate-400">{fmtApplies(p)}</span>
+                            <span className="text-[11px] text-slate-400">Created {format(new Date(p.created_at), "MMM d, yyyy")}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => togglePromotion(p)}
+                          className="flex-1 h-8 rounded-xl text-xs font-semibold border border-green-200 text-green-600 hover:bg-green-50 transition-all active:scale-95">
+                          Reactivate
+                        </button>
+                        <button onClick={() => setPromoDeleteConfirm(p.id)}
+                          className="h-8 px-3 rounded-xl text-xs font-semibold border border-red-200 text-red-500 hover:bg-red-50 transition-all active:scale-95">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {promotions.length === 0 && (
+              <div className="text-center py-16 text-slate-400">
+                <Tag size={36} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No promotions yet. Create your first one above.</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Delete confirmation ── */}
+        {promoDeleteConfirm && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center px-6" onClick={() => setPromoDeleteConfirm(null)}>
+            <div className="absolute inset-0 bg-black/60" />
+            <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+              <p className="font-bold text-slate-900">Delete Promotion?</p>
+              <p className="text-sm text-slate-600">This cannot be undone. If the promotion is active, an announcement will be sent to users that it has ended.</p>
+              <div className="flex gap-2">
+                <button onClick={() => setPromoDeleteConfirm(null)} className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold">Cancel</button>
+                <button onClick={() => deletePromotion(promoDeleteConfirm)}
+                  disabled={deletingPromoId === promoDeleteConfirm}
+                  className="flex-1 h-10 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 active:scale-95 disabled:opacity-60">
+                  {deletingPromoId === promoDeleteConfirm ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderContent = () => {
     if (activeTab === "overview") return renderOverview();
     if (activeTab === "stores") return renderStores();
@@ -2054,6 +2448,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     if (activeTab === "communication") return renderCommunication();
     if (activeTab === "announcements") return renderAnnouncements();
     if (activeTab === "messages") return renderMessages();
+    if (activeTab === "promotions") return renderPromotions();
     return null;
   };
 
@@ -2066,6 +2461,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     { id: "bugs", label: "Bugs", icon: AlertCircle },
     { id: "bookings", label: "Bookings", icon: Calendar },
     { id: "revenue", label: "Revenue", icon: DollarSign },
+    { id: "promotions", label: "Promotions", icon: Tag },
     { id: "platform", label: "Platform", icon: Settings2 },
     { id: "financial", label: "Financial", icon: CreditCard },
     { id: "moderation", label: "Moderation", icon: Eye },

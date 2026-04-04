@@ -40,6 +40,8 @@ interface Reservation {
   commitment_fee_amount?: number;
   commission_amount?: number;
   store_earnings?: number;
+  discount_amount?: number;
+  promotion_id?: string | null;
   payout_status?: string;
   customer_id: string;
   customer_label: string;
@@ -615,7 +617,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
     const [resRes, slotsRes, reviewsRes] = await Promise.all([
       supabase
         .from("reservations")
-        .select("id, reservation_date, start_time, end_time, status, fee, payment_status, total_amount, refund_amount, retained_amount, commitment_fee_amount, commission_amount, store_earnings, payout_status, customer_id, checkin_code, cancelled_by, is_walk_in, walk_in_name, reservation_services(*)")
+        .select("id, reservation_date, start_time, end_time, status, fee, payment_status, total_amount, refund_amount, retained_amount, commitment_fee_amount, commission_amount, store_earnings, discount_amount, promotion_id, payout_status, customer_id, checkin_code, cancelled_by, is_walk_in, walk_in_name, reservation_services(*)")
         .eq("store_id", store.id)
         .order("reservation_date", { ascending: false }),
       supabase
@@ -1710,10 +1712,23 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               <span>Commitment deposit (25%)</span>
               <span>{fmt(depositAmt)}</span>
             </div>
+            {r.discount_amount != null && r.discount_amount > 0 && (
+              <div className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                <span className="flex items-center gap-1 text-green-700 dark:text-green-400 font-semibold">
+                  <span className="text-[10px]">✦</span> Rezo Promo
+                </span>
+                <span className="text-green-700 dark:text-green-400 font-bold">−{fmt(r.discount_amount)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm font-extrabold text-foreground pt-0.5 border-t border-border/60">
               <span>Total charged</span>
               <span className="text-primary">{fmt(total)}</span>
             </div>
+            {r.discount_amount != null && r.discount_amount > 0 && (
+              <div className="text-[10px] text-green-600 dark:text-green-400 font-medium">
+                Your earnings are not affected — Rezo absorbs this discount.
+              </div>
+            )}
             {r.payment_status === "partially_refunded" && r.refund_amount != null && r.retained_amount != null && (
               <div className="pt-1 space-y-0.5">
                 <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400">
