@@ -189,12 +189,6 @@ const CustomerBooking = ({ store, onBack }: Props) => {
       .catch(() => setActivePromotion(null));
   }, [store.id, store.category]);
 
-  // Derived promo calculation (recalculates whenever serviceTotal or promotion changes)
-  const promoCalc: PromoCalc | null =
-    activePromotion && serviceTotal > 0
-      ? applyPromotion(serviceTotal, activePromotion)
-      : null;
-
   const acceptTermsAndBook = async () => {
     if (!user) return;
     setAcceptingTerms(true);
@@ -354,6 +348,12 @@ const CustomerBooking = ({ store, onBack }: Props) => {
         })
       ).reduce((a, b) => a + b, 0)
     : 0;
+
+  // Derived promo calculation — must be after serviceTotal
+  const promoCalc: PromoCalc | null =
+    activePromotion && serviceTotal > 0
+      ? applyPromotion(serviceTotal, activePromotion)
+      : null;
 
   const requiredGroupsFilled = selectedService
     ? selectedService.service_option_groups
