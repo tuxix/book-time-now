@@ -17,11 +17,11 @@ A mobile-first booking app built with React + Vite + Supabase. Formerly called "
 - `src/hooks/useAuth.tsx` — Supabase auth context
 - `src/lib/categories.ts` — CATEGORIES array, DAILY_LIMITS, distanceKm, timeAgo, getCategoryEmoji, DEFAULT_SERVICES utilities
 - `src/pages/CustomerHome.tsx` — full-screen Leaflet map + bottom sheet + 4-tab nav (Explore/Search/Bookings/Profile)
-- `src/pages/StoreDashboard.tsx` — dark-header dashboard; hamburger drawer nav; Bookings/Slots/Hours/Services/Photos/Reviews/Messages/Calendar tabs; two toggles (open/closed + accepting bookings); onboarding checklist banner; service edit dialog; category-change migration flow; walk-in system
+- `src/pages/StoreDashboard.tsx` — dark-header dashboard; hamburger drawer nav; Bookings/Hours/Services/Photos/Reviews/Messages/Calendar tabs; compact 2-col status panel (OPEN/CLOSED + BOOKINGS ON/PAUSED) with contextual hints; corrected 4-step onboarding checklist (photo/service/hours/description); payout history modal with request-payout action; geocoding error toast; walk-in system
 - `src/pages/AdminDashboard.tsx` — admin panel with overview stats, store management, customer management, bookings, revenue, disputes, bug reports, content moderation, announcements, financial tab
 - `src/components/StoreProfile.tsx` — Supabase-connected profile with live reviews (realtime) and available hours
 - `src/components/CategoryResults.tsx` — filtered store list for a selected category
-- `src/components/SearchScreen.tsx` — full-text store search with localStorage recent history
+- `src/components/SearchScreen.tsx` — full-text store search with localStorage recent history; filter chips (Open Now, 4★+, Nearest, Top Rated); result count display; improved empty states
 - `src/components/CustomerBooking.tsx` — date picker + slot picker + service selection + booking confirmation; duration-aware slot blocking; buffer enforcement; end-of-day slot filtering; post-insert race condition check
 - `src/components/CustomerReservations.tsx` — live reservations with pull-to-refresh + realtime updates + review trigger; dispute submission
 - `src/components/ReviewDialog.tsx` — star rating + comment form; inserts reviewer_name from user metadata

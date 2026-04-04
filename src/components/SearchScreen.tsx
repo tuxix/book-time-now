@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, Clock, Star, MapPin, X, Heart } from "lucide-react";
+import { Search, Clock, Star, MapPin, X, Heart, SlidersHorizontal } from "lucide-react";
 import { getCategoryEmoji, distanceKm } from "@/lib/categories";
 import { type Store } from "@/components/StoreProfile";
 
@@ -24,10 +24,15 @@ const removeRecent = (q: string) => {
   localStorage.setItem(RECENT_KEY, JSON.stringify(items));
 };
 
+type SortMode = "default" | "rating" | "distance";
+
 const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }: Props) => {
   const [query, setQuery] = useState("");
   const [allStores, setAllStores] = useState<Store[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>(getRecent());
+  const [filterOpenNow, setFilterOpenNow] = useState(false);
+  const [filterTopRated, setFilterTopRated] = useState(false);
+  const [sortBy, setSortBy] = useState<SortMode>("default");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,13 +43,28 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
-  const results = query.trim()
-    ? allStores.filter((s) => {
-        const q = query.toLowerCase();
-        const allCats = (s.categories && s.categories.length > 0 ? s.categories : [s.category ?? ""]);
-        return s.name.toLowerCase().includes(q) || allCats.some((c) => c.toLowerCase().includes(q));
-      })
-    : allStores;
+  const results = (() => {
+    let list = query.trim()
+      ? allStores.filter((s) => {
+          const q = query.toLowerCase();
+          const allCats = (s.categories && s.categories.length > 0 ? s.categories : [s.category ?? ""]);
+          return s.name.toLowerCase().includes(q) || allCats.some((c) => c.toLowerCase().includes(q));
+        })
+      : [...allStores];
+    if (filterOpenNow) list = list.filter((s) => s.is_open !== false);
+    if (filterTopRated) list = list.filter((s) => (s.rating ?? 0) >= 4 && (s.review_count ?? 0) > 0);
+    if (sortBy === "rating") list = [...list].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    if (sortBy === "distance" && userLocation) {
+      list = [...list].sort((a, b) => {
+        const dA = a.latitude && a.longitude ? Math.hypot(a.latitude - userLocation[0], a.longitude - userLocation[1]) : Infinity;
+        const dB = b.latitude && b.longitude ? Math.hypot(b.latitude - userLocation[0], b.longitude - userLocation[1]) : Infinity;
+        return dA - dB;
+      });
+    }
+    return list;
+  })();
+
+  const activeFilterCount = [filterOpenNow, filterTopRated, sortBy !== "default"].filter(Boolean).length;
 
   const handleSelect = (store: Store) => {
     addRecent(store.name);
@@ -126,7 +146,7 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
   return (
     <div className="absolute inset-x-0 top-0 bg-background" style={{ bottom: 56, zIndex: 200, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       {/* Search bar */}
-      <div className="shrink-0 px-4 py-3 border-b border-border bg-card/95 backdrop-blur-md">
+      <div className="shrink-0 px-4 pt-3 pb-2 border-b border-border bg-card/95 backdrop-blur-md space-y-2">
         <div className="flex items-center gap-2 bg-secondary rounded-2xl px-3 booka-shadow-sm transition-shadow focus-within:booka-shadow-blue">
           <Search size={16} className="text-muted-foreground shrink-0" />
           <input
@@ -140,6 +160,54 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
           {query && (
             <button onClick={() => setQuery("")} className="p-1 rounded-full hover:bg-muted active:scale-95">
               <X size={14} className="text-muted-foreground" />
+            </button>
+          )}
+        </div>
+        {/* Filter chips */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <SlidersHorizontal size={13} className={`shrink-0 ${activeFilterCount > 0 ? "text-primary" : "text-muted-foreground"}`} />
+          <button
+            data-testid="filter-open-now"
+            onClick={() => setFilterOpenNow((v) => !v)}
+            className={`shrink-0 flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border transition-all active:scale-95 ${filterOpenNow ? "bg-green-500 text-white border-green-500" : "bg-secondary text-muted-foreground border-border"}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${filterOpenNow ? "bg-white" : "bg-green-400"}`} />
+            Open Now
+          </button>
+          <button
+            data-testid="filter-top-rated"
+            onClick={() => setFilterTopRated((v) => !v)}
+            className={`shrink-0 flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border transition-all active:scale-95 ${filterTopRated ? "bg-amber-500 text-white border-amber-500" : "bg-secondary text-muted-foreground border-border"}`}
+          >
+            <Star size={10} className={filterTopRated ? "fill-white text-white" : "text-amber-400"} />
+            4★ & up
+          </button>
+          {userLocation && (
+            <button
+              data-testid="sort-distance"
+              onClick={() => setSortBy((v) => v === "distance" ? "default" : "distance")}
+              className={`shrink-0 flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border transition-all active:scale-95 ${sortBy === "distance" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-muted-foreground border-border"}`}
+            >
+              <MapPin size={10} />
+              Nearest
+            </button>
+          )}
+          <button
+            data-testid="sort-rating"
+            onClick={() => setSortBy((v) => v === "rating" ? "default" : "rating")}
+            className={`shrink-0 flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border transition-all active:scale-95 ${sortBy === "rating" ? "bg-primary text-primary-foreground border-primary" : "bg-secondary text-muted-foreground border-border"}`}
+          >
+            <Star size={10} />
+            Top Rated
+          </button>
+          {activeFilterCount > 0 && (
+            <button
+              data-testid="clear-filters"
+              onClick={() => { setFilterOpenNow(false); setFilterTopRated(false); setSortBy("default"); }}
+              className="shrink-0 flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border border-dashed border-muted-foreground/40 text-muted-foreground hover:bg-secondary transition-all active:scale-95"
+            >
+              <X size={10} />
+              Clear
             </button>
           )}
         </div>
@@ -175,18 +243,29 @@ const SearchScreen = ({ userLocation, onSelectStore, favStoreIds, onToggleFav }:
           </div>
         )}
 
-        {!query && (
+        {!query && activeFilterCount === 0 && (
           <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">All Stores</p>
         )}
+        {(query || activeFilterCount > 0) && results.length > 0 && (
+          <p className="text-[10px] font-semibold text-muted-foreground mb-1">
+            {results.length} store{results.length !== 1 ? "s" : ""} found
+            {query ? ` for "${query}"` : ""}
+            {activeFilterCount > 0 ? ` · ${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""} active` : ""}
+          </p>
+        )}
 
-        {query && results.length === 0 ? (
+        {results.length === 0 ? (
           <div className="text-center py-14 text-muted-foreground fade-in">
             <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mx-auto mb-4">
               <Search size={26} className="opacity-30" />
             </div>
             <p className="text-sm font-semibold text-foreground">No results found</p>
-            <p className="text-xs mt-1 opacity-70">for "{query}"</p>
-            <p className="text-xs mt-3 opacity-50">Try a different store name or category</p>
+            {query && <p className="text-xs mt-1 opacity-70">for "{query}"</p>}
+            {activeFilterCount > 0 ? (
+              <p className="text-xs mt-3 opacity-60">Try removing some filters to see more stores</p>
+            ) : (
+              <p className="text-xs mt-3 opacity-50">Try a different store name or category</p>
+            )}
           </div>
         ) : (
           results.map((store, i) => <StoreCard key={store.id} store={store} index={i} />)

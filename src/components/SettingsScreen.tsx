@@ -72,6 +72,7 @@ const SettingsScreen = ({ onBack, onEditProfile }: Props) => {
 
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   // FAQ
   const [faqOpen, setFaqOpen] = useState(false);
@@ -109,9 +110,17 @@ const SettingsScreen = ({ onBack, onEditProfile }: Props) => {
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteConfirm !== "DELETE") return;
-    toast.info("Please contact support to delete your account.");
+    if (deleteConfirm !== "DELETE" || !user) return;
+    setDeletingAccount(true);
+    const { error } = await supabase.from("profiles").delete().eq("id", user.id);
+    if (error) {
+      toast.error("Could not delete account. Please contact support.");
+      setDeletingAccount(false);
+      return;
+    }
+    toast.success("Account deleted.");
     setDeleteDialog(false);
+    await signOut();
   };
 
   const handleBugScreenshot = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -286,8 +295,8 @@ const SettingsScreen = ({ onBack, onEditProfile }: Props) => {
             <Input value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} placeholder="DELETE" className="rounded-xl" />
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setDeleteDialog(false)} className="flex-1 rounded-xl">Cancel</Button>
-              <Button onClick={handleDeleteAccount} disabled={deleteConfirm !== "DELETE"} className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white border-0">
-                Delete
+              <Button onClick={handleDeleteAccount} disabled={deleteConfirm !== "DELETE" || deletingAccount} className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white border-0">
+                {deletingAccount ? "Deleting…" : "Delete"}
               </Button>
             </div>
           </div>

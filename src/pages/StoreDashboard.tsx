@@ -315,7 +315,11 @@ const StoreSetupScreen = ({
       if (error) throw error;
       if (address.trim()) {
         geocodeAddress(address.trim()).then((coords) => {
-          if (coords) supabase.from("stores").update({ latitude: coords.lat, longitude: coords.lng }).eq("user_id", userId);
+          if (coords) {
+            supabase.from("stores").update({ latitude: coords.lat, longitude: coords.lng }).eq("user_id", userId);
+          } else {
+            toast.warning("Address not found on map. You can update it in your Profile settings.");
+          }
         });
       }
       // Create default store_hours (Mon–Fri 9am–5pm, Sat 9am–2pm, Sun closed)
@@ -421,6 +425,9 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [togglingOpen, setTogglingOpen] = useState(false);
   const [togglingAccepting, setTogglingAccepting] = useState(false);
+  const [hasStoreHours, setHasStoreHours] = useState(false);
+  const [showPayoutHistory, setShowPayoutHistory] = useState(false);
+  const [requestingPayout, setRequestingPayout] = useState(false);
 
   // Chat / messaging — routes to Messages tab instead of floating overlay
   const [pendingChat, setPendingChat] = useState<{ reservationId: string; customerName: string } | null>(null);
@@ -614,7 +621,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
   // ── Fetch reservations, slots, reviews ─────────────────────────────────
   const fetchData = async () => {
     if (!store || needsSetup) return;
-    const [resRes, slotsRes, reviewsRes] = await Promise.all([
+    const [resRes, slotsRes, reviewsRes, hoursRes] = await Promise.all([
       supabase
         .from("reservations")
         .select("id, reservation_date, start_time, end_time, status, fee, payment_status, total_amount, refund_amount, retained_amount, commitment_fee_amount, commission_amount, store_earnings, discount_amount, promotion_id, payout_status, customer_id, checkin_code, cancelled_by, is_walk_in, walk_in_name, reservation_services(*)")
@@ -626,7 +633,11 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
       supabase
         .from("reviews").select("*").eq("store_id", store.id)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("store_hours").select("id", { count: "exact", head: true })
+        .eq("store_id", store.id).eq("is_open", true),
     ]);
+    setHasStoreHours((hoursRes.count ?? 0) > 0);
     if (resRes.data) {
       const reservationData = resRes.data;
       const customerIds = [...new Set(reservationData.map((r) => r.customer_id as string))];
@@ -1455,6 +1466,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         if (coords) {
           supabase.from("stores").update({ latitude: coords.lat, longitude: coords.lng }).eq("id", store.id);
           setStore((prev) => prev ? { ...prev, latitude: coords.lat, longitude: coords.lng } : prev);
+        } else {
+          toast.warning("Address not found on map — try a more specific address so customers can locate you.");
         }
       });
     }
@@ -1957,26 +1970,44 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         return null;
       })()}
 
-      {/* ── Toggles ──────────────────────────────────────────────────────── */}
-      <div className="px-5 py-3 border-b border-border bg-card space-y-2">
-        <button
-          data-testid="button-toggle-open"
-          onClick={toggleOpen}
-          disabled={togglingOpen}
-          className={`w-full py-2.5 rounded-2xl font-bold text-white flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-[0.98] text-sm ${isOpen ? "bg-green-500" : "bg-red-500"} ${togglingOpen ? "opacity-70" : ""}`}
-        >
-          <div className="w-2 h-2 rounded-full bg-white" />
-          {isOpen ? "Store OPEN" : "Store CLOSED"}
-        </button>
-        <button
-          data-testid="button-toggle-accepting"
-          onClick={toggleAccepting}
-          disabled={togglingAccepting}
-          className={`w-full py-2.5 rounded-2xl font-bold text-white flex items-center justify-center gap-2.5 transition-all duration-300 active:scale-[0.98] text-sm ${acceptingBookings ? "bg-blue-500" : "bg-slate-500"} ${togglingAccepting ? "opacity-70" : ""}`}
-        >
-          <div className="w-2 h-2 rounded-full bg-white" />
-          {acceptingBookings ? "Accepting New Bookings" : "Bookings Paused"}
-        </button>
+      {/* ── Status Panel ─────────────────────────────────────────────────── */}
+      <div className="px-4 py-3 border-b border-border bg-card">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            data-testid="button-toggle-open"
+            onClick={toggleOpen}
+            disabled={togglingOpen}
+            className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl border transition-all active:scale-[0.97] ${isOpen ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700" : "bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700"} ${togglingOpen ? "opacity-60" : ""}`}
+          >
+            <div>
+              <p className={`text-xs font-extrabold tracking-wide ${isOpen ? "text-green-700 dark:text-green-300" : "text-red-600 dark:text-red-400"}`}>
+                {isOpen ? "OPEN" : "CLOSED"}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Store status</p>
+            </div>
+            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isOpen ? "bg-green-500" : "bg-red-400"}`} />
+          </button>
+          <button
+            data-testid="button-toggle-accepting"
+            onClick={toggleAccepting}
+            disabled={togglingAccepting}
+            className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl border transition-all active:scale-[0.97] ${acceptingBookings ? "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700" : "bg-secondary border-border"} ${togglingAccepting ? "opacity-60" : ""}`}
+          >
+            <div>
+              <p className={`text-xs font-extrabold tracking-wide ${acceptingBookings ? "text-blue-700 dark:text-blue-300" : "text-muted-foreground"}`}>
+                {acceptingBookings ? "BOOKINGS ON" : "PAUSED"}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">New bookings</p>
+            </div>
+            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${acceptingBookings ? "bg-blue-500" : "bg-muted-foreground/30"}`} />
+          </button>
+        </div>
+        {!isOpen && (
+          <p className="text-[10px] text-muted-foreground text-center mt-2">Store is closed — customers can't book new appointments</p>
+        )}
+        {isOpen && !acceptingBookings && (
+          <p className="text-[10px] text-muted-foreground text-center mt-2">Open but not accepting new bookings right now</p>
+        )}
       </div>
 
       {/* ── Onboarding Checklist ─────────────────────────────────────────── */}
@@ -1984,9 +2015,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         const checks = [
           { label: "Upload a store photo", done: photos.length > 0, action: () => setTab("photos") },
           { label: "Add your first service", done: storeServices.length > 0, action: () => setTab("services") },
-          { label: "Create booking slots", done: slots.length > 0, action: () => setTab("slots") },
+          { label: "Set your business hours", done: hasStoreHours, action: () => setTab("hours") },
           { label: "Write a store description", done: (store.description?.trim()?.length ?? 0) > 10, action: () => setTab("profile") },
-          { label: "Set operating hours", done: storeServices.length > 0 && slots.length > 0, action: () => setTab("hours") },
         ];
         const doneCount = checks.filter(c => c.done).length;
         const allDone = doneCount === checks.length;
@@ -2067,7 +2097,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             const unpaidEarnings = reservations.filter((r) => r.status === "completed" && r.payout_status === "unpaid").reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
             const weekCommission = completedThisWeek.reduce((s, r) => s + (r.commission_amount ?? (r.total_amount ? Math.round(r.total_amount * 0.10) : 0)), 0);
             const fmtJ = (n: number) => `J$${n.toLocaleString()}`;
-            if (completedThisMonth.length === 0) return null;
+            const allCompleted = reservations.filter((r) => r.status === "completed");
+            if (allCompleted.length === 0) return null;
             return (
               <div className="mb-5 rounded-2xl border border-border bg-card p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -2093,11 +2124,11 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                     <p className="text-[10px] text-muted-foreground">this week (10%)</p>
                   </div>
                   <div className="h-8 w-px bg-border" />
-                  <div className="text-center">
+                  <button className="text-center active:scale-95 transition-all" onClick={() => setShowPayoutHistory(true)}>
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Pending Payout</p>
                     <p className="text-sm font-bold text-amber-600">{fmtJ(unpaidEarnings)}</p>
-                    <p className="text-[10px] text-muted-foreground">weekly disbursement</p>
-                  </div>
+                    <p className="text-[10px] text-primary underline underline-offset-2">View details →</p>
+                  </button>
                 </div>
               </div>
             );
@@ -3468,6 +3499,100 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Payout History Modal ─────────────────────────────────────────── */}
+      {showPayoutHistory && (() => {
+        const fmtJ = (n: number) => `J$${n.toLocaleString()}`;
+        const completed = reservations.filter((r) => r.status === "completed");
+        const unpaid = completed.filter((r) => r.payout_status === "unpaid" || !r.payout_status);
+        const paid = completed.filter((r) => r.payout_status === "paid");
+        const unpaidTotal = unpaid.reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
+        const paidTotal = paid.reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
+
+        const handleRequestPayout = async () => {
+          if (!store) return;
+          setRequestingPayout(true);
+          await supabase.from("stores").update({ payout_requested_at: new Date().toISOString() } as any).eq("id", store.id);
+          setRequestingPayout(false);
+          toast.success("Payout request sent — our team processes payouts every Monday.");
+        };
+
+        return (
+          <div className="fixed inset-0 z-[150] flex items-end justify-center" onClick={() => setShowPayoutHistory(false)}>
+            <div className="absolute inset-0 bg-black/50" />
+            <div className="relative bg-card rounded-t-3xl w-full max-w-lg shadow-2xl pb-safe" onClick={(e) => e.stopPropagation()}>
+              <div className="p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-base font-bold text-foreground">Earnings & Payouts</p>
+                  <button onClick={() => setShowPayoutHistory(false)} className="p-1.5 rounded-xl hover:bg-secondary active:scale-95 transition-all">
+                    <span className="text-lg text-muted-foreground leading-none">✕</span>
+                  </button>
+                </div>
+
+                {/* Summary */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3">
+                    <p className="text-[10px] text-amber-700 dark:text-amber-300 font-bold uppercase tracking-wide">Pending Payout</p>
+                    <p className="text-xl font-extrabold text-amber-800 dark:text-amber-200">{fmtJ(unpaidTotal)}</p>
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400">{unpaid.length} booking{unpaid.length !== 1 ? "s" : ""}</p>
+                  </div>
+                  <div className="rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-3">
+                    <p className="text-[10px] text-green-700 dark:text-green-300 font-bold uppercase tracking-wide">Total Paid Out</p>
+                    <p className="text-xl font-extrabold text-green-800 dark:text-green-200">{fmtJ(paidTotal)}</p>
+                    <p className="text-[10px] text-green-600 dark:text-green-400">{paid.length} booking{paid.length !== 1 ? "s" : ""}</p>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground">Payouts are disbursed every Monday. You receive 90% of each booking's total — Rezo's 10% commission is already deducted.</p>
+
+                {/* Request payout button */}
+                {unpaidTotal > 0 && (
+                  <button
+                    onClick={handleRequestPayout}
+                    disabled={requestingPayout}
+                    data-testid="button-request-payout"
+                    className="w-full py-3 rounded-2xl booka-gradient text-primary-foreground font-bold text-sm transition-all active:scale-[0.98] disabled:opacity-70"
+                  >
+                    {requestingPayout ? "Sending request…" : `Request Payout — ${fmtJ(unpaidTotal)}`}
+                  </button>
+                )}
+
+                {/* Recent completed bookings */}
+                {completed.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Recent Completed Bookings</p>
+                    <div className="rounded-2xl border border-border divide-y divide-border max-h-52 overflow-y-auto">
+                      {completed.slice(0, 20).map((r) => {
+                        const earnings = r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0);
+                        const isPaid = r.payout_status === "paid";
+                        return (
+                          <div key={r.id} className="flex items-center justify-between px-3.5 py-2.5 bg-card">
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">{r.customer_label ?? "Customer"}</p>
+                              <p className="text-[10px] text-muted-foreground">{r.reservation_date} · {r.start_time}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold text-foreground">{fmtJ(earnings)}</p>
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isPaid ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300" : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"}`}>
+                                {isPaid ? "Paid" : "Pending"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {completed.length === 0 && (
+                  <p className="text-center text-sm text-muted-foreground py-4">No completed bookings yet</p>
+                )}
+              </div>
+              <div className="h-6" />
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Store chat screen — rendered at top level to avoid z-index issues ── */}
       {storeChatTarget && store && (
