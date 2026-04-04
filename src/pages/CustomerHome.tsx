@@ -502,7 +502,6 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
       .from("stores")
       .select("id, name, description, address, phone, category, categories, rating, review_count, latitude, longitude, is_open, buffer_minutes, accepting_bookings, cancellation_hours, announcement, avatar_url")
       .then(({ data, error }) => {
-        console.log("[Booka] stores response:", { data, error });
         if (data) setStores(data as Store[]);
       });
   }, []);
@@ -809,7 +808,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
             width: "calc(100% - 32px)",
           }}
         >
-          <div className="bg-white rounded-2xl flex items-center gap-2.5 px-3 py-2.5 relative"
+          <div className="bg-card rounded-2xl flex items-center gap-2.5 px-3 py-2.5 relative"
             style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.15)" }}
           >
             {/* Avatar */}
@@ -824,15 +823,15 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
 
             {/* Info */}
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-slate-900 text-[13px] truncate leading-tight">{mapPinStore.name}</p>
+              <p className="font-bold text-foreground text-[13px] truncate leading-tight">{mapPinStore.name}</p>
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <Star size={10} className="text-amber-400 fill-amber-400" />
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[11px] text-muted-foreground">
                   {mapPinStore.review_count > 0 ? mapPinStore.rating : "New"}
                 </span>
                 {(() => {
                   const d = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, mapPinStore.latitude, mapPinStore.longitude);
-                  return d ? <span className="text-[11px] text-slate-400 flex items-center gap-0.5"><MapPin size={9} />{d}</span> : null;
+                  return d ? <span className="text-[11px] text-muted-foreground flex items-center gap-0.5"><MapPin size={9} />{d}</span> : null;
                 })()}
                 {mapPinStore.is_open === false && (
                   <span className="text-[9px] font-bold bg-red-500 text-white px-1 py-0.5 rounded-full">CLOSED</span>
@@ -862,7 +861,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
       {/* ── Bottom sheet (explore only) ────────────────────────────────────── */}
       {showMap && (
         <div
-          className="absolute inset-x-0 bg-white rounded-t-3xl overflow-hidden"
+          className="absolute inset-x-0 bg-card rounded-t-3xl overflow-hidden"
           style={{
             bottom: 56,
             height: filterCat ? "30%" : sheetExpanded ? "57%" : "90px",
@@ -883,7 +882,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
             className="flex justify-center pt-3 pb-2 cursor-pointer"
             onClick={() => { if (!filterCat) setSheetExpanded((v) => !v); }}
           >
-            <div className="w-10 h-1 rounded-full bg-slate-300" />
+            <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
           </div>
 
           {/* Where to? / category search bar */}
@@ -922,23 +921,23 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
           {sheetExpanded && !filterCat && (
             <div className="fade-in">
               <div className="px-4 mb-2.5">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Browse Services</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Browse Services</p>
               </div>
               <div className="px-4 grid grid-cols-4 gap-2.5 pb-4 overflow-y-auto">
                 {CATEGORIES.map((cat, idx) => {
                   const palettes = [
-                    "bg-violet-50 border-violet-100 hover:border-violet-300",
-                    "bg-sky-50 border-sky-100 hover:border-sky-300",
-                    "bg-rose-50 border-rose-100 hover:border-rose-300",
-                    "bg-amber-50 border-amber-100 hover:border-amber-300",
-                    "bg-emerald-50 border-emerald-100 hover:border-emerald-300",
-                    "bg-indigo-50 border-indigo-100 hover:border-indigo-300",
-                    "bg-pink-50 border-pink-100 hover:border-pink-300",
-                    "bg-orange-50 border-orange-100 hover:border-orange-300",
-                    "bg-teal-50 border-teal-100 hover:border-teal-300",
-                    "bg-fuchsia-50 border-fuchsia-100 hover:border-fuchsia-300",
-                    "bg-lime-50 border-lime-100 hover:border-lime-300",
-                    "bg-cyan-50 border-cyan-100 hover:border-cyan-300",
+                    "bg-violet-50 dark:bg-violet-900/30 border-violet-100 dark:border-violet-700/40 hover:border-violet-300 dark:hover:border-violet-600",
+                    "bg-sky-50 dark:bg-sky-900/30 border-sky-100 dark:border-sky-700/40 hover:border-sky-300 dark:hover:border-sky-600",
+                    "bg-rose-50 dark:bg-rose-900/30 border-rose-100 dark:border-rose-700/40 hover:border-rose-300 dark:hover:border-rose-600",
+                    "bg-amber-50 dark:bg-amber-900/30 border-amber-100 dark:border-amber-700/40 hover:border-amber-300 dark:hover:border-amber-600",
+                    "bg-emerald-50 dark:bg-emerald-900/30 border-emerald-100 dark:border-emerald-700/40 hover:border-emerald-300 dark:hover:border-emerald-600",
+                    "bg-indigo-50 dark:bg-indigo-900/30 border-indigo-100 dark:border-indigo-700/40 hover:border-indigo-300 dark:hover:border-indigo-600",
+                    "bg-pink-50 dark:bg-pink-900/30 border-pink-100 dark:border-pink-700/40 hover:border-pink-300 dark:hover:border-pink-600",
+                    "bg-orange-50 dark:bg-orange-900/30 border-orange-100 dark:border-orange-700/40 hover:border-orange-300 dark:hover:border-orange-600",
+                    "bg-teal-50 dark:bg-teal-900/30 border-teal-100 dark:border-teal-700/40 hover:border-teal-300 dark:hover:border-teal-600",
+                    "bg-fuchsia-50 dark:bg-fuchsia-900/30 border-fuchsia-100 dark:border-fuchsia-700/40 hover:border-fuchsia-300 dark:hover:border-fuchsia-600",
+                    "bg-lime-50 dark:bg-lime-900/30 border-lime-100 dark:border-lime-700/40 hover:border-lime-300 dark:hover:border-lime-600",
+                    "bg-cyan-50 dark:bg-cyan-900/30 border-cyan-100 dark:border-cyan-700/40 hover:border-cyan-300 dark:hover:border-cyan-600",
                   ];
                   const palette = palettes[idx % palettes.length];
                   return (
@@ -949,7 +948,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
                       className={`flex flex-col items-center gap-2 py-4 px-2 rounded-2xl border transition-all duration-150 active:scale-90 booka-shadow-sm ${palette}`}
                     >
                       <span className="text-3xl leading-none">{cat.emoji}</span>
-                      <span className="text-[9px] font-bold text-slate-700 text-center leading-tight">{cat.label}</span>
+                      <span className="text-[9px] font-bold text-foreground/80 text-center leading-tight">{cat.label}</span>
                     </button>
                   );
                 })}
@@ -960,7 +959,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
           {/* Category results — always visible at 30% when filterCat active */}
           {filterCat && (
             <div className="flex flex-col" style={{ height: "calc(100% - 90px)", overflow: "hidden" }}>
-              <p className="text-xs font-medium text-slate-400 px-4 mb-1.5">
+              <p className="text-xs font-medium text-muted-foreground px-4 mb-1.5">
                 {filteredForSheet.length} {filteredForSheet.length === 1 ? "store" : "stores"} nearby
               </p>
               <div className="flex-1 overflow-y-auto px-4 pb-3 space-y-2 fade-in">
@@ -970,7 +969,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
                   filteredForSheet.map((store) => {
                     const dist = distanceKm(userLocation?.[0] ?? null, userLocation?.[1] ?? null, store.latitude, store.longitude);
                     return (
-                      <div key={store.id} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-100">
+                      <div key={store.id} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-secondary">
                         <button
                           className="flex-1 flex items-center gap-2.5 text-left min-w-0"
                           onClick={() => {
@@ -987,14 +986,14 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-slate-900 truncate leading-tight">{store.name}</p>
+                            <p className="text-sm font-bold text-foreground truncate leading-tight">{store.name}</p>
                             <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs text-slate-500 flex items-center gap-0.5">
+                              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
                                 <Star size={9} className="text-amber-400 fill-amber-400" />
                                 {store.review_count > 0 ? store.rating : "New"}
                               </span>
                               {dist && (
-                                <span className="text-xs text-slate-400 flex items-center gap-0.5">
+                                <span className="text-xs text-muted-foreground flex items-center gap-0.5">
                                   <MapPin size={9} /> {dist}
                                 </span>
                               )}
@@ -1003,11 +1002,11 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
                         </button>
                         <button
                           onClick={() => toggleFav(store.id)}
-                          className="p-1.5 rounded-lg hover:bg-slate-200 active:scale-95 shrink-0 transition-all"
+                          className="p-1.5 rounded-lg hover:bg-muted active:scale-95 shrink-0 transition-all"
                         >
                           <Heart
                             size={15}
-                            className={favStoreIds.has(store.id) ? "text-red-500" : "text-slate-300"}
+                            className={favStoreIds.has(store.id) ? "text-red-500" : "text-muted-foreground/40"}
                             fill={favStoreIds.has(store.id) ? "currentColor" : "none"}
                           />
                         </button>
