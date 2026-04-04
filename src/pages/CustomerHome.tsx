@@ -415,12 +415,9 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
   useEffect(() => {
     if (!user) return;
     const fetchAnn = async () => {
-      const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
-      const { data } = await supabase.from("announcements").select("id, title, message").in("audience", ["all", "customers"]).order("created_at", { ascending: false }).limit(10);
-      if (data) {
-        const next = data.find((a: any) => !dismissed.includes(a.id));
-        setAnnouncement(next ?? null);
-      }
+      const { data } = await supabase.from("announcements").select("id, title, message").in("audience", ["all", "customers"]).order("created_at", { ascending: false }).limit(1);
+      if (data && data.length > 0) setAnnouncement(data[0]);
+      else setAnnouncement(null);
     };
     fetchAnn();
     const ch = supabase.channel("ann-customer").on("postgres_changes" as any, { event: "INSERT", schema: "public", table: "announcements" }, fetchAnn).subscribe();
@@ -733,22 +730,11 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
       {/* ── Announcement modal pop-up ───────────────────────────────────────── */}
       {announcement && (
         <div className="fixed inset-0 z-[900] flex items-center justify-center px-6">
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={() => {
-              const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
-              localStorage.setItem("booka_dismissed_ann", JSON.stringify([...dismissed, announcement.id]));
-              setAnnouncement(null);
-            }}
-          />
+          <div className="absolute inset-0 bg-black/60" onClick={() => setAnnouncement(null)} />
           <div className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl" style={{ background: "linear-gradient(160deg, hsl(220 85% 14%) 0%, hsl(213 80% 24%) 100%)" }}>
             {/* Close button */}
             <button
-              onClick={() => {
-                const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
-                localStorage.setItem("booka_dismissed_ann", JSON.stringify([...dismissed, announcement.id]));
-                setAnnouncement(null);
-              }}
+              onClick={() => setAnnouncement(null)}
               className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white transition-all active:scale-90 z-10"
             >
               <X size={16} />
@@ -771,11 +757,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
             {/* Dismiss button */}
             <div className="px-6 pb-7">
               <button
-                onClick={() => {
-                  const dismissed: string[] = (() => { try { return JSON.parse(localStorage.getItem("booka_dismissed_ann") ?? "[]"); } catch { return []; } })();
-                  localStorage.setItem("booka_dismissed_ann", JSON.stringify([...dismissed, announcement.id]));
-                  setAnnouncement(null);
-                }}
+                onClick={() => setAnnouncement(null)}
                 className="w-full h-11 rounded-2xl bg-white text-slate-900 text-sm font-bold active:scale-95 transition-all hover:bg-blue-50"
               >
                 Got it
