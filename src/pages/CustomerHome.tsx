@@ -731,7 +731,7 @@ const CustomerHome = ({ onSwitchToDashboard, onSwitchToAdmin }: Props) => {
       )}
 
       {/* ── Announcement banner ────────────────────────────────────────────── */}
-      {announcement && activeTab === "explore" && (
+      {announcement && (
         <div className="absolute inset-x-0 top-0 z-[690] flex items-start gap-2 px-3 py-2.5" style={{ background: "linear-gradient(135deg, hsl(220 85% 16%) 0%, hsl(213 82% 28%) 100%)" }}>
           <Bell size={13} className="text-blue-200 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
