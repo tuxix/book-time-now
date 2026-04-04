@@ -35,31 +35,40 @@ export async function getActivePromotion(
   storeId: string,
   storeCategory: string,
 ): Promise<Promotion | null> {
-  const now = new Date().toISOString();
+  try {
+    const now = new Date();
 
-  const { data, error } = await supabase
-    .from("promotions")
-    .select("*")
-    .eq("is_active", true)
-    .or(`start_date.is.null,start_date.lte.${now}`)
-    .or(`end_date.is.null,end_date.gte.${now}`);
+    // Fetch all active promotions — date filtering done in JS to avoid
+    // complex PostgREST .or() chains with ISO strings that can throw.
+    const { data, error } = await supabase
+      .from("promotions")
+      .select("*")
+      .eq("is_active", true);
 
-  if (error || !data || data.length === 0) return null;
+    if (error || !data || data.length === 0) return null;
 
-  const applicable = (data as Promotion[]).filter((p) => {
-    if (p.applies_to === "all") return true;
-    if (p.applies_to === "category") return p.category === storeCategory;
-    if (p.applies_to === "specific_stores")
-      return (p.store_ids ?? []).includes(storeId);
-    return false;
-  });
+    const applicable = (data as Promotion[]).filter((p) => {
+      // Date window check
+      if (p.start_date && new Date(p.start_date) > now) return false;
+      if (p.end_date && new Date(p.end_date) < now) return false;
 
-  if (applicable.length === 0) return null;
+      // Scope check
+      if (p.applies_to === "all") return true;
+      if (p.applies_to === "category") return p.category === storeCategory;
+      if (p.applies_to === "specific_stores")
+        return (p.store_ids ?? []).includes(storeId);
+      return false;
+    });
 
-  // Pick highest discount value
-  return applicable.reduce((best, curr) =>
-    curr.discount_value > best.discount_value ? curr : best,
-  );
+    if (applicable.length === 0) return null;
+
+    // Pick highest discount value
+    return applicable.reduce((best, curr) =>
+      curr.discount_value > best.discount_value ? curr : best,
+    );
+  } catch {
+    return null;
+  }
 }
 
 export interface PromoCalc {

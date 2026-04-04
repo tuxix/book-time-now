@@ -184,7 +184,9 @@ const CustomerBooking = ({ store, onBack }: Props) => {
   // Fetch active promotion for this store
   useEffect(() => {
     const primaryCategory = (store.categories?.[0]) ?? store.category ?? "";
-    getActivePromotion(store.id, primaryCategory).then(setActivePromotion);
+    getActivePromotion(store.id, primaryCategory)
+      .then((p) => setActivePromotion(p))
+      .catch(() => setActivePromotion(null));
   }, [store.id, store.category]);
 
   // Derived promo calculation (recalculates whenever serviceTotal or promotion changes)
