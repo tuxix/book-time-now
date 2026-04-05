@@ -220,6 +220,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [payoutRows, setPayoutRows] = useState<{ store_id: string; name: string; unpaid: number; total_commission: number; booking_count: number }[]>([]);
   const [payoutsLoading, setPayoutsLoading] = useState(false);
   const [payoutRequests, setPayoutRequests] = useState<{ id: string; store_id: string; store_name: string; note: string; created_at: string }[]>([]);
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [proStores, setProStores] = useState<StoreRow[]>([]);
   const [premiumStores, setPremiumStores] = useState<StoreRow[]>([]);
   const [freeStores, setFreeStores] = useState<StoreRow[]>([]);
@@ -933,6 +934,29 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       );
     }
     setPayoutsLoading(false);
+  };
+
+  const markStoreAsPaid = async (store_id: string, store_name: string) => {
+    setMarkingPaidId(store_id);
+    const [{ error: resErr }, { error: storeErr }] = await Promise.all([
+      supabase
+        .from("reservations")
+        .update({ payout_status: "paid" })
+        .eq("store_id", store_id)
+        .eq("status", "completed")
+        .or("payout_status.is.null,payout_status.eq.unpaid"),
+      supabase
+        .from("stores")
+        .update({ payout_requested_at: null } as any)
+        .eq("id", store_id),
+    ]);
+    setMarkingPaidId(null);
+    if (resErr || storeErr) {
+      toast.error("Failed to mark payout as paid");
+      return;
+    }
+    toast.success(`Payout marked as paid for ${store_name}`);
+    fetchPayoutsData();
   };
 
   // ── Promotions ─────────────────────────────────────────────────────────────
@@ -2049,24 +2073,35 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                   <div className="bg-card rounded-2xl border border-border shadow-sm divide-y divide-border">
                     {payoutRows.map(r => {
                       const hasReq = payoutRequests.some(req => req.store_id === r.store_id);
+                      const isMarking = markingPaidId === r.store_id;
                       return (
-                        <div key={r.store_id} className="flex items-center gap-3 px-4 py-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-semibold text-foreground truncate">{r.name}</p>
-                              {hasReq && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">REQUESTED</span>}
+                        <div key={r.store_id} className="px-4 py-3 space-y-2">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-foreground truncate">{r.name}</p>
+                                {hasReq && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 py-0.5 rounded-full shrink-0">REQUESTED</span>}
+                              </div>
+                              <p className="text-[11px] text-muted-foreground">{r.booking_count} completed bookings · commission {fmtJ(r.total_commission)}</p>
                             </div>
-                            <p className="text-[11px] text-muted-foreground">{r.booking_count} completed bookings · commission {fmtJ(r.total_commission)}</p>
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-bold text-amber-700">{fmtJ(r.unpaid)}</p>
+                              <p className="text-[10px] text-muted-foreground">unpaid</p>
+                            </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-sm font-bold text-amber-700">{fmtJ(r.unpaid)}</p>
-                            <p className="text-[10px] text-muted-foreground">unpaid</p>
-                          </div>
+                          <button
+                            onClick={() => markStoreAsPaid(r.store_id, r.name)}
+                            disabled={isMarking}
+                            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white text-xs font-bold transition-all disabled:opacity-60"
+                          >
+                            {isMarking ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                            {isMarking ? "Processing…" : `Mark J$${r.unpaid.toLocaleString()} as Paid`}
+                          </button>
                         </div>
                       );
                     })}
                   </div>
-                  <p className="text-[11px] text-muted-foreground text-center">Weekly payouts processed every Monday. Mark reservations as paid in the Bookings tab once processed.</p>
+                  <p className="text-[11px] text-muted-foreground text-center">Weekly payouts processed every Monday.</p>
                 </>
               )}
             </>
