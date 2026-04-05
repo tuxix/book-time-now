@@ -943,8 +943,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         .from("reservations")
         .update({ payout_status: "paid" })
         .eq("store_id", store_id)
-        .eq("status", "completed")
-        .or("payout_status.is.null,payout_status.eq.unpaid"),
+        .eq("status", "completed"),
       supabase
         .from("stores")
         .update({ payout_requested_at: null } as any)
