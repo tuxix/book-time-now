@@ -2094,7 +2094,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             const completedThisMonth = reservations.filter((r) => r.status === "completed" && r.reservation_date >= monthStart);
             const weekEarnings = completedThisWeek.reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
             const monthEarnings = completedThisMonth.reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
-            const unpaidEarnings = reservations.filter((r) => r.status === "completed" && r.payout_status === "unpaid").reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
+            const unpaidEarnings = reservations.filter((r) => r.status === "completed" && (r.payout_status === "unpaid" || !r.payout_status)).reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
             const weekCommission = completedThisWeek.reduce((s, r) => s + (r.commission_amount ?? (r.total_amount ? Math.round(r.total_amount * 0.10) : 0)), 0);
             const fmtJ = (n: number) => `J$${n.toLocaleString()}`;
             const allCompleted = reservations.filter((r) => r.status === "completed");
@@ -3509,6 +3509,8 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         const unpaidTotal = unpaid.reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
         const paidTotal = paid.reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
 
+        const payoutAlreadyRequested = !!(store as any).payout_requested_at;
+
         const handleRequestPayout = async () => {
           if (!store) return;
           setRequestingPayout(true);
@@ -3521,6 +3523,7 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
             toast.error("Could not send payout request. Please contact support.");
             return;
           }
+          setStore((prev) => prev ? { ...prev, payout_requested_at: new Date().toISOString() } as any : prev);
           toast.success("Payout request sent — our team processes payouts every Monday.");
         };
 
@@ -3531,9 +3534,14 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
               <div className="p-5 space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-base font-bold text-foreground">Earnings & Payouts</p>
-                  <button onClick={() => setShowPayoutHistory(false)} className="p-1.5 rounded-xl hover:bg-secondary active:scale-95 transition-all">
-                    <span className="text-lg text-muted-foreground leading-none">✕</span>
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => fetchData()} title="Refresh" className="p-1.5 rounded-xl hover:bg-secondary active:scale-95 transition-all text-muted-foreground">
+                      <RefreshCw size={14} />
+                    </button>
+                    <button onClick={() => setShowPayoutHistory(false)} className="p-1.5 rounded-xl hover:bg-secondary active:scale-95 transition-all">
+                      <span className="text-lg text-muted-foreground leading-none">✕</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Summary */}
@@ -3553,15 +3561,27 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
                 <p className="text-[11px] text-muted-foreground">Payouts are disbursed every Monday. You receive 90% of each booking's total — Rezo's 10% commission is already deducted.</p>
 
                 {/* Request payout button */}
-                {unpaidTotal > 0 && (
-                  <button
-                    onClick={handleRequestPayout}
-                    disabled={requestingPayout}
-                    data-testid="button-request-payout"
-                    className="w-full py-3 rounded-2xl booka-gradient text-primary-foreground font-bold text-sm transition-all active:scale-[0.98] disabled:opacity-70"
-                  >
-                    {requestingPayout ? "Sending request…" : `Request Payout — ${fmtJ(unpaidTotal)}`}
-                  </button>
+                {unpaidTotal > 0 ? (
+                  payoutAlreadyRequested ? (
+                    <div className="w-full py-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 font-bold text-sm text-center">
+                      ✓ Payout Requested — Processing Monday
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleRequestPayout}
+                      disabled={requestingPayout}
+                      data-testid="button-request-payout"
+                      className="w-full py-3 rounded-2xl booka-gradient text-primary-foreground font-bold text-sm transition-all active:scale-[0.98] disabled:opacity-70"
+                    >
+                      {requestingPayout ? "Sending request…" : `Request Payout — ${fmtJ(unpaidTotal)}`}
+                    </button>
+                  )
+                ) : (
+                  paidTotal > 0 && (
+                    <div className="w-full py-3 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 text-green-700 dark:text-green-300 font-bold text-sm text-center">
+                      ✓ All Payouts Processed
+                    </div>
+                  )
                 )}
 
                 {/* Recent completed bookings */}
