@@ -3510,14 +3510,12 @@ const StoreDashboard = ({ onBack }: { onBack: () => void }) => {
         const paidTotal = paid.reduce((s, r) => s + (r.store_earnings ?? (r.total_amount ? Math.round(r.total_amount * 0.9) : 0)), 0);
 
         const handleRequestPayout = async () => {
-          if (!store || !user) return;
+          if (!store) return;
           setRequestingPayout(true);
-          const fmtNote = `PAYOUT_REQUEST: ${fmtJ(unpaidTotal)} pending (${unpaid.length} completed booking${unpaid.length !== 1 ? "s" : ""})`;
-          const { error } = await supabase.from("admin_store_notes").insert({
-            store_id: store.id,
-            admin_id: user.id,
-            note: fmtNote,
-          });
+          const { error } = await supabase
+            .from("stores")
+            .update({ payout_requested_at: new Date().toISOString() } as any)
+            .eq("id", store.id);
           setRequestingPayout(false);
           if (error) {
             toast.error("Could not send payout request. Please contact support.");

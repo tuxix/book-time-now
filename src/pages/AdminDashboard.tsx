@@ -892,16 +892,15 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const fetchPayoutsData = async () => {
     setPayoutsLoading(true);
-    const [{ data }, { data: noteData }] = await Promise.all([
+    const [{ data }, { data: storeReqData }] = await Promise.all([
       supabase
         .from("reservations")
         .select("store_id, store_earnings, commission_amount, total_amount, payout_status, stores(name)")
         .eq("status", "completed"),
       supabase
-        .from("admin_store_notes")
-        .select("id, store_id, note, created_at, stores(name)")
-        .like("note", "PAYOUT_REQUEST:%")
-        .order("created_at", { ascending: false }),
+        .from("stores")
+        .select("id, name, payout_requested_at")
+        .not("payout_requested_at", "is", null) as any,
     ]);
     if (data) {
       const storeMap: Record<string, { name: string; unpaid: number; total_commission: number; booking_count: number }> = {};
@@ -922,14 +921,14 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         .sort((a, b) => b.unpaid - a.unpaid);
       setPayoutRows(rows);
     }
-    if (noteData) {
+    if (storeReqData) {
       setPayoutRequests(
-        (noteData as any[]).map((n) => ({
-          id: n.id,
-          store_id: n.store_id,
-          store_name: n.stores?.name ?? "Store",
-          note: n.note,
-          created_at: n.created_at,
+        (storeReqData as any[]).map((s: any) => ({
+          id: s.id,
+          store_id: s.id,
+          store_name: s.name ?? "Store",
+          note: "",
+          created_at: s.payout_requested_at,
         }))
       );
     }
@@ -2022,7 +2021,7 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-foreground truncate">{req.store_name}</p>
-                          <p className="text-[11px] text-muted-foreground">{req.note.replace("PAYOUT_REQUEST: ","")}</p>
+                          <p className="text-[11px] text-muted-foreground">Requested payout processing</p>
                         </div>
                         <p className="text-[10px] text-muted-foreground shrink-0 mt-0.5">{format(parseISO(req.created_at), "MMM d, h:mma")}</p>
                       </div>
