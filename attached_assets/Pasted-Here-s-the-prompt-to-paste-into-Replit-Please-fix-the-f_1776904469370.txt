@@ -1,0 +1,110 @@
+Here's the prompt to paste into Replit:
+
+---
+
+*"Please fix the following issues. These are critical for launch. Do not break anything already working. Read all existing code before making changes.*
+
+***FIX 1 — GOOGLE SIGN IN NOT GOING THROUGH ONBOARDING***
+
+*1. When a user signs in or signs up with Google they are currently being sent directly to the app without going through the role selection screen. Fix this so:*
+
+*2. After any Google OAuth sign in check if the user has a profiles row with a role set:*
+- *Query the profiles table for the current user's ID*
+- *If no profile exists OR if role is null or empty — redirect to the role selection screen*
+- *If a profile exists with a valid role — customer or store — proceed to the correct screen as normal*
+
+*3. The role selection screen should:*
+- *Show two clear options — I am a Customer and I am a Store Owner*
+- *When the customer option is tapped create a profiles row with role = customer and redirect to the customer explore screen*
+- *When the store owner option is tapped create a profiles row with role = store and redirect to the store setup screen*
+- *This screen should not have a back button — the user must select a role*
+
+*4. Make sure this check runs every time on app load — not just on first sign in. If a Google user somehow got through without a profile they should be caught on next login too*
+
+*5. Make sure the profile row created for Google users includes:*
+- *id — the Supabase auth user ID*
+- *role — customer or store*
+- *full_name — pulled from Google account metadata if available*
+- *email — pulled from Google account*
+- *created_at — current timestamp*
+
+*6. Give me this as a SQL code block to ensure the profiles table has the correct columns:*
+```sql
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email text;
+
+-- Fix RLS to allow profile creation after Google OAuth
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
+CREATE POLICY "Users can insert own profile"
+ON public.profiles FOR INSERT TO authenticated
+WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile"
+ON public.profiles FOR UPDATE TO authenticated
+USING (auth.uid() = id)
+WITH CHECK (auth.uid() = id);
+```
+
+***FIX 2 — USERS NOT SHOWING IN ADMIN DASHBOARD***
+
+*7. Users who sign up with Google are not appearing in the admin Stores or Customers tabs. Fix this by:*
+
+*8. Check the query that fetches customers in the admin dashboard — it should:*
+- *Join the profiles table with auth.users or fetch all profiles where role = customer*
+- *Include users who signed up with Google — not just email signups*
+- *Show full_name, email, phone, role, created_at and booking count*
+
+*9. Check the query that fetches stores in the admin dashboard — it should:*
+- *Join the stores table with the profiles table*
+- *Include store owners who signed up with Google*
+- *Show store name, category, tier, rating, booking count and owner email*
+
+*10. Make sure the admin dashboard queries are not filtering by auth provider — they should show ALL users regardless of whether they used email or Google*
+
+*11. Add a console log in the admin dashboard that shows the raw Supabase response when fetching customers and stores so we can see if the data is coming back or being filtered out*
+
+***FIX 3 — PAYMENT BYPASS FOR TESTING***
+
+*12. On the booking confirmation screen replace the Pay via Fygaro button with a simple Confirm Booking button that:*
+- *Immediately sets payment_status to paid*
+- *Completes the booking without any external redirect*
+- *Shows the full confirmation screen with booking reference and 4 digit check in code as normal*
+- *Add a small grey label under the button saying Test Mode — Payment Bypass Active*
+
+*13. Do not delete or modify any Fygaro code — just comment it out and replace with the bypass button so it can be switched back on later*
+
+***FIX 4 — BOOKING CONFIRMATION SCREEN***
+
+*14. Make sure the booking confirmation screen clearly shows:*
+- *Store name*
+- *Service name and price*
+- *Date and time*
+- *Booking reference number*
+- *4 digit check in code in large bold text*
+- *A note saying Show this code to your service provider when you arrive*
+
+*15. Verify the check in code is exactly 4 digits — not 6. If it is currently 6 digits change it to 4*
+
+***FIX 5 — REAL TIME BOOKING UPDATES***
+
+*16. When a customer confirms a booking make sure:*
+- *The booking appears immediately on the store dashboard without refreshing*
+- *The booking appears immediately in the customer Bookings tab without refreshing*
+- *The store owner receives a visible notification or the booking count updates in real time*
+
+***FIX 6 — TEST MODE BANNER***
+
+*17. Add a small yellow banner at the very top of the app visible ONLY to accounts where is_admin = true saying:*
+- *🧪 Test Mode — Payment bypass is active*
+- *Not visible to regular customers or store owners*
+
+***GENERAL***
+- *Give me all SQL code blocks first and wait for my confirmation before writing any code*
+- *Do not break anything already working*
+- *Test each fix after implementing and confirm it works before moving to the next one*
+- *If anything is unclear ask before building*"*
+
+---
+
+This covers everything needed for a clean first test run with your sister's store. Let me know what Replit says!
