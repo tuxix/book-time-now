@@ -386,10 +386,12 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   // ── Fetch stores ──────────────────────────────────────────────────────────
   const fetchStores = async () => {
     setStoresLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("stores")
       .select("id, name, category, address, phone, rating, review_count, is_suspended, is_approved, created_at, subscription_tier, category_locked_until")
       .order("created_at", { ascending: false });
+    // Diagnostic: show raw response so we can confirm Google-OAuth stores arrive.
+    console.log("[admin] fetchStores raw response:", { count: data?.length ?? 0, error, data });
     if (data) {
       const ids = data.map((s: any) => s.id);
       const [bookRes, slotsRes, lastBkRes, revRes] = await Promise.all([
@@ -420,11 +422,13 @@ const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   // ── Fetch customers ────────────────────────────────────────────────────────
   const fetchCustomers = async () => {
     setCustomersLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, phone, is_suspended, created_at, warning_count, trust_score, suspension_reason")
+      .select("id, full_name, email, phone, is_suspended, created_at, warning_count, trust_score, suspension_reason")
       .eq("role", "customer")
       .order("created_at", { ascending: false });
+    // Diagnostic: show raw response so we can confirm Google-OAuth users arrive.
+    console.log("[admin] fetchCustomers raw response:", { count: data?.length ?? 0, error, data });
     if (data) {
       const ids = data.map((p: any) => p.id);
       const [spentRes, noShowRes, lastBkRes, bkCountRes] = await Promise.all([

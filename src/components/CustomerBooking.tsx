@@ -676,7 +676,7 @@ const CustomerBooking = ({ store, onBack }: Props) => {
                   {confirmed.checkinCode}
                 </p>
                 <p className="text-[11px] text-muted-foreground text-center mt-1">
-                  Show this 4-digit code at the store to check in
+                  Show this code to your service provider when you arrive
                 </p>
               </div>
             )}

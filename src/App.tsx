@@ -39,26 +39,38 @@ const AppRoutes = () => {
   }
 
   return (
-    <Routes>
-      <Route
-        path="/admin"
-        element={
-          profile.is_admin
-            ? <AdminDashboard onBack={() => {}} />
-            : <Navigate to="/" replace />
-        }
-      />
-      <Route
-        path="/"
-        element={
-          <CustomerHome
-            onSwitchToDashboard={profile.role === "store" ? () => setShowDashboard(true) : undefined}
-            onSwitchToAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
-          />
-        }
-      />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      {/* Admin-only Test Mode banner — payment bypass is active in this build */}
+      {profile.is_admin && (
+        <div
+          data-testid="banner-test-mode"
+          className="fixed top-0 inset-x-0 z-[1000] text-center text-[11px] font-semibold py-1 px-2 bg-amber-300 text-amber-950 shadow-md pointer-events-none"
+          style={{ paddingTop: "max(env(safe-area-inset-top), 4px)" }}
+        >
+          🧪 Test Mode — Payment bypass is active
+        </div>
+      )}
+      <Routes>
+        <Route
+          path="/admin"
+          element={
+            profile.is_admin
+              ? <AdminDashboard onBack={() => {}} />
+              : <Navigate to="/" replace />
+          }
+        />
+        <Route
+          path="/"
+          element={
+            <CustomerHome
+              onSwitchToDashboard={profile.role === "store" ? () => setShowDashboard(true) : undefined}
+              onSwitchToAdmin={profile.is_admin ? () => setShowAdmin(true) : undefined}
+            />
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 };
 
