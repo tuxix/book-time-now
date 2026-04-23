@@ -35,8 +35,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq("id", userId)
       .maybeSingle();
     if (!data) return null;
+    // Treat a missing/empty role as "no profile" so the user is sent to RoleSelectPage.
+    // This handles Google OAuth users whose profile row may be created by a trigger
+    // with role = null before they pick customer/store.
+    if (!data.role || String(data.role).trim() === "") return null;
     return {
-      role: data.role ?? "customer",
+      role: data.role,
       is_admin: data.is_admin ?? false,
       is_suspended: data.is_suspended ?? false,
       full_name: data.full_name ?? null,

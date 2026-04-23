@@ -1,0 +1,141 @@
+Read the entire codebase carefully before making any changes. Do NOT assume anything. Do NOT overwrite working logic.
+
+This is a ONE-PASS task due to limited credits, so follow this execution order STRICTLY:
+
+---
+
+############################
+STEP 1 — ANALYZE FIRST (MANDATORY)
+############################
+
+Before writing any code, analyze and internally determine:
+
+1. Why Google OAuth users are skipping onboarding
+2. Why profiles may not be created correctly
+3. Why users are not appearing in admin dashboard
+4. Where onboarding logic currently exists
+5. Which files control:
+
+   * auth flow
+   * role selection
+   * admin queries
+
+DO NOT output long explanations — just ensure you understand before proceeding.
+
+---
+
+############################
+STEP 2 — SAFE FIX IMPLEMENTATION
+############################
+
+Implement ONLY the following fixes:
+
+---
+
+### FIX 1 — ONBOARDING GATE
+
+After login (Google or email):
+
+IF:
+
+* No profile exists
+* OR role is null
+
+THEN:
+→ Redirect to Role Selection screen
+
+ELSE:
+→ Continue normally
+
+Requirements:
+
+* Must run on every app load
+* Must NOT create duplicate profiles
+* Must NOT break existing login flow
+
+---
+
+### FIX 2 — PROFILE CREATION FOR GOOGLE USERS
+
+When user selects role:
+
+Create profile ONLY IF it does not exist:
+
+Required fields:
+
+* id = auth.uid()
+* role = 'customer' or 'store'
+* full_name = from Google metadata if available
+* email = from auth
+* created_at = now()
+
+---
+
+### FIX 3 — ADMIN DASHBOARD VISIBILITY
+
+Customers:
+
+* Fetch ALL profiles where role = 'customer'
+* Do NOT filter by auth provider
+
+Stores:
+
+* Join stores with profiles
+* Include Google users
+
+Ensure:
+
+* No filtering excludes OAuth users
+
+---
+
+### FIX 4 — TEST MODE PAYMENT
+
+Replace payment step with:
+
+* "Confirm Booking" button
+* Sets payment_status = 'paid'
+* Completes booking instantly
+
+DO:
+
+* Add label: "Test Mode — Payment Bypass Active"
+
+DO NOT:
+
+* Delete Fygaro code (comment only)
+
+---
+
+### FIX 5 — CHECK-IN CODE
+
+Ensure:
+
+* Code is exactly 4 digits
+* Displayed clearly on confirmation screen
+
+---
+
+############################
+STEP 3 — SAFETY RULES
+############################
+
+* DO NOT modify booking engine logic unless required
+* DO NOT change database schema unless absolutely necessary
+* DO NOT remove any existing functionality
+* DO NOT rewrite entire components — patch only
+* Preserve all existing working features
+
+---
+
+############################
+STEP 4 — OUTPUT FORMAT
+############################
+
+Return:
+
+1. Summary of what was fixed
+2. Exact files modified
+3. Code changes only (clean and minimal)
+
+Keep response concise. Do not output large explanations.

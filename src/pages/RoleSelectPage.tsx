@@ -29,10 +29,23 @@ const RoleSelectPage = () => {
       });
       if (metaError) throw metaError;
 
-      // Create profile row — trigger may have already created it; ON CONFLICT DO NOTHING
+      // Create or update profile row — idempotent for Google OAuth users whose
+      // profile row may have been created by a trigger with role = null.
+      const fullNameFromGoogle =
+        (user.user_metadata as any)?.full_name ||
+        (user.user_metadata as any)?.name ||
+        null;
       const { error: profileError } = await supabase
         .from("profiles")
-        .insert({ id: user.id, role });
+        .upsert(
+          {
+            id: user.id,
+            user_id: user.id,
+            role,
+            full_name: fullName.trim() || fullNameFromGoogle || "",
+          },
+          { onConflict: "id" },
+        );
       if (profileError && profileError.code !== "23505") throw profileError;
 
       // Create store record if store role
